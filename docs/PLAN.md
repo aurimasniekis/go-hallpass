@@ -1582,29 +1582,29 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP01 | Scaffolding, CI, lint | WP00 | tested | 89620d3 |
 | WP02 | Config, runtime modes, logging | WP01 | tested | 860e1a7 |
 | WP03 | SQLite storage, migrations, lock, backup primitive | WP02 | tested | f0b96c0 |
-| WP04 | Keyring and field crypto | WP03 | tested | dc3680d |
+| WP04 | Keyring and field crypto | WP03 | tested | dc3680d, 4178285 |
 | WP05 | Audit, jobs, outbox | WP04 | tested | 3327bc9 |
 | WP06 | Agents and keys | WP05 | tested | bdf3f05 |
 | WP07 | Servers, host identities, roles, credentials/CA | WP06 | tested | 6284850 |
 | WP08 | Policy engine and effective access | WP07 | tested | d4b4e2a |
 | WP09 | Request/grant/session lifecycle and enforcer | WP08 | tested | 0fdc035 |
-| WP10 | SSH front end | WP09 | implemented | 42ada72, d948bf8 |
-| WP11 | SSH data plane | WP10 | implemented | d948bf8 |
-| WP12 | Recording format, recorder, reconciliation | WP11, WP04 | implemented | 88bbd7f, d948bf8 |
-| WP13 | Local operator auth, sessions, MFA | WP05 | implemented | 1540b43 |
-| WP14 | OIDC SSO | WP13 | implemented | |
-| WP15 | RBAC, REST API, SSE | WP14, WP12 | implemented | |
-| WP16 | Web approvals and notification core | WP15 | implemented | |
-| WP17 | Slack | WP16 | implemented | |
-| WP18 | Telegram | WP16 | implemented | |
-| WP19 | Frontend foundation and design system | WP15 | in-progress | |
-| WP20 | Operational pages | WP19, WP16 | planned | |
-| WP21 | Timeline and replay UI | WP20 | planned | |
-| WP22 | Observability | WP15 | implemented | |
-| WP23 | Backup/restore/upgrade/break-glass | WP12, WP13 | implemented | |
-| WP24 | Packaging and release pipeline | WP22, WP23 | implemented | |
-| WP25 | Destination-side audit integration | WP12, WP21 | implemented | |
-| WP26 | Hardening | WP01–WP25 | planned | |
+| WP10 | SSH front end | WP09 | implemented | 42ada72, d948bf8, fe9f62a |
+| WP11 | SSH data plane | WP10 | implemented | d948bf8, bd08fce, fee9b40 |
+| WP12 | Recording format, recorder, reconciliation | WP11, WP04 | implemented | 88bbd7f, d948bf8, 06803ba |
+| WP13 | Local operator auth, sessions, MFA | WP05 | implemented | 1540b43, 5f00b8c |
+| WP14 | OIDC SSO | WP13 | implemented | 78df15a, a65d102 |
+| WP15 | RBAC, REST API, SSE | WP14, WP12 | implemented | 5f00b8c |
+| WP16 | Web approvals and notification core | WP15 | implemented | 5083bbc, 42a6805 |
+| WP17 | Slack | WP16 | implemented | 5083bbc |
+| WP18 | Telegram | WP16 | implemented | 5083bbc |
+| WP19 | Frontend foundation and design system | WP15 | implemented | fc10c80, 366b4c2 |
+| WP20 | Operational pages | WP19, WP16 | implemented | 366b4c2 |
+| WP21 | Timeline and replay UI | WP20 | implemented | 366b4c2 |
+| WP22 | Observability | WP15 | implemented | 55b0c35 |
+| WP23 | Backup/restore/upgrade/break-glass | WP12, WP13 | implemented | 25bde35, 732bcbd |
+| WP24 | Packaging and release pipeline | WP22, WP23 | implemented | 16ccfc9 |
+| WP25 | Destination-side audit integration | WP12, WP21 | implemented | 6c10a5f |
+| WP26 | Hardening | WP01–WP25 | implemented | fee5d24, bd08fce, fee9b40, 86b565f, 9cbcfdb, 05734b9, 899b65e |
 | WP27 | Release-gate validation and RC | WP26 | planned | |
 
 ### 19.3 Progress log
@@ -1633,6 +1633,8 @@ local run of the same targets the workflow executes, and the entry says so. Chec
 - 2026-10-23 — WP15 + WP22: REST API v1 (spec-first OpenAPI 3.1, in-repo generator, RBAC matrix, problem details, pagination, idempotency, SSE hub, OIDC browser endpoints, embedded UI) and observability (metrics registry, readiness checks, tracing, correlation, call-site instrumentation, serve wiring). Remaining API resources (integrations, retention, recording export) arrive with WP16-18/WP23 follow-ups. ADR-0031, ADR-0034.
 - 2026-10-23 — WP16-WP18: notification core (internal/notify, migration 0012): integrations and routes with sealed write-only secrets, action tokens, provider identity links and link codes, durable replay cache, outbox delivery through the Slack/Telegram adapters with delivery-time rendering, message updates, webhook routing under /hooks, chat MFA requirement and rate limits; API endpoints for integrations, routes, deliveries and links. THREAT_MODEL T-05 corrected (ADR-0035, security-relevant). Real Slack/Telegram verification pending (WP17/WP18 status implemented, not externally verified).
 WP25 (2026-10-23): destination-side audit integration (internal/destaudit, cmd/hallpass-collector, migration 0014, /hooks/destaudit/{collector_id}, collector and record API). Deviations in ADR-0037 (route, separate binary, no HALLPASS_SESSION marker). Fixed unbounded webhook rate-limiter key table. OpenSSH+auditd container test pending.
+- **WP19–WP21** (2026-10-23, 366b4c2): all operational pages, session detail with timeline, destination records and per-channel replay; typed API client from the OpenAPI schema; reauth gate with SSO step-up; Chromium E2E (9 specs incl. axe in both themes) against a real gateway. Known gaps: no visual snapshots (HP-UI-015), no /system/time sampling, Storage & keys page is a placeholder (no API). API gaps found by the UI (tracked for follow-up): approver identity on grants/sessions, policy what-if endpoint, storage/keys/retention/backup endpoints, recovery-token redemption endpoint, OperatorPatch If-Match, host-CA list, route PATCH, delivery pagination, records page limit, typed free-form objects.
+- **WP26** (2026-10-23, fee5d24 + fixes): 28 fuzz targets, fault suite (test/fault, make test-fault), soak harness (make soak-smoke), security review checklist. The fault suite found 11 product defects; all were fixed (bd08fce destination keepalives; fee9b40/899b65e unrecorded forwarding, late termination on stalled storage, agent disconnect and stalled agent; 86b565f/9cbcfdb sticky disk-full and corruption guidance; 05734b9 return_to dot segments, egress NAT64/Teredo, enforcer cursor after clock steps, ADR-0039). Also fixed: unbounded webhook rate-limiter key table (42a6805) and the export default contradicting HP-REC-014 (06803ba, ADR-0040). Pending for RG-3/5/6/8: long fuzz runs, 24 h soak and benchmarks on reference hardware, the security review itself.
 <!-- progress-log-end -->
 
 ---
@@ -1687,7 +1689,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-SSH-012` Keepalive and idle timeouts — WP11 — evidence: I, O — ✅ tested: agent and destination legs probe keepalive@openssh.com (internal/sshkeepalive unit tests; internal/app TestGatewayAgentKeepalive, TestGatewayDestinationKeepalive exit 88; fault TestFI15), idle timeout (TestGatewayIdleTimeout)
 - [ ] `HP-SSH-013` Pre-auth and connection limits — WP10 — evidence: S, FI — ◐ partial: global/per-IP pre-auth limits + handshake timeout implemented; per-IP limit tested (internal/app/e2e_test.go TestGatewayPreAuthLimit); load test pending WP26
 - [x] `HP-SSH-014` Bounded buffering and backpressure — WP11 — evidence: S, I — ✅ tested: 5 MB output through OpenSSH; recorder backpressure test; soak pending WP26
-- [x] `HP-SSH-015` Cancellation and cleanup — WP11 — evidence: U, S — ✅ tested: internal/app/e2e_test.go TestGatewayNoGoroutineLeak, revocation/shutdown termination; fd soak pending WP26
+- [x] `HP-SSH-015` Cancellation and cleanup — WP11 — evidence: U, S — ✅ tested: TestGatewayNoGoroutineLeak, agent disconnect releases destination, stalled agent closes (fault tests), soak smoke shows no goroutine/FD growth
 - [x] `HP-SSH-016` Shell-free command grammar — WP10 — evidence: U, Z — ✅ tested: grammar unit + fuzz tests (98.9%)
 - [x] `HP-SSH-017` Reserved words — WP10 — evidence: U, O — ✅ tested: grammar tests; reserved words incl. ps (ADR-0027)
 - [x] `HP-SSH-018` Stable JSON output — WP10 — evidence: U, O — ✅ tested: strict schema validation in grammar tests; api/ssh-schemas
@@ -1765,7 +1767,7 @@ check · R recovery drill · SR security review · D documentation review.
 
 #### HP-GRT — Grants and enforcement
 
-- [ ] `HP-GRT-001` Transactional decision and grant — WP09 — evidence: I, FI — ◐ WP09: decision+grant+session in one writer tx, start = tx time (tested); crash fault injection FI-01 pending WP26
+- [x] `HP-GRT-001` Transactional decision and grant — WP09 — evidence: I, FI — ✅ tested: decision + grant + session in one writer tx; SIGKILL during auto-approve storms leaves all or nothing (fault TestFI01)
 - [x] `HP-GRT-002` Grant record — WP09 — evidence: U, I — ✅ tested (local) @ WP09: grant record with scope, capabilities, policy version
 - [x] `HP-GRT-003` No implicit extension — WP09 — evidence: U, I — ✅ tested (local) @ WP09: reuse never changes expiry; extensions only via new requests
 - [x] `HP-GRT-004` Active grant reuse — WP09 — evidence: I, O — ✅ tested: second exec reuses the active grant (internal/app/e2e_test.go TestGatewayExecEndToEnd)
@@ -1824,11 +1826,11 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-DB-006` Single active instance — WP03 — evidence: I — ✅ tested (local) @ WP03: flock hallpass.lock (TestSecondOwnerRefused)
 - [x] `HP-DB-007` Unsupported storage refusal — WP03 — evidence: I — ✅ tested (local, Linux container) @ WP03: statfs magic check; `make test-netfs` verifies refusal on a FUSE mount
 - [x] `HP-DB-008` Corruption checks — WP03 — evidence: I, FI — ✅ tested: startup quick_check refusal, daily integrity_check job, readiness store health (store + obs/health tests)
-- [ ] `HP-DB-009` Disk-full and I/O failure — WP03 — evidence: FI — ◐ WP03: error classification + Health (degraded/failed, fail-closed AcceptsWrites); fault tests FI-06 and recording termination pending WP12/WP26
+- [x] `HP-DB-009` Disk-full and I/O failure — WP03 — evidence: FI — ✅ tested: disk-full degrade sticky until a page-allocating probe commits, I/O failure classes, reserve refusal (fault FI-05/06/07, store tests)
 - [x] `HP-DB-010` Filesystem permissions — WP03 — evidence: I — ✅ tested (local) @ WP03/WP04: data dir 0700 + owner, DB files 0600, KEK file mode/owner refusal
 - [ ] `HP-DB-011` Bounded growth — WP03 — evidence: I, S — ◐ WP03: incremental auto_vacuum, Checkpoint/IncrementalVacuum/Sizes; retention jobs + metrics pending WP05/WP12/WP22
 - [x] `HP-DB-012` Consistent backup primitive — WP03 — evidence: I, R — ✅ tested: snapshot + segment copy + manifest (backup package)
-- [ ] `HP-DB-013` Crash reconciliation — WP09 — evidence: FI, I — ◐ WP09: ReconcileStartup (interrupted connections/channels + timeline, expiry, policy, sessions) tested; segment reconciliation WP12; kill -9 fault tests WP26
+- [x] `HP-DB-013` Crash reconciliation — WP09 — evidence: FI, I — ✅ tested: startup reconciliation after SIGKILL during requests, recording and finalize (fault FI-01..FI-04, FI-23)
 - [ ] `HP-DB-014` Recovery objectives — WP23 — evidence: R, D — ◐ partial: documented; RTO not measured
 
 #### HP-AUTH — Operator authentication and browser sessions
@@ -1894,21 +1896,21 @@ check · R recovery drill · SR security review · D documentation review.
 
 #### HP-UI — Web UI
 
-- [ ] `HP-UI-001` Frontend stack — WP19 — evidence: C
-- [ ] `HP-UI-002` Design system and themes — WP19 — evidence: V, E
-- [ ] `HP-UI-003` Complete page set — WP20 — evidence: E
-- [ ] `HP-UI-004` Access-session detail — WP21 — evidence: E
-- [ ] `HP-UI-005` Authentication settings — WP20 — evidence: E
-- [ ] `HP-UI-006` Login modes — WP19 — evidence: E, V
-- [ ] `HP-UI-007` Real UI states — WP19 — evidence: E, V
-- [ ] `HP-UI-008` Tables and saved filters — WP20 — evidence: E
-- [ ] `HP-UI-009` Charts with real data — WP20 — evidence: E, A
-- [ ] `HP-UI-010` Destructive confirmation — WP19 — evidence: E
-- [ ] `HP-UI-011` Server-derived countdowns — WP19 — evidence: U, E
-- [ ] `HP-UI-012` No optimistic security success — WP19 — evidence: E
-- [ ] `HP-UI-013` Safe replay rendering — WP21 — evidence: U, E, SR
-- [ ] `HP-UI-014` Accessibility — WP19 — evidence: A
-- [ ] `HP-UI-015` Visual regression — WP19 — evidence: V
+- [x] `HP-UI-001` Frontend stack — WP19 — evidence: C — ✅ tested: React + TS + Vite, TanStack Router/Query/Store, Ant Design, ECharts, xterm.js; lint/typecheck/421 unit tests
+- [ ] `HP-UI-002` Design system and themes — WP19 — evidence: V, E — ◐ light/dark tokens with contrast test; axe in both themes; visual snapshots (V) not implemented
+- [ ] `HP-UI-003` Complete page set — WP20 — evidence: E — ◐ all pages implemented (WP20); Storage & keys is a placeholder (no API yet); Chromium E2E covers bootstrap, inventory, policy, request/approve, lockdown
+- [ ] `HP-UI-004` Access-session detail — WP21 — evidence: E — ◐ summary, reason (untrusted), channels, timeline, replay, destination records, integrity, revoke implemented; approver identity not exposed by the API
+- [ ] `HP-UI-005` Authentication settings — WP20 — evidence: E — ◐ providers, mappings, test login, SSO-only toggle implemented and unit tested; E2E needs an IdP
+- [ ] `HP-UI-006` Login modes — WP19 — evidence: E, V — ◐ password + TOTP E2E (Chromium, real backend); SSO login E2E and visual snapshots pending
+- [ ] `HP-UI-007` Real UI states — WP19 — evidence: E, V — ◐ loading/empty/error/forbidden states implemented and unit tested; visual snapshots pending
+- [ ] `HP-UI-008` Tables and saved filters — WP20 — evidence: E — ◐ server pagination, filters and saved filters implemented; column chooser not implemented
+- [ ] `HP-UI-009` Charts with real data — WP20 — evidence: E, A — ◐ ECharts from /stats/overview with table alternatives; some PLAN §14.6 series (decision latency, storage growth, delivery) lack API data
+- [x] `HP-UI-010` Destructive confirmation — WP19 — evidence: E — ✅ tested: ConfirmAction (typed confirmations, idempotency keys) unit tests; lockdown typed confirmation in Chromium E2E
+- [ ] `HP-UI-011` Server-derived countdowns — WP19 — evidence: U, E — ◐ countdowns from server timestamps; /system/time clock-offset sampling not implemented
+- [x] `HP-UI-012` No optimistic security success — WP19 — evidence: E — ✅ tested: decisions shown only after server confirmation (request approve flow in Chromium E2E; unit tests)
+- [ ] `HP-UI-013` Safe replay rendering — WP21 — evidence: U, E, SR — ◐ xterm link handler and OSC 52 disabled, untrusted text never rendered as HTML (unit tests); security review pending
+- [x] `HP-UI-014` Accessibility — WP19 — evidence: A — ✅ tested: axe (WCAG 2.2 AA) no serious/critical violations on all top-level and detail pages in light and dark (Chromium E2E); keyboard-scrollable tables
+- [ ] `HP-UI-015` Visual regression — WP19 — evidence: V — ◐ not implemented: Playwright visual snapshots
 - [x] `HP-UI-016` Embedded build — WP19 — evidence: C, I — ✅ tested: embedui build tag embeds web/dist; SPA handler tests; serve smoke test
 
 #### HP-NTF — Approvals and notifications
@@ -1955,13 +1957,13 @@ check · R recovery drill · SR security review · D documentation review.
 #### HP-TST — Testing and quality
 
 - [x] `HP-TST-001` Race detector — WP01 — evidence: C — ✅ tested (local) @ WP01: `make race` runs `go test -race -count=1 ./...`; CI job `go` configured
-- [ ] `HP-TST-002` Fuzzing — WP26 — evidence: Z
-- [ ] `HP-TST-003` Real OpenSSH integration — WP10 — evidence: O — ◐ tested locally: make test-openssh (8 tests, real ssh + sshd container); CI job added, not yet run in CI
-- [ ] `HP-TST-004` Browser E2E — WP19 — evidence: E
-- [ ] `HP-TST-005` Fault injection — WP26 — evidence: FI
-- [ ] `HP-TST-006` Soak — WP26 — evidence: S
-- [ ] `HP-TST-007` Measured performance — WP26 — evidence: S
-- [ ] `HP-TST-008` Security review — WP26 — evidence: SR
+- [ ] `HP-TST-002` Fuzzing — WP26 — evidence: Z — ◐ 28 new fuzz targets (plus existing parsers) ran 30 s each with no open crashers; make fuzz-smoke; RG-3 needs ≥ 10 min per target
+- [ ] `HP-TST-003` Real OpenSSH integration — WP10 — evidence: O — ◐ tested locally: make test-openssh (11 tests: exec, PTY, forwarding refusal, hidden target, host-key change, revocation, key revocation, agent/server disable, certificates, unknown key); not yet run in CI
+- [ ] `HP-TST-004` Browser E2E — WP19 — evidence: E — ◐ Chromium E2E (ADR-0038) passes locally against a real gateway (9 specs incl. axe); not all operator workflows covered (SSO, replay, chat linking, invite); not run in CI
+- [ ] `HP-TST-005` Fault injection — WP26 — evidence: FI — ◐ make test-fault: catalog FI-01..FI-23 passes (all 9 findings fixed); FI-19 covered by oidc tests; FI-24 power loss needs a VM hard reset (not done)
+- [ ] `HP-TST-006` Soak — WP26 — evidence: S — ◐ soak harness (test/soak, make soak-smoke); 30 s smoke: 1,386 sessions, 0 failures, no goroutine/FD growth; 24 h run on reference hardware pending
+- [ ] `HP-TST-007` Measured performance — WP26 — evidence: S — ◐ smoke numbers only (M1 Max, all in one process): exec p95 437 ms, revoke→closed max 155 ms; reference-hardware benchmarks pending
+- [ ] `HP-TST-008` Security review — WP26 — evidence: SR — ◐ review checklist written (docs/security/review-checklist.md) with 11 pre-review findings fixed; the review itself is not done
 - [ ] `HP-TST-009` Coverage floor — WP01 — evidence: C — ◐ WP01: floor script `scripts/coverage-floor.sh` (80%) in CI; enforced as each listed package lands
 
 #### HP-DOC — Documentation
