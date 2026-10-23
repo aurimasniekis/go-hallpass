@@ -614,7 +614,7 @@ func (s *session) connect(ctx context.Context, alias string, o grammar.Opts, wai
 		return -1
 	}
 	if res.Err != nil {
-		s.h.Log.Warn("session could not start", slog.String(obs.FieldAgentID, s.c.AgentID), slog.String("reason", res.Reason), obs.Err(res.Err))
+		s.h.Log.Warn("session could not start", slog.String(obs.FieldAgentID, s.c.AgentID), slog.String("close_reason", res.Reason), slog.String("close_detail", res.Detail), obs.Err(res.Err))
 	}
 	switch res.GatewayCode {
 	case int(grammar.ExitDestinationUnavailable):

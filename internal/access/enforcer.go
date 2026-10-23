@@ -165,7 +165,7 @@ func (e *Enforcer) grantEnded(grantID, reason string, at time.Time) {
 		ended = endedAt(at)
 	}
 	if n := e.terminateWhere(reason, ended, func(l *Live) bool { return l.GrantID == grantID }); n > 0 {
-		e.log.Info("terminated channels", slog.String(obs.FieldGrantID, grantID), slog.String("reason", reason), slog.Int("channels", n))
+		e.log.Info("terminated channels", slog.String(obs.FieldGrantID, grantID), slog.String("end_reason", reason), slog.Int("channels", n))
 	}
 }
 
