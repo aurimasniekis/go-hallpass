@@ -1583,8 +1583,8 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP04 | Keyring and field crypto | WP03 | tested | dc3680d |
 | WP05 | Audit, jobs, outbox | WP04 | tested | 3327bc9 |
 | WP06 | Agents and keys | WP05 | tested | bdf3f05 |
-| WP07 | Servers, host identities, roles, credentials/CA | WP06 | tested | |
-| WP08 | Policy engine and effective access | WP07 | planned | |
+| WP07 | Servers, host identities, roles, credentials/CA | WP06 | tested | 6284850 |
+| WP08 | Policy engine and effective access | WP07 | tested | |
 | WP09 | Request/grant/session lifecycle and enforcer | WP08 | planned | |
 | WP10 | SSH front end | WP09 | planned | |
 | WP11 | SSH data plane | WP10 | planned | |
@@ -1620,6 +1620,7 @@ local run of the same targets the workflow executes, and the entry says so. Chec
 - **WP05** (2026-10-23): migration 0002 (audit_events, jobs, outbox_messages, delivery_attempts), `internal/audit` (hash chain, Verify, sealed sensitive details, sinks), `internal/jobs` (leased durable queue, retries, dedup, Periodic), `internal/outbox` (encrypted bodies, provider registry, leased delivery, bounded retries, dead-letter, attempt history), `internal/eventbus` (bounded, drop-counting), `internal/keyring/keyringtest`. Tested locally under -race.
 - **WP06** (2026-10-23): migration 0003 (groups, labels, agents, agent_keys, agent_groups), `internal/agents` (strict key parsing/algorithm policy, global key uniqueness with tombstones, revocation with sealed reasons, enable/disable, in-transaction hooks for WP09 cascades, Authenticate with failure reasons and source CIDRs, policy-version bumps, audit), `internal/groups` (group/label validation and persistence), `internal/apperr`, `internal/testutil/sshkeys`, audit request metadata. Tested locally (-race), FuzzParseAgentKey 20 s.
 - **WP07** (2026-10-23): migrations 0004/0005, `internal/inventory` (servers, roles, aliases/reserved words, host identities with paste/scan/confirm/retire, duplicate detection + audited exceptions, host CAs with principal binding, strict Verifier), `internal/credentials` (managed/imported login keys sealed with the credential key, authorized_keys suggestion, probe/activate/overlap/retire/revoke, user CAs + per-connection certificates, Signer/SignerResolver abstraction, gateway host keys with staged rotation), `internal/egress` (anti-SSRF guard), `internal/destssh` (sole outbound dialer, verifier mandatory), `internal/sshalg`, `internal/testutil/sshtest` (in-process destination), config `egress.source_addresses`. txscope analyzer refined (SSH I/O only; AfterCommit callbacks exempt). Tested locally (-race); real-OpenSSH interop deferred to WP10/WP11 harness.
+- **WP08** (2026-10-23): migration 0006 (policy_rules, approver_rules, agent_owners), `internal/policy` (selectors with Kubernetes-style label expressions and empty-matches-nothing semantics, immutable compiled Snapshot: Evaluate/Visible/ResolveServer/ResolveRole with single ErrNotFoundOrForbidden, durations/presets/auto-approve, CanApprove with self-approval prohibition; Engine with per-version cache, consistent ReadTx loading, WhatIf; CRUD service with in-tx version bump + audit + policy.changed), `store.ReadTx`, docs/operator/policy.md. Evaluate ≈1.2 µs, Visible over 2,000 servers × 3 roles × 100 rules ≈8.5 ms (M-series laptop, not RH-1). Coverage 81.8%. Tested locally (-race), FuzzRuleJSON 20 s.
 <!-- progress-log-end -->
 
 ---
@@ -1723,20 +1724,20 @@ check · R recovery drill · SR security review · D documentation review.
 
 #### HP-POL — Visibility and policy
 
-- [ ] `HP-POL-001` Default deny — WP08 — evidence: U, P
-- [ ] `HP-POL-002` Deny overrides — WP08 — evidence: U, P
-- [ ] `HP-POL-003` Selector semantics — WP08 — evidence: U, P
-- [ ] `HP-POL-004` Level lattice — WP08 — evidence: U, P
-- [ ] `HP-POL-005` Role and server visibility — WP08 — evidence: U
-- [ ] `HP-POL-006` Separated permissions — WP08 — evidence: U, I
-- [ ] `HP-POL-007` Policy versioning — WP08 — evidence: I
+- [x] `HP-POL-001` Default deny — WP08 — evidence: U, P — ✅ tested (local) @ WP08: TestDefaultDeny + property tests
+- [x] `HP-POL-002` Deny overrides — WP08 — evidence: U, P — ✅ tested (local) @ WP08: deny overrides any allow (table + randomized property)
+- [x] `HP-POL-003` Selector semantics — WP08 — evidence: U, P — ✅ tested (local) @ WP08: union clauses, k8s label AND, empty selector/label clause matches nothing, all:true future objects; FuzzRuleJSON 20 s
+- [x] `HP-POL-004` Level lattice — WP08 — evidence: U, P — ✅ tested (local) @ WP08: level lattice, group union, smallest auto max
+- [x] `HP-POL-005` Role and server visibility — WP08 — evidence: U — ✅ tested (local) @ WP08: role/server visibility, disabled invisible
+- [x] `HP-POL-006` Separated permissions — WP08 — evidence: U, I — ✅ tested (local) @ WP08: separate Evaluate (visibility/request), CanApprove (approval authority); activity check = grant revalidation in WP09
+- [x] `HP-POL-007` Policy versioning — WP08 — evidence: I — ✅ tested (local) @ WP08: policy_version bumped in-tx by policy, agent, inventory changes; engine rebuilds snapshot on version change
 - [ ] `HP-POL-008` Policy change effects — WP09 — evidence: I
-- [ ] `HP-POL-009` Effective-access preview — WP08 — evidence: U, E
+- [ ] `HP-POL-009` Effective-access preview — WP08 — evidence: U, E — ◐ WP08: PreviewAgent/PreviewServer with deciding rule + Engine.WhatIf tested; UI pending WP20
 - [ ] `HP-POL-010` Hidden-target non-disclosure — WP10 — evidence: U, O, I
-- [ ] `HP-POL-011` Approver authority rules — WP08 — evidence: U, I
-- [ ] `HP-POL-012` Self-approval prohibition — WP08 — evidence: U, I
-- [ ] `HP-POL-013` Auto-approval within limits — WP08 — evidence: U, I
-- [ ] `HP-POL-014` Command allowlists are not a sandbox — WP08 — evidence: D
+- [x] `HP-POL-011` Approver authority rules — WP08 — evidence: U, I — ✅ tested (local) @ WP08: approver rules + internal role required; admins need rules too
+- [x] `HP-POL-012` Self-approval prohibition — WP08 — evidence: U, I — ✅ tested (local) @ WP08: agent owners + policy.prohibit_self_approval (default prohibited)
+- [x] `HP-POL-013` Auto-approval within limits — WP08 — evidence: U, I — ✅ tested (local) @ WP08: AutoApproves only ≤ auto max; longer requests need a human; decision recording in WP09
+- [ ] `HP-POL-014` Command allowlists are not a sandbox — WP08 — evidence: D — ◐ WP08: docs/operator/policy.md states capabilities are channel types, not a sandbox; destination hardening guide WP25
 
 #### HP-REQ — Access requests
 

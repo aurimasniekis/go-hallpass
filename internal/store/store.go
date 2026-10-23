@@ -255,3 +255,13 @@ func secureFiles(dir string) error {
 	}
 	return nil
 }
+
+// ReadTx runs fn in a read-only transaction on the reader pool, giving fn a consistent snapshot of the database.
+func (s *Store) ReadTx(ctx context.Context, fn func(q *db.Queries) error) error {
+	tx, err := s.rdb.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return classify(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	return classify(fn(db.New(tx)))
+}

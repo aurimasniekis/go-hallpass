@@ -45,6 +45,26 @@ type AgentKey struct {
 	LastUsedAt        sql.NullInt64
 }
 
+type AgentOwner struct {
+	AgentID    string
+	OperatorID string
+}
+
+type ApproverRule struct {
+	ID            string
+	Name          string
+	Description   string
+	OperatorsJson string
+	TargetsJson   string
+	RolesJson     string
+	MaxDurationS  sql.NullInt64
+	Enabled       int64
+	Version       int64
+	CreatedAt     int64
+	UpdatedAt     int64
+	UpdatedBy     string
+}
+
 type AuditEvent struct {
 	ID            string
 	Seq           int64
@@ -206,6 +226,25 @@ type OutboxMessage struct {
 	LastError   sql.NullString
 	CreatedAt   int64
 	UpdatedAt   int64
+}
+
+type PolicyRule struct {
+	ID               string
+	Name             string
+	Description      string
+	Effect           string
+	Level            sql.NullString
+	SubjectsJson     string
+	TargetsJson      string
+	RolesJson        string
+	MaxDurationS     sql.NullInt64
+	AutoMaxDurationS sql.NullInt64
+	RequireReason    int64
+	Enabled          int64
+	Version          int64
+	CreatedAt        int64
+	UpdatedAt        int64
+	UpdatedBy        string
 }
 
 type PolicyState struct {
