@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 
+	"github.com/aurimasniekis/go-hallpass/internal/app"
+
 	"github.com/aurimasniekis/go-hallpass/internal/config"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
@@ -22,6 +24,7 @@ func keysCommands() *command {
 			{name: "init-kek", summary: "generate a new master key file (0400)", run: runKeysInitKEK},
 			{name: "status", summary: "show keyring status (offline; takes the data-directory lock)", run: runKeysStatus},
 			{name: "rotate", summary: "rotate a purpose key (offline; takes the data-directory lock)", run: runKeysRotate},
+			{name: "retire", summary: "retire an old purpose-key version once nothing uses it (offline; takes the data-directory lock)", run: runKeysRetire},
 			{name: "rotate-kek", summary: "rewrap all keys under a new KEK (offline; back up first)", run: runKeysRotateKEK},
 		},
 	}
@@ -152,4 +155,62 @@ func runKeysRotateKEK(ctx context.Context, args []string, stdout, stderr io.Writ
 	_, err = fmt.Fprintf(stdout, "rewrapped %d keys from KEK %s to %s\nUpdate kek.file to %s, take a backup, and keep the old KEK until backups made with it expire.\n",
 		n, oldW.ID(), newW.ID(), *newFile)
 	return err
+}
+
+func runKeysRetire(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	fs := newFlagSet("keys retire", stderr)
+	path := configFlag(fs)
+	purpose := fs.String("purpose", "", "purpose: field, credential, recording, token")
+	version := fs.Uint("version", 0, "decrypt-only version to retire")
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
+	if *purpose == "" || *version == 0 {
+		return &exitError{code: 2, err: errors.New("--purpose and --version are required")}
+	}
+	cfg, err := loadConfig(*path)
+	if err != nil {
+		return &exitError{code: 1, err: err}
+	}
+	s, kr, _, err := openKeyring(ctx, cfg)
+	if err != nil {
+		return &exitError{code: 1, err: err}
+	}
+	defer s.Close()
+	if err := retireGuard(ctx, s, keyring.Purpose(*purpose), uint32(*version)); err != nil { //nolint:gosec // versions are small
+		return &exitError{code: 1, err: err}
+	}
+	if err := kr.Retire(ctx, s, keyring.Purpose(*purpose), uint32(*version)); err != nil { //nolint:gosec // versions are small
+		return &exitError{code: 1, err: err}
+	}
+	_, err = fmt.Fprintf(stdout, "%s key v%d retired\n", *purpose, *version)
+	return err
+}
+
+// retireGuard refuses to retire a version that still protects data (HP-CRY-002): sealed columns, audit details (whose
+// ciphertext the audit chain covers), live recording segments, and the integrity-chain MAC key.
+func retireGuard(ctx context.Context, s *store.Store, p keyring.Purpose, v uint32) error {
+	switch p {
+	case keyring.PurposeManifest:
+		return errors.New("manifest keys authenticate the integrity chain and are never retired")
+	case keyring.PurposeRecording:
+		var n int
+		if err := s.ReadDB().QueryRowContext(ctx, `SELECT count(*) FROM recording_segments WHERE key_id = ? AND state != 'deleted'`,
+			fmt.Sprintf("recording:v%d", v)).Scan(&n); err != nil {
+			return err
+		}
+		if n > 0 {
+			return fmt.Errorf("%d recording segments still use recording v%d (they become retirable after retention deletes them)", n, v)
+		}
+		return nil
+	}
+	cols := append(app.SealedColumns(), keyring.FieldColumn("audit_events", "id", "details_enc", keyring.PurposeField))
+	inUse, err := keyring.VersionInUse(ctx, s, cols, p, v)
+	if err != nil {
+		return err
+	}
+	if inUse {
+		return fmt.Errorf("%s v%d still protects stored data; wait for background re-encryption (audit details keep their version)", p, v)
+	}
+	return nil
 }

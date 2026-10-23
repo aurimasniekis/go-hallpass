@@ -1804,7 +1804,7 @@ check · R recovery drill · SR security review · D documentation review.
 #### HP-CRY — Cryptography and key management
 
 - [x] `HP-CRY-001` Master KEK provisioning — WP04 — evidence: U, I — ✅ tested (local) @ WP04: LoadKEK file/env/dev, production refusal, perms/owner checks, canary detects wrong KEK; `hallpass keys init-kek`
-- [ ] `HP-CRY-002` Purpose keys and rotation — WP04 — evidence: U, I — ◐ WP04: purpose keys wrapped AES-256-GCM, versioned, Rotate/Reseal/Retire, offline RotateKEK (tests + CLI); background re-encryption job pending (WP05 jobs + per-table resealers)
+- [x] `HP-CRY-002` Purpose keys and rotation — WP04 — evidence: U, I — ✅ tested: purpose keys versioned, rotation, background re-encryption job (keyring + app TestResealRegistry) and guarded retire CLI (cmd TestKeysRetireGuard); audit/recording/manifest exceptions documented
 - [x] `HP-CRY-003` Field encryption — WP04 — evidence: U, P — ✅ tested (local) @ WP04: Keyring.Seal/Open with FieldAAD(table|column|row) + key version; bit-flip, row-swap and purpose-confusion tests
 - [ ] `HP-CRY-004` Recording file format — WP12 — evidence: U, Z, SR — ◐ partial: HPREC1 implemented, unit + fuzz tested (94.8%); external crypto review pending (R-02)
 - [x] `HP-CRY-005` Integrity verification — WP12 — evidence: I, R — ✅ tested: hallpass verify (segments, ciphertext hash, final frame, chain links + MACs); TestVerifyDetectsTampering

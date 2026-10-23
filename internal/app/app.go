@@ -253,6 +253,13 @@ func (a *App) RunBackground(ctx context.Context) (wait func()) {
 		})
 	})
 	wg.Go(func() {
+		// HP-CRY-002: move sealed fields to the active key version after a purpose-key rotation.
+		jobs.Periodic(ctx, log, "keyring.reseal", 6*time.Hour, false, func(ctx context.Context) error {
+			_, err := a.Keyring.ResealColumns(ctx, a.Store, SealedColumns(), 500)
+			return err
+		})
+	})
+	wg.Go(func() {
 		jobs.Periodic(ctx, log, "store.wal_checkpoint", 5*time.Minute, false, func(ctx context.Context) error {
 			return a.Store.Checkpoint(ctx, "TRUNCATE")
 		})
@@ -284,3 +291,22 @@ func Listen(ctx context.Context, addr string) (net.Listener, error) {
 
 // ErrShutdown marks a clean shutdown.
 var ErrShutdown = errors.New("shutdown")
+
+// SealedColumns lists the columns re-encrypted after purpose-key rotation (HP-CRY-002). Audit details are excluded
+// because the audit hash chain covers the ciphertext: field key versions used by audit rows stay decrypt-only.
+// Recording segment keys are rewrapped separately (HPREC1 key slots). Short-lived OIDC PKCE verifiers expire instead.
+func SealedColumns() []keyring.Column {
+	return []keyring.Column{
+		keyring.FieldColumn("access_requests", "id", "reason_enc", keyring.PurposeField),
+		keyring.FieldColumn("approval_decisions", "id", "comment_enc", keyring.PurposeField),
+		keyring.FieldColumn("agent_keys", "id", "revoke_reason_enc", keyring.PurposeField),
+		keyring.FieldColumn("mfa_totp", "operator_id", "secret_enc", keyring.PurposeField),
+		keyring.FieldColumn("outbox_messages", "id", "body_enc", keyring.PurposeField),
+		keyring.FieldColumn("integrations", "id", "secrets_enc", keyring.PurposeCredential),
+		keyring.FieldColumn("login_credentials", "id", "private_enc", keyring.PurposeCredential),
+		keyring.FieldColumn("user_cas", "id", "private_enc", keyring.PurposeCredential),
+		keyring.FieldColumn("gateway_host_keys", "id", "private_enc", keyring.PurposeCredential),
+		{Table: "oidc_providers", IDColumn: "id", BlobColumn: "client_secret_enc", Purpose: keyring.PurposeField,
+			AAD: func(id string) []byte { return []byte("hallpass/oidc-client-secret/v1|" + id) }},
+	}
+}

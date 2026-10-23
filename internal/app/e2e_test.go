@@ -23,6 +23,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/audit"
 	"github.com/aurimasniekis/go-hallpass/internal/config"
 	"github.com/aurimasniekis/go-hallpass/internal/inventory"
+	"github.com/aurimasniekis/go-hallpass/internal/keyring"
 	"github.com/aurimasniekis/go-hallpass/internal/policy"
 	"github.com/aurimasniekis/go-hallpass/internal/testutil/sshkeys"
 	"github.com/aurimasniekis/go-hallpass/internal/testutil/sshtest"
@@ -739,4 +740,23 @@ func TestGatewaySourceCIDR(t *testing.T) {
 	c, err := g.client(g.key)
 	must(t, err)
 	_ = c.Close()
+}
+
+// HP-CRY-002: every registered sealed column exists and re-seals after rotation without breaking reads.
+func TestResealRegistry(t *testing.T) {
+	g := startGateway(t)
+	ctx := context.Background()
+	if _, err := g.a.Keyring.Rotate(ctx, g.a.Store, keyring.PurposeCredential); err != nil {
+		t.Fatal(err)
+	}
+	n, err := g.a.Keyring.ResealColumns(ctx, g.a.Store, SealedColumns(), 1000)
+	if err != nil || n == 0 { // the gateway host key and the role's login key are credential-sealed
+		t.Fatalf("resealed %d: %v", n, err)
+	}
+	if _, _, c := g.run("exec web1 -- true"); c != 0 { // re-sealed login credential still works
+		t.Fatalf("exec after reseal: %d", c)
+	}
+	if n, err := g.a.Keyring.ResealColumns(ctx, g.a.Store, SealedColumns(), 1000); err != nil || n != 0 {
+		t.Fatalf("second pass %d %v", n, err)
+	}
 }

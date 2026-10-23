@@ -48,3 +48,22 @@ A wrong or rotated-away KEK is detected at startup ("master key (KEK) does not m
 
 Keys exist in process memory while Hallpass runs. Anyone who controls the running process, or holds both the host and the KEK,
 can decrypt everything (see `docs/THREAT_MODEL.md` §1). KMS/HSM-backed wrapping is a review item (R-03).
+
+## Background re-encryption after purpose-key rotation
+
+After `hallpass keys rotate <purpose>`, a background job (`keyring.reseal`, every 6 hours, 500 rows per column per
+run) re-seals encrypted fields under the new active version:
+- request reasons, decision comments, key revocation reasons, TOTP secrets and outbox bodies (`field`);
+- integration secrets and private keys (`credential`);
+- OIDC client secrets.
+
+Each row is compare-and-set, so concurrent updates are never overwritten.
+
+Two exceptions:
+- **Audit details** are never re-sealed, because the audit hash chain covers their ciphertext. `field` key versions used
+  by audit rows stay `decrypt_only`.
+- **Recording segment keys** live in the HPREC1 key slots and are rewrapped separately. A `recording` key version stays
+  needed until retention deletes the segments that use it.
+
+Retire an old version (`hallpass keys retire`) only after the job has stopped finding rows for it, and only for purposes
+not covered by the exceptions above.
