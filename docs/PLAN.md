@@ -1966,7 +1966,7 @@ check · R recovery drill · SR security review · D documentation review.
 
 #### HP-DOC — Documentation
 
-- [ ] `HP-DOC-001` Operator guide — WP24 — evidence: D — ◐ partial: install/container/upgrade/backup/observability/sso/recording guides; incident runbooks pending
+- [x] `HP-DOC-001` Operator guide — WP24 — evidence: D — ✅ done: docs/operator/{install,configuration,keys,backup,upgrade,storage,recording,observability,logging,sso,approvals,slack,telegram,container,policy,incidents}.md; root README.md
 - [x] `HP-DOC-002` Agent guide — WP10 — evidence: D — ✅ done: docs/agent/{guide,exit-codes,json-schemas}.md
 - [x] `HP-DOC-003` Destination hardening guide — WP25 — evidence: D — ✅ done: docs/destination/hardening.md + docs/destination/audit-collector.md
 - [ ] `HP-DOC-004` Guarantees and non-guarantees — WP27 — evidence: D — ◐ written: docs/security-guarantees.md (G-1..G-10 with status, non-guarantees, assumptions) consistent with THREAT_MODEL; release-time consistency review is part of RG-10 (WP27)

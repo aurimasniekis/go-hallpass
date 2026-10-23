@@ -31,3 +31,4 @@ as the corresponding work packages land:
 | [operator/slack.md](operator/slack.md) | Slack approval app setup. |
 | [operator/telegram.md](operator/telegram.md) | Telegram approval bot setup. |
 | [operator/sso.md](operator/sso.md) | OIDC single sign-on: providers, linking, group mapping, step-up, SSO-only mode. |
+| [operator/incidents.md](operator/incidents.md) | Incident runbooks: lockdown, compromise, host-key change, disk full, corruption, lost KEK, break-glass. |
