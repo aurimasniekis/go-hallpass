@@ -96,7 +96,9 @@ func (c *Config) Validate() error {
 	}
 	v.durationRange("recording.segment_max_age", c.Recording.SegmentMaxAge, time.Minute, 24*time.Hour)
 	v.positive("recording.queue_records", c.Recording.QueueRecords)
-	v.positive("recording.queue_bytes", c.Recording.QueueBytes)
+	if c.Recording.QueueBytes < 64<<10 { // one maximum-size HPREC1 record (64 KiB frame) must fit, or every large write stalls
+		v.add("recording.queue_bytes must be at least 65536 (one maximum-size record)")
+	}
 	v.durationRange("recording.block_timeout", c.Recording.BlockTimeout, time.Second, time.Minute)
 	v.durationRange("recording.default_retention", c.Recording.DefaultRetention, 24*time.Hour, 10*365*24*time.Hour)
 	for _, e := range c.Recording.RetentionClasses {

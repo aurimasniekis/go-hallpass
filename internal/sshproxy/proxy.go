@@ -368,15 +368,22 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 	if s.PTY != nil {
 		outStream = StreamPTY
 	}
-	recFail := func(err error) {
-		p.o.Logger.Error("recording write failed", slog.String(obs.FieldChannelID, reg.ChannelID), obs.Err(err))
-		if recFailed.CompareAndSwap(false, true) {
-			rec.Abort(err)
-			_ = p.o.Access.AppendSessionEvent(context.WithoutCancel(ctx), reg, access.EvRecordingFailed, rec.SegmentID(), map[string]any{"error": "recording write failed"})
-		}
-		if reg.Role.RecordingMode == "mandatory" {
+	// recFail handles a recording failure and reports whether forwarding may continue. With mandatory recording the
+	// channel is terminated before anything else, so no unrecorded byte is forwarded (G-8, HP-REC-007); aborting the
+	// recorder and the timeline write may block on stalled storage, so they run in the background (HP-REC-011).
+	recFail := func(err error) (forward bool) {
+		mandatory := reg.Role.RecordingMode == "mandatory"
+		if mandatory {
 			t.terminate("recording_failed")
 		}
+		if recFailed.CompareAndSwap(false, true) {
+			p.o.Logger.Error("recording write failed", slog.String(obs.FieldChannelID, reg.ChannelID), obs.Err(err))
+			go func() {
+				rec.Abort(err)
+				_ = p.o.Access.AppendSessionEvent(context.WithoutCancel(ctx), reg, access.EvRecordingFailed, rec.SegmentID(), map[string]any{"error": "recording write failed"})
+			}()
+		}
+		return !mandatory
 	}
 	var outputs sync.WaitGroup
 	outputs.Go(func() { pump(stdout, s.Agent, outStream, rec, touch, recFail) })
@@ -388,8 +395,8 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 			if n > 0 {
 				touch()
 				if recordInput {
-					if rerr := rec.Input(buf[:n]); rerr != nil {
-						recFail(rerr)
+					if rerr := rec.Input(buf[:n]); rerr != nil && !recFail(rerr) {
+						return
 					}
 				}
 				if _, werr := stdin.Write(buf[:n]); werr != nil {
@@ -403,7 +410,12 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 			}
 		}
 	}()
-	go p.agentRequests(s, sess, rec, touch)
+	go func() {
+		p.agentRequests(s, sess, rec, touch)
+		// The agent's request stream ends when its channel or connection closes: release the destination even if it
+		// ignores stdin EOF or is unreachable (HP-SSH-015). After a normal exit this is a no-op.
+		t.terminate("agent_disconnected")
+	}()
 	stopIdle := make(chan struct{})
 	if p.o.IdleTimeout > 0 {
 		go idleWatch(p.o.IdleTimeout, &activity, stopIdle, t)
@@ -457,14 +469,14 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 
 // pump copies destination output to the agent, recording it first. Writes to the agent block on its SSH window, which
 // stops reading from the destination: bounded memory and end-to-end backpressure (HP-SSH-014).
-func pump(src io.Reader, dst io.Writer, stream Stream, rec Recorder, touch func(), recFail func(error)) {
+func pump(src io.Reader, dst io.Writer, stream Stream, rec Recorder, touch func(), recFail func(error) bool) {
 	buf := make([]byte, 32*1024)
 	for {
 		n, err := src.Read(buf)
 		if n > 0 {
 			touch()
-			if rerr := rec.Output(stream, buf[:n]); rerr != nil {
-				recFail(rerr)
+			if rerr := rec.Output(stream, buf[:n]); rerr != nil && !recFail(rerr) {
+				return // the chunk was not recorded: it must not reach the agent
 			}
 			if _, werr := dst.Write(buf[:n]); werr != nil {
 				return
@@ -547,7 +559,20 @@ func (t *terminator) terminate(reason string) {
 	_ = t.sess.Signal(ssh.SIGHUP)
 	_ = t.sess.Close()
 	_ = t.client.Close() // unblocks pumps and Wait
+	// An output pump blocked on a full agent window (the agent stopped reading) would keep the channel open forever:
+	// close the agent side if the normal finish has not happened shortly (HP-SSH-012, HP-SSH-015).
+	time.AfterFunc(agentCloseGrace, func() {
+		t.mu.Lock()
+		done := t.done
+		t.mu.Unlock()
+		if !done {
+			_ = t.agent.Close()
+		}
+	})
 }
+
+// agentCloseGrace bounds how long a terminated channel waits for its output pumps before the agent side is closed.
+const agentCloseGrace = 2 * time.Second
 
 func (t *terminator) reason() string {
 	t.mu.Lock()

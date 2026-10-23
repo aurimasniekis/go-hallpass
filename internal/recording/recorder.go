@@ -285,7 +285,11 @@ func (r *channelRecorder) enqueueLocked(t hprec.RecordType, stream hprec.Stream,
 	if closed {
 		return nil, hprec.ErrWriterClosed
 	}
-	seq, err := r.svc.seq.Next(context.Background(), r.reg.SessionID, 1)
+	// Reserving a new sequence block writes to the database; a stalled database must not hold the channel beyond
+	// the block timeout (HP-REC-011).
+	sctx, cancel := context.WithTimeout(context.Background(), r.svc.opts.BlockTimeout)
+	seq, err := r.svc.seq.Next(sctx, r.reg.SessionID, 1)
+	cancel()
 	if err != nil {
 		r.setErr(err)
 		r.m().RecordingFailed(metrics.RecWrite)
