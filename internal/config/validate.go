@@ -106,6 +106,11 @@ func (c *Config) Validate() error {
 	for _, p := range c.Egress.AllowSpecialCIDRs {
 		v.prefix("egress.allow_special_cidrs", p)
 	}
+	for _, p := range c.Egress.SourceAddresses {
+		if _, err := netip.ParseAddr(p); err != nil {
+			v.prefix("egress.source_addresses", p)
+		}
+	}
 
 	c.validateAccess(v)
 

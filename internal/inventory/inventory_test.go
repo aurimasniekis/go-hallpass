@@ -1,0 +1,287 @@
+package inventory
+
+import (
+	"context"
+	"crypto/rand"
+	"errors"
+	"net"
+	"strings"
+	"testing"
+	"time"
+
+	"golang.org/x/crypto/ssh"
+
+	"github.com/aurimasniekis/go-hallpass/internal/apperr"
+	"github.com/aurimasniekis/go-hallpass/internal/audit"
+	"github.com/aurimasniekis/go-hallpass/internal/egress"
+	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
+	"github.com/aurimasniekis/go-hallpass/internal/keyring/keyringtest"
+	"github.com/aurimasniekis/go-hallpass/internal/store"
+	"github.com/aurimasniekis/go-hallpass/internal/store/storetest"
+	"github.com/aurimasniekis/go-hallpass/internal/testutil/sshkeys"
+	"github.com/aurimasniekis/go-hallpass/internal/testutil/sshtest"
+)
+
+var admin = audit.Actor{Type: audit.ActorOperator, ID: "opr_admin"}
+
+func newSvc(t *testing.T) (*Service, *store.Store) {
+	t.Helper()
+	s := storetest.Open(t)
+	kr := keyringtest.Load(t, s)
+	g, err := egress.New([]string{"10.0.0.0/8", "127.0.0.0/8"}, []string{"127.0.0.1/32"}, nil, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return New(s, audit.NewWriter(kr), eventbus.New(), Options{Guard: g, MaxGrantDuration: 24 * time.Hour, DialTimeout: 2 * time.Second}), s
+}
+
+func ptr[T any](v T) *T { return &v }
+
+func mkServer(t *testing.T, svc *Service, alias, addr string, port int) *Server {
+	t.Helper()
+	srv, err := svc.CreateServer(context.Background(), admin, ServerInput{Alias: ptr(alias), Address: ptr(addr), Port: ptr(port),
+		Description: ptr("web tier"), Groups: ptr([]string{"prod"}), Labels: ptr(map[string]string{"tier": "web"})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return srv
+}
+
+func TestReservedAliases(t *testing.T) {
+	for _, w := range ReservedWords {
+		if ValidAlias(w) {
+			t.Errorf("reserved word %q accepted", w)
+		}
+	}
+	for _, ok := range []string{"foo-server", "db1", "a"} {
+		if !ValidAlias(ok) {
+			t.Errorf("%q rejected", ok)
+		}
+	}
+	for _, bad := range []string{"Foo", "1db", "-x", "x-", "a_b", "--", strings.Repeat("a", 64)} {
+		if ValidAlias(bad) {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}
+
+func TestServerLifecycle(t *testing.T) {
+	svc, s := newSvc(t)
+	ctx := context.Background()
+	srv := mkServer(t, svc, "foo-server", "10.0.0.5", 22)
+	if !srv.Enabled || srv.Groups[0] != "prod" || srv.Labels["tier"] != "web" || srv.DisplayName != "foo-server" {
+		t.Fatalf("%+v", srv)
+	}
+	if _, err := svc.CreateServer(ctx, admin, ServerInput{Alias: ptr("foo-server"), Address: ptr("10.0.0.6")}); !errors.Is(err, apperr.ErrAlreadyExists) {
+		t.Fatal(err)
+	}
+	for _, in := range []ServerInput{
+		{Alias: ptr("list"), Address: ptr("10.0.0.6")},
+		{Alias: ptr("meta"), Address: ptr("169.254.169.254")},
+		{Alias: ptr("outside"), Address: ptr("192.168.1.1")},
+		{Alias: ptr("loopy"), Address: ptr("localhost")},
+	} {
+		if _, err := svc.CreateServer(ctx, admin, in); !errors.Is(err, apperr.ErrInvalid) {
+			t.Errorf("%s accepted: %v", *in.Alias, err)
+		}
+	}
+	upd, err := svc.UpdateServer(ctx, admin, srv.ID, ServerInput{Version: srv.Version, Address: ptr("10.0.0.9")})
+	if err != nil || upd.Address != "10.0.0.9" || upd.Groups[0] != "prod" {
+		t.Fatalf("%+v %v", upd, err)
+	}
+	if _, err := svc.UpdateServer(ctx, admin, srv.ID, ServerInput{Version: srv.Version, Address: ptr("10.0.0.8")}); !errors.Is(err, apperr.ErrConflict) {
+		t.Fatal(err)
+	}
+	var hooked []string
+	svc.OnDisable(func(_ context.Context, _ *store.Tx, kind, id string) error {
+		hooked = append(hooked, kind+":"+id)
+		return nil
+	})
+	d, err := svc.SetServerEnabled(ctx, admin, srv.ID, false)
+	if err != nil || d.Enabled || len(hooked) != 1 {
+		t.Fatalf("%v %v %v", d, err, hooked)
+	}
+	if res, err := audit.Verify(ctx, s.R()); err != nil || !res.OK || res.Events < 3 {
+		t.Fatalf("%+v %v", res, err)
+	}
+}
+
+func TestRoleValidationAndDefaults(t *testing.T) {
+	svc, _ := newSvc(t)
+	ctx := context.Background()
+	srv := mkServer(t, svc, "db1", "10.0.0.5", 22)
+	r, err := svc.CreateRole(ctx, admin, srv.ID, RoleInput{Alias: ptr("inspect"), RemoteUser: ptr("readonly"), Description: ptr("logs")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.RecordingMode != "mandatory" || r.RecordInput || !r.Has(CapShell) || r.MaxDuration != 6*time.Hour || len(r.ApprovalChannels) != 3 {
+		t.Fatalf("unsafe defaults: %+v", r)
+	}
+	bad := []RoleInput{
+		{Alias: ptr("exec"), RemoteUser: ptr("x")},
+		{Alias: ptr("a"), RemoteUser: ptr("Root!")},
+		{Alias: ptr("b"), RemoteUser: ptr("x"), Capabilities: ptr([]string{"pty"})},
+		{Alias: ptr("c"), RemoteUser: ptr("x"), Capabilities: ptr([]string{"forward"})},
+		{Alias: ptr("d"), RemoteUser: ptr("x"), MaxDuration: ptr(48 * time.Hour)},
+		{Alias: ptr("e"), RemoteUser: ptr("x"), MaxConcurrent: ptr(1), MaxConcurrentPerAgent: ptr(5)},
+		{Alias: ptr("f"), RemoteUser: ptr("x"), EnvAllow: ptr([]string{"BAD=1"})},
+		{Alias: ptr("g"), RemoteUser: ptr("x"), ApprovalChannels: ptr([]string{"email"})},
+	}
+	for i, in := range bad {
+		if _, err := svc.CreateRole(ctx, admin, srv.ID, in); !errors.Is(err, apperr.ErrInvalid) {
+			t.Errorf("case %d accepted: %v", i, err)
+		}
+	}
+	if _, err := svc.CreateRole(ctx, admin, srv.ID, RoleInput{Alias: ptr("inspect"), RemoteUser: ptr("x")}); !errors.Is(err, apperr.ErrAlreadyExists) {
+		t.Fatal(err)
+	}
+	u, err := svc.UpdateRole(ctx, admin, r.ID, RoleInput{Version: r.Version, Capabilities: ptr([]string{"exec"}), Labels: ptr(map[string]string{"class": "readonly"})})
+	if err != nil || u.Has(CapShell) || u.Labels["class"] != "readonly" {
+		t.Fatalf("%+v %v", u, err)
+	}
+	roles, _ := svc.ListRoles(ctx, srv.ID)
+	if len(roles) != 1 || roles[0].Labels["class"] != "readonly" {
+		t.Fatalf("%+v", roles)
+	}
+}
+
+// HP-SRV-004/006: explicit enrollment; duplicates across servers need an audited exception.
+func TestHostIdentityDuplicates(t *testing.T) {
+	svc, _ := newSvc(t)
+	ctx := context.Background()
+	a := mkServer(t, svc, "a", "10.0.0.1", 22)
+	b := mkServer(t, svc, "b", "10.0.0.2", 22)
+	hk := sshkeys.Ed25519(t)
+	line := hk.AuthorizedLine("")
+	h, err := svc.AddHostIdentity(ctx, admin, a.ID, "10.0.0.1 "+line)
+	if err != nil || h.State != "active" || h.Fingerprint != hk.Fingerprint() {
+		t.Fatalf("%+v %v", h, err)
+	}
+	if _, err := svc.AddHostIdentity(ctx, admin, b.ID, line); !errors.Is(err, apperr.ErrConflict) {
+		t.Fatalf("duplicate host key accepted: %v", err)
+	}
+	if err := svc.AddDuplicateException(ctx, admin, hk.Fingerprint(), b.ID, a.ID, "short"); err == nil {
+		t.Fatal("short justification accepted")
+	}
+	if err := svc.AddDuplicateException(ctx, admin, hk.Fingerprint(), b.ID, a.ID, "VIP fronting identical replicas"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.AddHostIdentity(ctx, admin, b.ID, line); err != nil {
+		t.Fatalf("exception not honored: %v", err)
+	}
+	if _, err := svc.AddHostIdentity(ctx, admin, a.ID, "garbage"); !errors.Is(err, apperr.ErrInvalid) {
+		t.Fatal(err)
+	}
+	r, err := svc.RetireHostIdentity(ctx, admin, h.ID)
+	if err != nil || r.State != "retired" {
+		t.Fatal(err)
+	}
+}
+
+// HP-SSH-011, HP-SRV-005: strict verification, changed keys rejected, no identity → no trust.
+func TestVerifier(t *testing.T) {
+	svc, _ := newSvc(t)
+	ctx := context.Background()
+	srv := mkServer(t, svc, "a", "10.0.0.1", 22)
+	if _, err := svc.NewVerifier(ctx, srv.ID); err == nil {
+		t.Fatal("server without identities must not be trusted")
+	}
+	hk, other := sshkeys.Ed25519(t), sshkeys.ECDSA256(t)
+	if _, err := svc.AddHostIdentity(ctx, admin, srv.ID, hk.AuthorizedLine("")); err != nil {
+		t.Fatal(err)
+	}
+	v, err := svc.NewVerifier(ctx, srv.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := &net.TCPAddr{IP: net.IPv4(10, 0, 0, 1), Port: 22}
+	if err := v.Callback("x", addr, hk.Public); err != nil {
+		t.Fatal(err)
+	}
+	var he *HostKeyError
+	if err := v.Callback("x", addr, other.Public); !errors.As(err, &he) || he.Presented != other.Fingerprint() {
+		t.Fatalf("changed key accepted: %v", err)
+	}
+	if len(v.Algorithms) != 1 || v.Algorithms[0] != ssh.KeyAlgoED25519 {
+		t.Fatalf("algorithms %v", v.Algorithms)
+	}
+}
+
+func signHostCert(t *testing.T, ca sshkeys.Key, host sshkeys.Key, principals []string, validFor time.Duration, typ uint32) *ssh.Certificate {
+	t.Helper()
+	now := time.Now()
+	c := &ssh.Certificate{Key: host.Public, CertType: typ, ValidPrincipals: principals,
+		ValidAfter: uint64(now.Add(-time.Minute).Unix()), ValidBefore: uint64(now.Add(validFor).Unix())}
+	if err := c.SignCert(rand.Reader, ca.Signer); err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+// HP-SRV-007: host CA with explicit principal binding.
+func TestHostCAVerification(t *testing.T) {
+	svc, _ := newSvc(t)
+	ctx := context.Background()
+	srv := mkServer(t, svc, "a", "10.0.0.1", 22)
+	ca, rogue, host := sshkeys.Ed25519(t), sshkeys.Ed25519(t), sshkeys.Ed25519(t)
+	hca, err := svc.CreateHostCA(ctx, admin, "corp-hosts", ca.AuthorizedLine(""), 30*24*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.BindHostCA(ctx, admin, srv.ID, hca.ID, nil); err == nil {
+		t.Fatal("binding without principals accepted")
+	}
+	if err := svc.BindHostCA(ctx, admin, srv.ID, hca.ID, []string{"a.prod.example"}); err != nil {
+		t.Fatal(err)
+	}
+	v, err := svc.NewVerifier(ctx, srv.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := &net.TCPAddr{IP: net.IPv4(10, 0, 0, 1), Port: 22}
+	good := signHostCert(t, ca, host, []string{"a.prod.example"}, 24*time.Hour, ssh.HostCert)
+	if err := v.Callback("x", addr, good); err != nil {
+		t.Fatalf("valid host cert rejected: %v", err)
+	}
+	for name, c := range map[string]*ssh.Certificate{
+		"wrong principal": signHostCert(t, ca, host, []string{"b.prod.example"}, 24*time.Hour, ssh.HostCert),
+		"rogue CA":        signHostCert(t, rogue, host, []string{"a.prod.example"}, 24*time.Hour, ssh.HostCert),
+		"user cert":       signHostCert(t, ca, host, []string{"a.prod.example"}, 24*time.Hour, ssh.UserCert),
+		"too long":        signHostCert(t, ca, host, []string{"a.prod.example"}, 90*24*time.Hour, ssh.HostCert),
+	} {
+		if err := v.Callback("x", addr, c); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+	if err := v.Callback("x", addr, host.Public); err == nil {
+		t.Fatal("plain key accepted without enrolled identity")
+	}
+}
+
+// HP-SRV-004: scan records pending identities that require confirmation.
+func TestScanAndConfirm(t *testing.T) {
+	svc, _ := newSvc(t)
+	ctx := context.Background()
+	dest := sshtest.Start(t, sshkeys.Ed25519(t), sshkeys.ECDSA256(t))
+	host, port := dest.Addr()
+	srv := mkServer(t, svc, "dest", host, port)
+	ids, err := svc.ScanHostKeys(ctx, admin, srv.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 2 || ids[0].State != "pending" || ids[0].EnrolledVia != "scan" {
+		t.Fatalf("%+v", ids)
+	}
+	if _, err := svc.NewVerifier(ctx, srv.ID); err == nil {
+		t.Fatal("pending identities must not be trusted")
+	}
+	if _, err := svc.ConfirmHostIdentity(ctx, admin, ids[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ConfirmHostIdentity(ctx, admin, ids[0].ID); !errors.Is(err, apperr.ErrPrecondition) {
+		t.Fatal(err)
+	}
+	if v, err := svc.NewVerifier(ctx, srv.ID); err != nil || len(v.Algorithms) != 1 {
+		t.Fatalf("%v %v", v, err)
+	}
+}

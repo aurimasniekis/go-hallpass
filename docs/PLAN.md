@@ -1582,8 +1582,8 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP03 | SQLite storage, migrations, lock, backup primitive | WP02 | tested | f0b96c0 |
 | WP04 | Keyring and field crypto | WP03 | tested | dc3680d |
 | WP05 | Audit, jobs, outbox | WP04 | tested | 3327bc9 |
-| WP06 | Agents and keys | WP05 | tested | |
-| WP07 | Servers, host identities, roles, credentials/CA | WP06 | planned | |
+| WP06 | Agents and keys | WP05 | tested | bdf3f05 |
+| WP07 | Servers, host identities, roles, credentials/CA | WP06 | tested | |
 | WP08 | Policy engine and effective access | WP07 | planned | |
 | WP09 | Request/grant/session lifecycle and enforcer | WP08 | planned | |
 | WP10 | SSH front end | WP09 | planned | |
@@ -1619,6 +1619,7 @@ local run of the same targets the workflow executes, and the entry says so. Chec
 - **WP04** (2026-10-23): `internal/keyring` (LocalKEK AES-256-GCM KeyWrapper, KEK file/env/dev loading with permission checks, purpose keys field/credential/recording/manifest/token, Seal/Open with location-binding AAD, MAC/MACAll/VerifyMAC, purpose rotation with canary reseal, retire, offline KEK rotation), `hallpass keys init-kek|status|rotate|rotate-kek`, docs/operator/keys.md. Found and fixed during testing: retiring a rotated field key orphaned the canary; rotation now reseals it in the same transaction. Coverage 80.6%. Tested locally.
 - **WP05** (2026-10-23): migration 0002 (audit_events, jobs, outbox_messages, delivery_attempts), `internal/audit` (hash chain, Verify, sealed sensitive details, sinks), `internal/jobs` (leased durable queue, retries, dedup, Periodic), `internal/outbox` (encrypted bodies, provider registry, leased delivery, bounded retries, dead-letter, attempt history), `internal/eventbus` (bounded, drop-counting), `internal/keyring/keyringtest`. Tested locally under -race.
 - **WP06** (2026-10-23): migration 0003 (groups, labels, agents, agent_keys, agent_groups), `internal/agents` (strict key parsing/algorithm policy, global key uniqueness with tombstones, revocation with sealed reasons, enable/disable, in-transaction hooks for WP09 cascades, Authenticate with failure reasons and source CIDRs, policy-version bumps, audit), `internal/groups` (group/label validation and persistence), `internal/apperr`, `internal/testutil/sshkeys`, audit request metadata. Tested locally (-race), FuzzParseAgentKey 20 s.
+- **WP07** (2026-10-23): migrations 0004/0005, `internal/inventory` (servers, roles, aliases/reserved words, host identities with paste/scan/confirm/retire, duplicate detection + audited exceptions, host CAs with principal binding, strict Verifier), `internal/credentials` (managed/imported login keys sealed with the credential key, authorized_keys suggestion, probe/activate/overlap/retire/revoke, user CAs + per-connection certificates, Signer/SignerResolver abstraction, gateway host keys with staged rotation), `internal/egress` (anti-SSRF guard), `internal/destssh` (sole outbound dialer, verifier mandatory), `internal/sshalg`, `internal/testutil/sshtest` (in-process destination), config `egress.source_addresses`. txscope analyzer refined (SSH I/O only; AfterCommit callbacks exempt). Tested locally (-race); real-OpenSSH interop deferred to WP10/WP11 harness.
 <!-- progress-log-end -->
 
 ---
@@ -1663,13 +1664,13 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-SSH-002` Identity from key, not username — WP10 — evidence: O, I
 - [ ] `HP-SSH-003` Uniform rejection of unknown/revoked keys — WP10 — evidence: O, I
 - [ ] `HP-SSH-004` Algorithm policy — WP10 — evidence: U, O
-- [ ] `HP-SSH-005` Gateway host key lifecycle — WP10 — evidence: U, O, D
+- [ ] `HP-SSH-005` Gateway host key lifecycle — WP10 — evidence: U, O, D — ◐ WP07: gateway Ed25519 host key sealed, EnsureGatewayHostKey, stage(next, other algorithm)/promote rotation; CLI/UI/doc pending WP10
 - [ ] `HP-SSH-006` Shell, exec, PTY completeness — WP11 — evidence: O
 - [ ] `HP-SSH-007` Forwarding and unknown channels denied — WP10 — evidence: O, I
 - [ ] `HP-SSH-008` Environment allowlist — WP11 — evidence: U, O
 - [ ] `HP-SSH-009` Stdout purity — WP10 — evidence: O
 - [ ] `HP-SSH-010` Exit status and signal propagation — WP11 — evidence: O
-- [ ] `HP-SSH-011` Strict destination host verification — WP11 — evidence: C, O
+- [ ] `HP-SSH-011` Strict destination host verification — WP11 — evidence: C, O — ◐ WP07: inventory.Verifier (enrolled keys or bound host CA, restricted HostKeyAlgorithms), destssh refuses dial without verifier, nohostkeyignore lint; operator alert wiring WP11
 - [ ] `HP-SSH-012` Keepalive and idle timeouts — WP11 — evidence: I, O
 - [ ] `HP-SSH-013` Pre-auth and connection limits — WP10 — evidence: S, FI
 - [ ] `HP-SSH-014` Bounded buffering and backpressure — WP11 — evidence: S, I
@@ -1699,26 +1700,26 @@ check · R recovery drill · SR security review · D documentation review.
 
 #### HP-SRV — Destination servers and roles
 
-- [ ] `HP-SRV-001` Server record — WP07 — evidence: U, I
-- [ ] `HP-SRV-002` Role record — WP07 — evidence: U, I
+- [x] `HP-SRV-001` Server record — WP07 — evidence: U, I — ✅ tested (local) @ WP07: servers + groups/labels/metadata, alias rules, optimistic version
+- [x] `HP-SRV-002` Role record — WP07 — evidence: U, I — ✅ tested (local) @ WP07: roles with capabilities, durations, concurrency, recording mode, env allowlist, approval channels, labels
 - [ ] `HP-SRV-003` Descriptions are not enforcement — WP20 — evidence: E, D
-- [ ] `HP-SRV-004` Explicit host identity enrollment — WP07 — evidence: I, O
-- [ ] `HP-SRV-005` Host key rotation — WP07 — evidence: I, O
-- [ ] `HP-SRV-006` Duplicate host identity detection — WP07 — evidence: I
-- [ ] `HP-SRV-007` Host CA model — WP07 — evidence: U, O
+- [ ] `HP-SRV-004` Explicit host identity enrollment — WP07 — evidence: I, O — ◐ WP07: paste (active) and scan→pending→confirm enrollment, tested against in-process destination; real-sshd interop pending WP10/11 harness
+- [ ] `HP-SRV-005` Host key rotation — WP07 — evidence: I, O — ◐ WP07: pending/active/retired states, changed key → HostKeyError before auth (TestHostKeyMismatchBlocksLogin); alerting + exit 88 wiring WP11
+- [x] `HP-SRV-006` Duplicate host identity detection — WP07 — evidence: I — ✅ tested (local) @ WP07: duplicate active fingerprint rejected; justified, audited exception required
+- [ ] `HP-SRV-007` Host CA model — WP07 — evidence: U, O — ◐ WP07: host CA enrollment + principal binding, validity/CA/type checks (unit); real-sshd host-cert interop pending WP11
 - [ ] `HP-SRV-008` Server/role disablement — WP09 — evidence: I, O
-- [ ] `HP-SRV-009` Egress validation (anti-SSRF) — WP07 — evidence: U, I
+- [x] `HP-SRV-009` Egress validation (anti-SSRF) — WP07 — evidence: U, I — ✅ tested (local) @ WP07: internal/egress default-deny special ranges, allow CIDRs, mixed-DNS refusal, IP-pinned dial with Control re-check
 - [ ] `HP-SRV-010` Address confidentiality — WP15 — evidence: I, E
 
 #### HP-KEY — Destination login credentials and signing keys
 
-- [ ] `HP-KEY-001` Managed login key default — WP07 — evidence: U, I
-- [ ] `HP-KEY-002` Public key installation aid — WP07 — evidence: E, I
-- [ ] `HP-KEY-003` Login key rotation — WP07 — evidence: I, O
-- [ ] `HP-KEY-004` OpenSSH user certificates — WP07 — evidence: U, O
-- [ ] `HP-KEY-005` Signer abstraction — WP07 — evidence: U
-- [ ] `HP-KEY-006` Distinct key types — WP07 — evidence: C, SR
-- [ ] `HP-KEY-007` Credential isolation — WP07 — evidence: U, I, SR
+- [x] `HP-KEY-001` Managed login key default — WP07 — evidence: U, I — ✅ tested (local) @ WP07: per-role managed Ed25519, sealed with credential key, no export path
+- [ ] `HP-KEY-002` Public key installation aid — WP07 — evidence: E, I — ◐ WP07: AuthorizedKeysLine (restrict[,pty],from=egress.source_addresses) tested; UI copy action pending WP20
+- [ ] `HP-KEY-003` Login key rotation — WP07 — evidence: I, O — ◐ WP07: pending→probe→active→retiring→retired/revoked with overlap + RetireDue (tested vs in-process sshd); real-sshd probe interop pending WP11
+- [ ] `HP-KEY-004` OpenSSH user certificates — WP07 — evidence: U, O — ◐ WP07: per-connection user certs (TTL ≤ 3m default 2m, explicit principals, key ID, capability-limited extensions, source-address) verified by live login to test server; OpenSSH sshd interop pending WP11
+- [x] `HP-KEY-005` Signer abstraction — WP07 — evidence: U — ✅ tested (local) @ WP07: credentials.Signer/SignerResolver + FromCryptoSigner adapter (ECDSA DER→SSH) test; no external backend shipped (R-03)
+- [ ] `HP-KEY-006` Distinct key types — WP07 — evidence: C, SR — ◐ WP07: separate types/tables (host_identities, host_cas, login_credentials, user_cas, gateway_host_keys) and packages; API/UI separation WP15/WP20; SR WP26
+- [ ] `HP-KEY-007` Credential isolation — WP07 — evidence: U, I, SR — ◐ WP07: DTOs carry no private material (JSON test), imported keys flagged/never exported, credentials never presented to untrusted hosts; API/log review WP15/WP26
 
 #### HP-POL — Visibility and policy
 

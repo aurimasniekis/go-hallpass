@@ -4,6 +4,8 @@ type Queries struct{}
 
 func (q *Queries) Insert() error { return nil }
 
+func (q *Queries) AfterCommit(fn func()) {}
+
 type Writer struct{}
 
 func (w *Writer) Tx(fn func(q *Queries) error) error { return fn(&Queries{}) }

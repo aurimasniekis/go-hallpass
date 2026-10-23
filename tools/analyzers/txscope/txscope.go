@@ -29,8 +29,16 @@ var bannedPkgs = []string{
 	"net",
 	"net/http",
 	"os/exec",
-	"golang.org/x/crypto/ssh",
 }
+
+const sshPkg = "golang.org/x/crypto/ssh"
+
+// sshIOFuncs are package-level x/crypto/ssh functions that perform network I/O. Pure helpers (parsing,
+// fingerprints, marshaling, signing) are allowed inside transactions.
+var sshIOFuncs = map[string]bool{"Dial": true, "NewClientConn": true, "NewServerConn": true, "NewClient": true, "DiscardRequests": true}
+
+// sshIOTypes are x/crypto/ssh types whose methods perform network I/O.
+var sshIOTypes = map[string]bool{"Client": true, "Session": true, "ServerConn": true, "Request": true, "Channel": true, "Conn": true, "NewChannel": true, "ConnMetadata": false}
 
 // bannedInternal are module-relative package suffixes that must not be called inside a transaction.
 var bannedInternal = []string{
@@ -93,6 +101,10 @@ func checkBody(pass *analysis.Pass, body *ast.BlockStmt) {
 		case *ast.SendStmt:
 			pass.Reportf(x.Pos(), "channel send inside store transaction: publish events after commit")
 		case *ast.CallExpr:
+			// Callbacks registered with AfterCommit run after the transaction; they may publish and do I/O.
+			if sel, ok := x.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "AfterCommit" {
+				return false
+			}
 			checkCall(pass, x)
 		}
 		return true
@@ -122,6 +134,12 @@ func checkCall(pass *analysis.Pass, call *ast.CallExpr) {
 		pass.Reportf(call.Pos(), "file fsync inside store transaction: fsync before or after the transaction")
 		return
 	}
+	if path == sshPkg {
+		if isSSHIO(fn) {
+			pass.Reportf(call.Pos(), "call to %s.%s inside store transaction: no network or SSH I/O while holding the writer", path, fn.Name())
+		}
+		return
+	}
 	for _, b := range bannedPkgs {
 		if path == b || strings.HasPrefix(path, b+"/") {
 			pass.Reportf(call.Pos(), "call to %s.%s inside store transaction: no network or SSH I/O while holding the writer", path, fn.Name())
@@ -134,4 +152,19 @@ func checkCall(pass *analysis.Pass, call *ast.CallExpr) {
 			return
 		}
 	}
+}
+
+func isSSHIO(fn *types.Func) bool {
+	recv := fn.Signature().Recv()
+	if recv == nil {
+		return sshIOFuncs[fn.Name()]
+	}
+	t := recv.Type()
+	if p, ok := t.(*types.Pointer); ok {
+		t = p.Elem()
+	}
+	if named, ok := t.(*types.Named); ok {
+		return sshIOTypes[named.Obj().Name()]
+	}
+	return false
 }

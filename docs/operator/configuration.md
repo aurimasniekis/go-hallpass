@@ -54,6 +54,7 @@ Example: [`deploy/examples/hallpass.example.yaml`](../../deploy/examples/hallpas
 | `recording.default_retention` | `2160h` (90 days) | Default retention class. |
 | `egress.allow_cidrs` | `[]` | Ranges destinations may resolve into. **Empty means no destination is reachable** (HP-SRV-009). |
 | `egress.allow_special_cidrs` | `[]` | Explicitly re-allow normally denied ranges (loopback, link-local, metadata). |
+| `egress.source_addresses` | `[]` | The gateway's own egress IPs/CIDRs as destinations see them. Used for the suggested `from="…"` in login-key authorized_keys lines and firewall guidance. |
 | `access.wait_timeout_default` / `access.wait_timeout_max` | `120s` / `15m` | How long `connect`/`exec` wait for approval. |
 | `access.pending_expiry` | `30m` | Pending requests expire after this. |
 | `access.duration_presets` | `5m,15m,30m,1h,3h,6h,24h` | Allowed grant durations (ascending). |

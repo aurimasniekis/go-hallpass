@@ -134,6 +134,9 @@ type EgressConfig struct {
 	AllowCIDRs []string `yaml:"allow_cidrs"`
 	// AllowSpecialCIDRs explicitly re-allows ranges denied by default (loopback, link-local, metadata).
 	AllowSpecialCIDRs []string `yaml:"allow_special_cidrs"`
+	// SourceAddresses are the gateway's egress addresses as destinations see them; used in suggested
+	// authorized_keys from= restrictions and firewall guidance (HP-KEY-002).
+	SourceAddresses []string `yaml:"source_addresses"`
 }
 
 // AccessConfig configures request, wait and grant timing (HP-REQ-004, HP-REQ-005, HP-REQ-007).

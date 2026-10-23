@@ -2,6 +2,8 @@ package a
 
 import (
 	"net"
+
+	"golang.org/x/crypto/ssh"
 	"os"
 	"time"
 
@@ -20,6 +22,10 @@ func bad(w *store.Writer, ch chan int, f *os.File) error {
 		select {                      // want `select statement inside store transaction`
 		default:
 		}
+		_, _ = ssh.Dial("tcp", "x")      // want `call to golang.org/x/crypto/ssh.Dial inside store transaction`
+		_ = (&ssh.Client{}).NewSession() // want `call to golang.org/x/crypto/ssh.NewSession inside store transaction`
+		_ = ssh.FingerprintSHA256(nil)
+		q.AfterCommit(func() { _ = notify.Send() })
 		return q.Insert()
 	})
 }

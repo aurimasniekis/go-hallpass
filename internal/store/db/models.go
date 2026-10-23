@@ -73,6 +73,17 @@ type DeliveryAttempt struct {
 	DurationMs int64
 }
 
+type GatewayHostKey struct {
+	ID                string
+	Algorithm         string
+	PublicKey         string
+	FingerprintSha256 string
+	PrivateEnc        []byte
+	State             string
+	CreatedAt         int64
+	UpdatedAt         int64
+}
+
 type Group struct {
 	ID          string
 	Kind        string
@@ -80,6 +91,49 @@ type Group struct {
 	Description string
 	CreatedAt   int64
 	UpdatedAt   int64
+}
+
+type HostCa struct {
+	ID                string
+	Name              string
+	PublicKey         string
+	FingerprintSha256 string
+	MaxValidityS      int64
+	State             string
+	CreatedAt         int64
+	CreatedBy         string
+	UpdatedAt         int64
+}
+
+type HostCaPrincipal struct {
+	ServerID  string
+	Principal string
+}
+
+type HostDuplicateException struct {
+	ID                string
+	FingerprintSha256 string
+	ServerA           string
+	ServerB           string
+	Justification     string
+	CreatedBy         string
+	CreatedAt         int64
+}
+
+type HostIdentity struct {
+	ID                string
+	ServerID          string
+	Algorithm         string
+	PublicKey         string
+	FingerprintSha256 string
+	State             string
+	EnrolledVia       string
+	CreatedAt         int64
+	CreatedBy         string
+	ConfirmedAt       sql.NullInt64
+	ConfirmedBy       sql.NullString
+	RetiredAt         sql.NullInt64
+	RetiredBy         sql.NullString
 }
 
 type Job struct {
@@ -115,6 +169,26 @@ type Label struct {
 	Value      string
 }
 
+type LoginCredential struct {
+	ID                string
+	RoleID            string
+	Kind              string
+	Algorithm         string
+	PublicKey         string
+	FingerprintSha256 string
+	PrivateEnc        []byte
+	State             string
+	ProbeOkAt         sql.NullInt64
+	ProbeError        sql.NullString
+	ActivatedAt       sql.NullInt64
+	RetireAfter       sql.NullInt64
+	RetiredAt         sql.NullInt64
+	RevokedAt         sql.NullInt64
+	CreatedAt         int64
+	CreatedBy         string
+	UpdatedAt         int64
+}
+
 type OutboxMessage struct {
 	ID          string
 	Provider    string
@@ -143,9 +217,80 @@ type PolicyState struct {
 	UpdatedAt  int64
 }
 
+type RoleCertBinding struct {
+	RoleID         string
+	UserCaID       string
+	PrincipalsJson string
+	TtlS           int64
+	UpdatedAt      int64
+	UpdatedBy      string
+}
+
+type Server struct {
+	ID           string
+	Alias        string
+	DisplayName  string
+	Description  string
+	Environment  string
+	Address      string
+	Port         int64
+	Enabled      int64
+	HostCaID     sql.NullString
+	MetadataJson string
+	Version      int64
+	CreatedAt    int64
+	CreatedBy    string
+	UpdatedAt    int64
+	UpdatedBy    string
+}
+
+type ServerGroup struct {
+	ServerID string
+	GroupID  string
+}
+
+type ServerRole struct {
+	ID                    string
+	ServerID              string
+	Alias                 string
+	DisplayName           string
+	Description           string
+	RemoteUser            string
+	CapabilitiesJson      string
+	DefaultDurationS      int64
+	MaxDurationS          int64
+	MaxConcurrent         int64
+	MaxConcurrentPerAgent int64
+	RecordInput           int64
+	RecordingMode         string
+	EnvAllowJson          string
+	ApprovalChannelsJson  string
+	RestrictionNotes      string
+	RetentionClass        string
+	Enabled               int64
+	Version               int64
+	CreatedAt             int64
+	UpdatedAt             int64
+	UpdatedBy             string
+}
+
 type Setting struct {
 	Key       string
 	Value     string
 	UpdatedAt int64
 	UpdatedBy sql.NullString
+}
+
+type UserCa struct {
+	ID                string
+	Name              string
+	Algorithm         string
+	PublicKey         string
+	FingerprintSha256 string
+	PrivateEnc        []byte
+	SignerRef         sql.NullString
+	State             string
+	CreatedAt         int64
+	CreatedBy         string
+	UpdatedAt         int64
 }
