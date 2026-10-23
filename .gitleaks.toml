@@ -1,0 +1,10 @@
+title = "hallpass gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Planning docs mention secret names, not values"
+paths = [
+  '''docs/PROMPT\.md''',
+]

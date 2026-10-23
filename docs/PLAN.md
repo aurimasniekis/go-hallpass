@@ -28,7 +28,7 @@ R-01 to R-12 in DECISIONS.md §2 and summarized in §20 here.
 | # | Assumption | Consequence if false |
 |---|---|---|
 | A-1 | Repository `aurimasniekis/go-hallpass` was empty at WP00, so there are no existing conventions to preserve. | n/a (verified at WP00). |
-| A-2 | Go ≥ 1.25 (dev machine has 1.27.2). `go.mod` will declare `go 1.25` as the floor so the code works with distro toolchains, raised as needed. | Adjust in WP01. |
+| A-2 | Latest stable Go (1.27.3 at WP01, per user instruction 2026-10-23). `go.mod` declares `go 1.27.3`, and the toolchain auto-downloads where older. Bump to new stable releases as they ship. | Older distro toolchains are not supported; use the official toolchain or the container build. |
 | A-3 | Node 24 LTS + pnpm (via corepack) for the frontend. | Adjust in WP19. |
 | A-4 | Destinations run OpenSSH `sshd` ≥ 8.2 on POSIX systems with a POSIX-compatible login shell. | Windows/other sshd are unsupported in v1. |
 | A-5 | Deployments are Linux (amd64/arm64) on local block storage (ext4/xfs/btrfs/zfs). macOS is supported for development only. | Storage checks (HP-DB-007) are Linux-specific. |
@@ -1576,8 +1576,8 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 
 | WP | Title | Depends | Status | Commit |
 |---|---|---|---|---|
-| WP00 | Planning documents | — | implemented | (this commit) |
-| WP01 | Scaffolding, CI, lint | WP00 | planned | |
+| WP00 | Planning documents | — | implemented | e15801b |
+| WP01 | Scaffolding, CI, lint | WP00 | tested | |
 | WP02 | Config, runtime modes, logging | WP01 | planned | |
 | WP03 | SQLite storage, migrations, lock, backup primitive | WP02 | planned | |
 | WP04 | Keyring and field crypto | WP03 | planned | |
@@ -1604,6 +1604,17 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP25 | Destination-side audit integration | WP12, WP21 | planned | |
 | WP26 | Hardening | WP01–WP25 | planned | |
 | WP27 | Release-gate validation and RC | WP26 | planned | |
+
+### 19.3 Progress log
+
+Newest last. Each entry states what is **implemented**, what is **tested** (and where: local `make check` vs GitHub CI), and what is
+**externally verified**, plus deviations. Until the repository is pushed (only on explicit user instruction), "CI" evidence means a
+local run of the same targets the workflow executes, and the entry says so. Checklist marks in §21: `✅` = done (box checked),
+`◐` = partial progress (box stays unchecked).
+
+- **WP00** (2026-10-23): planning documents committed (`e15801b`).
+- **WP01** (2026-10-23): Go module (`go 1.27.3`, latest stable per user instruction; A-2 updated), `hallpass version`, golangci-lint v2 config (depguard: no math/rand, no log; forbidigo), custom analyzers `nohostkeyignore` and `txscope` with analysistest suites (tools module), Makefile, coverage-floor script, CI workflow (actions pinned by SHA, actionlint-clean), gitleaks config, CONTRIBUTING.md, docs index. Tested locally: `make vet custom-vet lint race tools-test coverage` green, gitleaks clean. Not yet run on GitHub (not pushed).
+<!-- progress-log-end -->
 
 ---
 
@@ -1779,7 +1790,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-CRY-003` Field encryption — WP04 — evidence: U, P
 - [ ] `HP-CRY-004` Recording file format — WP12 — evidence: U, Z, SR
 - [ ] `HP-CRY-005` Integrity verification — WP12 — evidence: I, R
-- [ ] `HP-CRY-006` Vetted cryptography only — WP01 — evidence: C, SR
+- [ ] `HP-CRY-006` Vetted cryptography only — WP01 — evidence: C, SR — ◐ WP01: depguard bans math/rand; nohostkeyignore analyzer; ongoing constraint, SR at WP26
 - [ ] `HP-CRY-007` Key loss and recovery — WP23 — evidence: D, R
 - [ ] `HP-CRY-008` External integrity anchoring — WP23 — evidence: I, D
 - [ ] `HP-CRY-009` Ciphertext-only archival — WP23 — evidence: I, R
@@ -1906,11 +1917,11 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-OPS-005` Upgrade and rollback — WP23 — evidence: R, D
 - [ ] `HP-OPS-006` Capacity and disk alerts — WP22 — evidence: I, D
 - [ ] `HP-OPS-007` Container and standalone deploy — WP24 — evidence: I, D
-- [ ] `HP-OPS-008` CI pipeline — WP01 — evidence: C
+- [ ] `HP-OPS-008` CI pipeline — WP01 — evidence: C — ◐ WP01: lint, vet, custom analyzers, race, fuzz smoke, govulncheck, gitleaks in CI; OpenSSH (WP10), frontend (WP19), Trivy (WP24) pending
 - [ ] `HP-OPS-009` Release provenance — WP24 — evidence: C
 - [ ] `HP-OPS-010` Project documents — WP24 — evidence: D
 - [ ] `HP-OPS-011` License decision — WP24 — evidence: D
-- [ ] `HP-OPS-012` No secrets in repo — WP01 — evidence: C
+- [x] `HP-OPS-012` No secrets in repo — WP01 — evidence: C — ✅ tested (local) @ WP01: gitleaks v8.30.1 clean; CI job `security`; .gitignore excludes keys/DBs/recordings
 - [ ] `HP-OPS-013` Config and runtime modes — WP02 — evidence: U, I
 - [ ] `HP-OPS-014` Durable jobs — WP05 — evidence: I
 
@@ -1924,7 +1935,7 @@ check · R recovery drill · SR security review · D documentation review.
 
 #### HP-TST — Testing and quality
 
-- [ ] `HP-TST-001` Race detector — WP01 — evidence: C
+- [x] `HP-TST-001` Race detector — WP01 — evidence: C — ✅ tested (local) @ WP01: `make race` runs `go test -race -count=1 ./...`; CI job `go` configured
 - [ ] `HP-TST-002` Fuzzing — WP26 — evidence: Z
 - [ ] `HP-TST-003` Real OpenSSH integration — WP10 — evidence: O
 - [ ] `HP-TST-004` Browser E2E — WP19 — evidence: E
@@ -1932,7 +1943,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-TST-006` Soak — WP26 — evidence: S
 - [ ] `HP-TST-007` Measured performance — WP26 — evidence: S
 - [ ] `HP-TST-008` Security review — WP26 — evidence: SR
-- [ ] `HP-TST-009` Coverage floor — WP01 — evidence: C
+- [ ] `HP-TST-009` Coverage floor — WP01 — evidence: C — ◐ WP01: floor script `scripts/coverage-floor.sh` (80%) in CI; enforced as each listed package lands
 
 #### HP-DOC — Documentation
 

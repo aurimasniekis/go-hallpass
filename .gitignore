@@ -1,0 +1,29 @@
+# Build output
+/bin/
+/dist/
+*.test
+*.out
+coverage.*
+
+# Local runtime data and secrets — never commit
+/data/
+/.hallpass/
+*.kek
+kek
+*.db
+*.db-wal
+*.db-shm
+*.hprec
+*.hprec.partial
+
+# Frontend
+node_modules/
+/web/dist/
+/web/test-results/
+/web/playwright-report/
+/web/blob-report/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
