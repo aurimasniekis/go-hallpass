@@ -379,8 +379,9 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 		if recFailed.CompareAndSwap(false, true) {
 			p.o.Logger.Error("recording write failed", slog.String(obs.FieldChannelID, reg.ChannelID), obs.Err(err))
 			go func() {
-				rec.Abort(err)
+				// Timeline first: once the segment shows "failed", its recording.failed event already exists.
 				_ = p.o.Access.AppendSessionEvent(context.WithoutCancel(ctx), reg, access.EvRecordingFailed, rec.SegmentID(), map[string]any{"error": "recording write failed"})
+				rec.Abort(err)
 			}()
 		}
 		return !mandatory
