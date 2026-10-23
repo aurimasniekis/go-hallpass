@@ -20,6 +20,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/clock"
 	"github.com/aurimasniekis/go-hallpass/internal/ids"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
 )
@@ -61,6 +62,8 @@ type Options struct {
 	MaxBackoff   time.Duration // retry delay cap (default 5m)
 	Logger       *slog.Logger
 	Clock        clock.Clock
+	// Metrics counts job executions by kind and result (hallpass_job_runs_total). Nil disables.
+	Metrics *metrics.Metrics
 }
 
 // Runner claims and executes jobs.
@@ -241,6 +244,7 @@ func (r *Runner) execute(parent context.Context, j claimedJob) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), j.cfg.timeout)
 	defer cancel()
 	err := safeRun(ctx, j.cfg.handler, j.Job)
+	r.opts.Metrics.JobRun(j.Kind, err)
 	state, runAt, lastErr := "done", r.opts.Clock.Now(), sql.NullString{}
 	if err != nil {
 		lastErr = sql.NullString{String: truncate(err.Error(), 1000), Valid: true}
@@ -301,17 +305,30 @@ func Backoff(base, maxDelay time.Duration, attempt int) time.Duration {
 // Periodic runs fn every interval until ctx is canceled (first run after one interval, or immediately if now).
 // Panics and errors are logged; fn must be idempotent.
 func Periodic(ctx context.Context, log *slog.Logger, name string, interval time.Duration, now bool, fn func(context.Context) error) {
+	PeriodicWithMetrics(ctx, log, nil, name, interval, now, fn)
+}
+
+// PeriodicWithMetrics is Periodic that also counts each run in hallpass_job_runs_total{job=name} (m may be nil).
+// Runs cut short by ctx cancellation are not counted.
+func PeriodicWithMetrics(ctx context.Context, log *slog.Logger, m *metrics.Metrics, name string, interval time.Duration, now bool,
+	fn func(context.Context) error) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	run := func() {
 		defer func() {
 			if p := recover(); p != nil {
 				log.Error("periodic task panicked", slog.String("task", name), slog.Any("panic", p))
+				m.JobRun(name, fmt.Errorf("panic: %v", p))
 			}
 		}()
-		if err := fn(ctx); err != nil && ctx.Err() == nil {
+		err := fn(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		if err != nil {
 			log.Warn("periodic task failed", slog.String("task", name), obs.Err(err))
 		}
+		m.JobRun(name, err)
 	}
 	if now {
 		run()

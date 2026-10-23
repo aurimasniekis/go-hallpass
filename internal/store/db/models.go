@@ -80,6 +80,17 @@ type AgentOwner struct {
 	OperatorID string
 }
 
+type ApiIdempotency struct {
+	OperatorID  string
+	Key         string
+	Operation   string
+	RequestHash []byte
+	Status      int64
+	Body        []byte
+	CreatedAt   int64
+	ExpiresAt   int64
+}
+
 type ApprovalDecision struct {
 	ID                string
 	RequestID         string

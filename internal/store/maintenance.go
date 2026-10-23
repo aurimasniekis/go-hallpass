@@ -102,7 +102,9 @@ func (s *Store) Checkpoint(ctx context.Context, mode string) error {
 	default:
 		return fmt.Errorf("invalid checkpoint mode %q", mode)
 	}
-	return s.writer.Exec(ctx, "PRAGMA wal_checkpoint("+mode+")")
+	err := s.writer.Exec(ctx, "PRAGMA wal_checkpoint("+mode+")")
+	s.writer.metrics.SetStoreSizes(s.Sizes()) // HP-DB-011: export sizes after each checkpoint
+	return err
 }
 
 // IncrementalVacuum returns up to pages free pages to the filesystem (0 = all).

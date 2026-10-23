@@ -93,7 +93,7 @@ func TestEnforcerLockdownCredentialAndShutdown(t *testing.T) {
 	if e.Count() != 1 {
 		t.Fatalf("count %d", e.Count())
 	}
-	e.credentialRevoked("cred_1")
+	e.credentialRevoked("cred_1", time.Time{})
 	if reason := rec.wait(t, r2.ChannelID, time.Second); reason != ReasonCredentialRevoked {
 		t.Fatalf("reason %q", reason)
 	}

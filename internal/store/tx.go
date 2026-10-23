@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/aurimasniekis/go-hallpass/internal/clock"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
 )
 
@@ -29,6 +30,7 @@ type Writer struct {
 	clock    clock.Clock
 	health   *Health
 	observer TxObserver
+	metrics  *metrics.Metrics
 }
 
 // Tx is a write transaction. Its callback must only touch the database: no network, SSH, file fsync,
@@ -66,9 +68,7 @@ func (w *Writer) TxNamed(ctx context.Context, name string, fn func(tx *Tx) error
 		hooks, err = w.attempt(ctx, fn)
 		if err == nil {
 			w.health.Observe(nil)
-			if w.observer != nil {
-				w.observer(name, time.Since(start), nil)
-			}
+			w.observe(name, time.Since(start), nil)
 			for _, h := range hooks {
 				h()
 			}
@@ -78,19 +78,54 @@ func (w *Writer) TxNamed(ctx context.Context, name string, fn func(tx *Tx) error
 		if !errors.Is(err, ErrBusy) || attempt >= txMaxAttempts || ctx.Err() != nil {
 			break
 		}
+		w.metrics.StoreTxBusyRetry()
 		if serr := sleepCtx(ctx, backoff(attempt)); serr != nil {
 			err = errors.Join(err, serr)
 			break
 		}
 	}
-	if w.observer != nil {
-		w.observer(name, time.Since(start), err)
-	}
+	w.observe(name, time.Since(start), err)
 	return err
 }
 
+// observe reports a finished transaction to the observer and metrics.
+func (w *Writer) observe(name string, d time.Duration, err error) {
+	if w.observer != nil {
+		w.observer(name, d, err)
+	}
+	w.metrics.StoreTx(name, d, TxResult(err))
+}
+
+// TxResult classifies a transaction error for metrics.
+func TxResult(err error) metrics.TxResult {
+	switch {
+	case err == nil:
+		return metrics.TxOK
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return metrics.TxCanceled
+	case errors.Is(err, ErrBusy):
+		return metrics.TxBusy
+	case errors.Is(err, ErrFull):
+		return metrics.TxFull
+	case errors.Is(err, ErrIO):
+		return metrics.TxIO
+	case errors.Is(err, ErrCorrupt):
+		return metrics.TxCorrupt
+	case errors.Is(err, ErrConstraint):
+		return metrics.TxConstraint
+	case errors.Is(err, ErrConflict):
+		return metrics.TxConflict
+	case errors.Is(err, ErrNotFound), errors.Is(err, sql.ErrNoRows):
+		return metrics.TxNotFound
+	default:
+		return metrics.TxError
+	}
+}
+
 func (w *Writer) attempt(ctx context.Context, fn func(tx *Tx) error) (hooks []func(), err error) {
+	waitStart := time.Now()
 	sqlTx, err := w.db.BeginTx(ctx, nil)
+	w.metrics.StoreWriterWait(time.Since(waitStart)) // pool wait + BEGIN IMMEDIATE lock acquisition (HP-DB-003)
 	if err != nil {
 		return nil, classify(fmt.Errorf("begin: %w", err))
 	}

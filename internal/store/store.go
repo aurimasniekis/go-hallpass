@@ -19,6 +19,7 @@ import (
 	_ "modernc.org/sqlite" // database/sql driver "sqlite"
 
 	"github.com/aurimasniekis/go-hallpass/internal/clock"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
 )
 
@@ -46,6 +47,9 @@ type Options struct {
 	Clock       clock.Clock
 	// TxObserver, if set, receives the duration and outcome of every write transaction.
 	TxObserver TxObserver
+	// Metrics, if set, records write transaction duration and results, busy retries and writer wait time
+	// (HP-DB-003, HP-DB-004). Nil disables metrics.
+	Metrics *metrics.Metrics
 	// BusyTimeout overrides SQLite's busy_timeout (default 5s). Tests only.
 	BusyTimeout time.Duration
 	// migrations overrides the embedded migrations. Tests only.
@@ -156,8 +160,9 @@ func (s *Store) open(ctx context.Context, opts Options) error {
 	if err := secureFiles(s.dir); err != nil {
 		return err
 	}
-	s.writer = &Writer{db: s.wdb, clock: s.clock, health: s.health, observer: opts.TxObserver}
+	s.writer = &Writer{db: s.wdb, clock: s.clock, health: s.health, observer: opts.TxObserver, metrics: opts.Metrics}
 	s.reader = db.New(s.rdb)
+	opts.Metrics.SetStoreSizes(s.Sizes())
 	return nil
 }
 

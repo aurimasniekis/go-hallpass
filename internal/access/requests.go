@@ -12,6 +12,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
 	"github.com/aurimasniekis/go-hallpass/internal/ids"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/policy"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
@@ -120,6 +121,7 @@ func (svc *Service) CreateRequest(ctx context.Context, in CreateRequestInput) (*
 		}); err != nil {
 			return err
 		}
+		tx.AfterCommit(func() { svc.opts.Metrics.AccessRequest(metrics.RequestPending) })
 		if _, err := svc.audit.Append(ctx, tx, audit.Event{Actor: audit.Actor{Type: audit.ActorAgent, ID: in.AgentID}, Action: "request.created",
 			Target: audit.Target{Type: "request", ID: id}, Details: map[string]any{"server_id": in.ServerID, "role_id": in.RoleID,
 				"duration": dur.String(), "key_id": in.KeyID, "policy_version": snap.Version}}); err != nil {
@@ -288,6 +290,7 @@ func (svc *Service) endRequestTx(ctx context.Context, tx *store.Tx, r db.AccessR
 	if err := svc.runHooks(ctx, tx, RequestEvent{Kind: kind, Request: req}); err != nil {
 		return nil, err
 	}
+	tx.AfterCommit(func() { svc.opts.Metrics.AccessRequest(metrics.RequestState(state)) })
 	svc.publish(tx, eventbus.TopicRequestUpdated, r.ID, req.State)
 	return req, nil
 }

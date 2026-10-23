@@ -17,6 +17,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/ids"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/policy"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
@@ -32,6 +33,11 @@ type Options struct {
 	BootID                string
 	Clock                 clock.Clock
 	Logger                *slog.Logger
+	// Metrics records request transitions, decisions, grants and enforcer terminations (HP-OBS-004). Nil disables.
+	Metrics *metrics.Metrics
+	// StorageReserve, if set, is called before admitting a new channel; a non-nil result (free space below the
+	// storage reserve, HP-OPS-006) refuses the channel with ErrStorageUnavailable. Nil skips the check.
+	StorageReserve func() error
 }
 
 // RequestHook runs inside the transaction that creates a pending request or records a decision, so notifications

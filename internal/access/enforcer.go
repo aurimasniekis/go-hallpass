@@ -9,6 +9,7 @@ import (
 
 	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 )
 
 // EnforcementBound is the documented maximum delay between access ending and termination of affected channels
@@ -110,16 +111,39 @@ func (e *Enforcer) TerminateAll(reason string) {
 	defer e.mu.Unlock()
 	for id, l := range e.byID {
 		l.kill(reason)
+		e.m().EnforcerTerminated(metrics.EndReason(reason))
 		delete(e.byID, id)
 	}
 }
 
-func (e *Enforcer) terminateWhere(reason string, match func(*Live) bool) int {
+func (e *Enforcer) m() *metrics.Metrics { return e.svc.opts.Metrics }
+
+// endedNow is the access end time for terminations detected at the moment access ended.
+func (e *Enforcer) endedNow() func(*Live) time.Time {
+	now := e.svc.opts.Clock.Now()
+	return func(*Live) time.Time { return now }
+}
+
+func endedAt(t time.Time) func(*Live) time.Time { return func(*Live) time.Time { return t } }
+
+// Terminate ends one live channel (operator action); it reports whether the channel was live in this process.
+func (e *Enforcer) Terminate(channelID, reason string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.terminateWhere(reason, e.endedNow(), func(l *Live) bool { return l.ChannelID == channelID }) > 0
+}
+
+// terminateWhere kills matching live channels. ended returns when access ended for a channel; the delay until
+// termination is the enforcement latency (HP-GRT-008, bound EnforcementBound).
+func (e *Enforcer) terminateWhere(reason string, ended func(*Live) time.Time, match func(*Live) bool) int {
 	n := 0
+	now := e.svc.opts.Clock.Now()
 	for id, l := range e.byID {
 		if match(l) {
 			l.kill(reason)
 			delete(e.byID, id)
+			e.m().EnforcerTerminated(metrics.EndReason(reason))
+			e.m().EnforcementLatency(now.Sub(ended(l)))
 			n++
 		}
 	}
@@ -127,14 +151,20 @@ func (e *Enforcer) terminateWhere(reason string, match func(*Live) bool) int {
 }
 
 // grantEnded handles a grant that is no longer active.
-func (e *Enforcer) grantEnded(grantID, reason string) {
+// at is when the grant ended (zero: now).
+func (e *Enforcer) grantEnded(grantID, reason string, at time.Time) {
 	if reason == "" {
 		reason = ReasonExpired
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.ended[grantID] = endedGrant{reason: reason, at: e.svc.opts.Clock.Now()}
-	if n := e.terminateWhere(reason, func(l *Live) bool { return l.GrantID == grantID }); n > 0 {
+	now := e.svc.opts.Clock.Now()
+	e.ended[grantID] = endedGrant{reason: reason, at: now}
+	ended := endedAt(now)
+	if !at.IsZero() && !at.After(now) {
+		ended = endedAt(at)
+	}
+	if n := e.terminateWhere(reason, ended, func(l *Live) bool { return l.GrantID == grantID }); n > 0 {
 		e.log.Info("terminated channels", slog.String(obs.FieldGrantID, grantID), slog.String("reason", reason), slog.Int("channels", n))
 	}
 }
@@ -149,25 +179,37 @@ func (e *Enforcer) grantExpiry(grantID string, expires time.Time) {
 	}
 }
 
-func (e *Enforcer) keyRevoked(keyID string) {
+// at is when the key was revoked (zero: now).
+func (e *Enforcer) keyRevoked(keyID string, at time.Time) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.revKeys[keyID] = e.svc.opts.Clock.Now()
-	e.terminateWhere(ReasonKeyRevoked, func(l *Live) bool { return l.KeyID == keyID })
+	now := e.svc.opts.Clock.Now()
+	e.revKeys[keyID] = now
+	e.terminateWhere(ReasonKeyRevoked, endedAt(earliest(at, now)), func(l *Live) bool { return l.KeyID == keyID })
 }
 
-func (e *Enforcer) credentialRevoked(credID string) {
+// at is when the credential was revoked (zero: now).
+func (e *Enforcer) credentialRevoked(credID string, at time.Time) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.revCred[credID] = e.svc.opts.Clock.Now()
-	e.terminateWhere(ReasonCredentialRevoked, func(l *Live) bool { return l.CredentialRef == credID })
+	now := e.svc.opts.Clock.Now()
+	e.revCred[credID] = now
+	e.terminateWhere(ReasonCredentialRevoked, endedAt(earliest(at, now)), func(l *Live) bool { return l.CredentialRef == credID })
+}
+
+// earliest returns at unless it is zero or in the future.
+func earliest(at, now time.Time) time.Time {
+	if at.IsZero() || at.After(now) {
+		return now
+	}
+	return at
 }
 
 // expire terminates channels whose (time-authoritative) expiry has passed and prunes old tombstones.
 func (e *Enforcer) expire(now time.Time) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.terminateWhere(ReasonExpired, func(l *Live) bool { return !now.Before(l.ExpiresAt) })
+	e.terminateWhere(ReasonExpired, func(l *Live) time.Time { return l.ExpiresAt }, func(l *Live) bool { return !now.Before(l.ExpiresAt) })
 	for id, g := range e.ended {
 		if now.Sub(g.at) > 10*time.Minute {
 			delete(e.ended, id)
@@ -197,11 +239,16 @@ func (e *Enforcer) reconcile(ctx context.Context) error {
 	}
 	for _, g := range grants {
 		if g.State != GrantActive {
-			reason := ReasonExpired
-			if full, err := q.GetGrant(ctx, g.ID); err == nil && full.EndReason.Valid {
-				reason = full.EndReason.String
+			reason, at := ReasonExpired, time.Time{}
+			if full, err := q.GetGrant(ctx, g.ID); err == nil {
+				if full.EndReason.Valid {
+					reason = full.EndReason.String
+				}
+				if full.EndedAt.Valid {
+					at = time.UnixMicro(full.EndedAt.Int64)
+				}
 			}
-			e.grantEnded(g.ID, reason)
+			e.grantEnded(g.ID, reason, at)
 		} else {
 			e.grantExpiry(g.ID, ts(g.ExpiresAt))
 		}
@@ -212,7 +259,7 @@ func (e *Enforcer) reconcile(ctx context.Context) error {
 		return err
 	}
 	for _, k := range keys {
-		e.keyRevoked(k.ID)
+		e.keyRevoked(k.ID, time.UnixMicro(k.RevokedAt.Int64))
 		e.keyCursor = max(e.keyCursor, k.RevokedAt.Int64)
 	}
 	creds, err := q.RevokedCredentialsSince(ctx, nullMicros(e.credCursor-overlap.Microseconds()))
@@ -220,7 +267,7 @@ func (e *Enforcer) reconcile(ctx context.Context) error {
 		return err
 	}
 	for _, c := range creds {
-		e.credentialRevoked(c.ID)
+		e.credentialRevoked(c.ID, time.UnixMicro(c.RevokedAt.Int64))
 		e.credCursor = max(e.credCursor, c.RevokedAt.Int64)
 	}
 	return nil
@@ -260,24 +307,28 @@ func (e *Enforcer) handle(ctx context.Context, ev eventbus.Event) {
 	case eventbus.TopicGrantUpdated:
 		if g, ok := ev.Payload.(*Grant); ok {
 			if g.State != GrantActive {
-				e.grantEnded(g.ID, g.EndReason)
+				var at time.Time
+				if g.EndedAt != nil {
+					at = *g.EndedAt
+				}
+				e.grantEnded(g.ID, g.EndReason, at)
 			} else {
 				e.grantExpiry(g.ID, g.ExpiresAt)
 			}
 		}
 	case eventbus.TopicAgentKeyRevoked:
-		e.keyRevoked(ev.Key)
+		e.keyRevoked(ev.Key, time.Time{})
 	case eventbus.TopicCredentialChange:
 		// Key is a credential ID for revocations; reconciliation confirms the state from the database.
 		if ev.Key != "" {
 			if c, err := e.svc.s.R().GetLoginCredential(ctx, ev.Key); err == nil && c.State == "revoked" {
-				e.credentialRevoked(ev.Key)
+				e.credentialRevoked(ev.Key, time.Time{})
 			}
 		}
 	case eventbus.TopicLockdown:
 		if on, _ := ev.Payload.(bool); on {
 			e.mu.Lock()
-			e.terminateWhere(ReasonLockdown, func(*Live) bool { return true })
+			e.terminateWhere(ReasonLockdown, e.endedNow(), func(*Live) bool { return true })
 			e.mu.Unlock()
 		}
 	}

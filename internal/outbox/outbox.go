@@ -19,6 +19,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/jobs"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
 )
@@ -71,6 +72,9 @@ type Outbox struct {
 	kr    *keyring.Keyring
 	log   *slog.Logger
 	clock clock.Clock
+	m     *metrics.Metrics
+
+	lastBacklog time.Time // last backlog gauge refresh (Run goroutine only)
 
 	mu        sync.RWMutex
 	providers map[string]Provider
@@ -92,6 +96,8 @@ type Options struct {
 	BaseBackoff  time.Duration // default 2s
 	MaxBackoff   time.Duration // default 5m
 	PollInterval time.Duration // default 1s
+	// Metrics records delivery outcomes and the pending/dead-letter backlog (HP-OBS-004). Nil disables.
+	Metrics *metrics.Metrics
 }
 
 // New returns an outbox.
@@ -113,7 +119,7 @@ func New(s *store.Store, kr *keyring.Keyring, o Options) *Outbox {
 	def(&o.MaxBackoff, 5*time.Minute)
 	def(&o.PollInterval, time.Second)
 	return &Outbox{
-		s: s, kr: kr, log: obs.Component(o.Logger, "outbox"), clock: o.Clock, providers: map[string]Provider{},
+		s: s, kr: kr, log: obs.Component(o.Logger, "outbox"), clock: o.Clock, m: o.Metrics, providers: map[string]Provider{},
 		wake: make(chan struct{}, 1), lease: o.Lease, timeout: min(o.Timeout, o.Lease), baseBackoff: o.BaseBackoff,
 		maxBackoff: o.MaxBackoff, poll: o.PollInterval,
 	}
@@ -178,6 +184,10 @@ func (o *Outbox) Run(ctx context.Context, concurrency int) {
 	t := time.NewTicker(o.poll)
 	defer t.Stop()
 	for {
+		if o.m != nil && time.Since(o.lastBacklog) >= BacklogRefresh {
+			o.lastBacklog = time.Now()
+			o.RefreshBacklog(ctx)
+		}
 		claimed, err := o.claim(ctx, cap(sem)-len(sem))
 		if err != nil && ctx.Err() == nil {
 			o.log.Warn("claiming outbox messages failed", obs.Err(err))
@@ -290,6 +300,47 @@ func (o *Outbox) deliver(parent context.Context, c claimed) {
 	})
 	if ferr != nil {
 		o.log.Error("recording delivery result failed; lease expiry will retry it", slog.String("outbox.id", c.ID), obs.Err(ferr))
+		return
+	}
+	mo := metrics.DeliveryDelivered
+	switch state {
+	case "dead":
+		mo = metrics.DeliveryDead
+	case "queued":
+		mo = metrics.DeliveryRetry
+	}
+	o.m.NotificationDelivery(metrics.Provider(c.Provider), mo)
+}
+
+// BacklogRefresh is how often Run re-reads the pending and dead-letter counts for metrics.
+const BacklogRefresh = 15 * time.Second
+
+// RefreshBacklog sets the outbox pending (queued or sending) and dead-letter gauges from the database.
+func (o *Outbox) RefreshBacklog(ctx context.Context) {
+	if o.m == nil {
+		return
+	}
+	rows, err := o.s.ReadDB().QueryContext(ctx,
+		`SELECT state, count(*) FROM outbox_messages WHERE state IN ('queued', 'sending', 'dead') GROUP BY state`)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	var pending, dead int
+	for rows.Next() {
+		var st string
+		var n int
+		if err := rows.Scan(&st, &n); err != nil {
+			return
+		}
+		if st == "dead" {
+			dead = n
+		} else {
+			pending += n
+		}
+	}
+	if rows.Err() == nil {
+		o.m.SetOutboxBacklog(pending, dead)
 	}
 }
 

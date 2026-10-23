@@ -11,6 +11,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/audit"
 	"github.com/aurimasniekis/go-hallpass/internal/clock"
 	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/policy"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
@@ -154,6 +155,7 @@ func (svc *Service) endGrantTx(ctx context.Context, tx *store.Tx, grantID, sessI
 	}
 	g := grantFromRow(row)
 	g.SessionID = sessID
+	tx.AfterCommit(func() { svc.opts.Metrics.GrantEnded(metrics.EndReason(reason)) })
 	svc.publish(tx, eventbus.TopicGrantUpdated, grantID, g)
 	return true, nil
 }

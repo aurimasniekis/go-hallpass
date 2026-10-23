@@ -23,6 +23,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/ids"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/recording/hprec"
 	"github.com/aurimasniekis/go-hallpass/internal/sshproxy"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
@@ -40,6 +41,9 @@ type Options struct {
 	BlockTimeout    time.Duration
 	Clock           clock.Clock
 	Logger          *slog.Logger
+	// Metrics records bytes/records written, queue depth, failures and segment finalize latency (HP-OBS-004).
+	// Nil disables.
+	Metrics *metrics.Metrics
 }
 
 // Service creates recorders and maintains the segment index.
@@ -216,16 +220,21 @@ func (r *channelRecorder) openSegment(ctx context.Context, ordinal uint32, prev 
 	})
 	if err != nil {
 		prep.Discard()
+		r.m().RecordingFailed(metrics.RecCreate)
 		return fmt.Errorf("register segment: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		prep.Discard()
 		r.markState(ctx, segID, "failed", "mkdir")
+		r.m().RecordingFailed(metrics.RecCreate)
+		r.m().SegmentClosed(metrics.SegmentFailed)
 		return err
 	}
 	w, err := prep.Create(path)
 	if err != nil {
 		r.markState(ctx, segID, "failed", "create")
+		r.m().RecordingFailed(metrics.RecCreate)
+		r.m().SegmentClosed(metrics.SegmentFailed)
 		return fmt.Errorf("create segment file: %w", err)
 	}
 	r.mu.Lock()
@@ -279,6 +288,7 @@ func (r *channelRecorder) enqueueLocked(t hprec.RecordType, stream hprec.Stream,
 	seq, err := r.svc.seq.Next(context.Background(), r.reg.SessionID, 1)
 	if err != nil {
 		r.setErr(err)
+		r.m().RecordingFailed(metrics.RecWrite)
 		return nil, err
 	}
 	now := r.svc.opts.Clock.Now()
@@ -295,6 +305,7 @@ func (r *channelRecorder) enqueueLocked(t hprec.RecordType, stream hprec.Stream,
 		case <-deadline.C:
 			err := errors.New("recording stalled: queue full beyond block timeout")
 			r.setErr(err)
+			r.m().RecordingFailed(metrics.RecQueueTimeout)
 			return nil, err
 		}
 	}
@@ -303,8 +314,10 @@ func (r *channelRecorder) enqueueLocked(t hprec.RecordType, stream hprec.Stream,
 	case <-deadline.C:
 		err := errors.New("recording stalled: queue full beyond block timeout")
 		r.setErr(err)
+		r.m().RecordingFailed(metrics.RecQueueTimeout)
 		return nil, err
 	}
+	r.m().RecordingQueueAdd(1)
 	return it.ack, nil
 }
 
@@ -320,6 +333,7 @@ func (r *channelRecorder) loop(ctx context.Context) {
 				it.result <- r.finalize(ctx, it.final)
 				return
 			}
+			r.m().RecordingQueueAdd(-1)
 			err := r.failure()
 			if err == nil {
 				err = r.write(ctx, it)
@@ -334,6 +348,7 @@ func (r *channelRecorder) loop(ctx context.Context) {
 			if r.failure() == nil && r.w != nil && r.w.Pending() > 0 {
 				if err := r.w.Flush(); err != nil {
 					r.setErr(fmt.Errorf("recording flush: %w", err))
+					r.m().RecordingFailed(metrics.RecFsync)
 				}
 			}
 		}
@@ -350,17 +365,22 @@ func (r *channelRecorder) write(ctx context.Context, it item) error {
 	if err := r.w.Append(it.rec); err != nil {
 		err = fmt.Errorf("recording append: %w", err)
 		r.setErr(err)
+		r.m().RecordingFailed(metrics.RecWrite)
 		return err
 	}
 	if r.strict {
 		if err := r.w.Flush(); err != nil {
 			err = fmt.Errorf("recording fsync: %w", err)
 			r.setErr(err)
+			r.m().RecordingFailed(metrics.RecFsync)
 			return err
 		}
 	}
+	r.m().RecordingWritten(1, len(it.rec.Payload))
 	return nil
 }
+
+func (r *channelRecorder) m() *metrics.Metrics { return r.svc.opts.Metrics }
 
 func (r *channelRecorder) rollover(ctx context.Context) error {
 	m, err := r.finishSegment(ctx, "rollover")
@@ -372,14 +392,24 @@ func (r *channelRecorder) rollover(ctx context.Context) error {
 
 // finishSegment finalizes the current file and records the manifest and integrity-chain entry (PLAN §13.5 step 4).
 func (r *channelRecorder) finishSegment(ctx context.Context, reason string) (hprec.Manifest, error) {
+	start := time.Now()
 	m, err := r.w.Finalize(reason)
 	if err != nil {
+		r.m().RecordingFailed(metrics.RecFinalize)
+		r.m().SegmentClosed(metrics.SegmentFailed)
 		return m, fmt.Errorf("recording finalize: %w", err)
 	}
 	err = r.svc.s.W().TxNamed(ctx, "recording.finalize", func(tx *store.Tx) error {
 		return r.svc.finalizeRowTx(ctx, tx, r.segID, "finalized", m)
 	})
-	return m, err
+	if err != nil {
+		r.m().RecordingFailed(metrics.RecFinalize)
+		r.m().SegmentClosed(metrics.SegmentFailed)
+		return m, err
+	}
+	r.m().SegmentFinalized(time.Since(start))
+	r.m().SegmentClosed(metrics.SegmentFinalized)
+	return m, nil
 }
 
 func (r *channelRecorder) finalize(ctx context.Context, reason string) error {
@@ -389,6 +419,7 @@ func (r *channelRecorder) finalize(ctx context.Context, reason string) error {
 	if err := r.failure(); err != nil {
 		_ = r.w.Close()
 		r.markState(ctx, r.segID, "failed", "write_error")
+		r.m().SegmentClosed(metrics.SegmentFailed) // the failure itself was counted where it happened
 		return err
 	}
 	_, err := r.finishSegment(ctx, reason)

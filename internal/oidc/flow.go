@@ -15,12 +15,15 @@ import (
 	"time"
 
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/oauth2"
 
 	"github.com/aurimasniekis/go-hallpass/internal/apperr"
 	"github.com/aurimasniekis/go-hallpass/internal/audit"
 	"github.com/aurimasniekis/go-hallpass/internal/ids"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/tracing"
 	"github.com/aurimasniekis/go-hallpass/internal/opauth"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
@@ -197,8 +200,9 @@ type CallbackInput struct {
 
 // CallbackResult is the outcome per purpose.
 type CallbackResult struct {
-	Purpose  string
-	ReturnTo string
+	Purpose    string
+	ProviderID string
+	ReturnTo   string
 	// SessionToken is set for login and stepup (the rotated session).
 	SessionToken string
 	OperatorID   string
@@ -233,7 +237,9 @@ type TestResult struct {
 
 // Callback validates the response and completes the purpose. The state is consumed first (single use) whatever
 // happens next.
-func (svc *Service) Callback(ctx context.Context, in CallbackInput) (*CallbackResult, error) {
+func (svc *Service) Callback(ctx context.Context, in CallbackInput) (_ *CallbackResult, cbErr error) {
+	ctx, span := tracing.StartKind(ctx, tracing.SpanOIDCCallback, trace.SpanKindServer)
+	defer func() { tracing.End(span, cbErr) }()
 	if in.State == "" || len(in.State) > 128 {
 		return nil, ErrInvalidState
 	}
@@ -260,6 +266,9 @@ func (svc *Service) Callback(ctx context.Context, in CallbackInput) (*CallbackRe
 	p, err := svc.GetProvider(ctx, st.ProviderID)
 	if err != nil {
 		return nil, ErrInvalidState
+	}
+	if st.Purpose == PurposeLogin {
+		defer func() { svc.observeLogin(p.Slug, cbErr) }()
 	}
 	if !p.Enabled && st.Purpose != PurposeTest {
 		return nil, ErrLoginRejected
@@ -294,7 +303,7 @@ func (svc *Service) Callback(ctx context.Context, in CallbackInput) (*CallbackRe
 		svc.log.Warn("id token rejected", "provider", p.Slug, "error", err.Error())
 		return nil, ErrTokenValidation
 	}
-	res := &CallbackResult{Purpose: st.Purpose, ReturnTo: st.ReturnTo}
+	res := &CallbackResult{Purpose: st.Purpose, ReturnTo: st.ReturnTo, ProviderID: p.ID}
 	switch st.Purpose {
 	case PurposeLogin:
 		res.SessionToken, res.OperatorID, err = svc.login(ctx, p, claims, in.Meta)
@@ -312,6 +321,23 @@ func (svc *Service) Callback(ctx context.Context, in CallbackInput) (*CallbackRe
 		return nil, err
 	}
 	return res, nil
+}
+
+// observeLogin counts an SSO login completion for a known provider.
+func (svc *Service) observeLogin(slug string, err error) {
+	var o metrics.LoginOutcome
+	switch {
+	case err == nil:
+		o = metrics.LoginSuccess
+	case errors.Is(err, ErrLoginRejected), errors.Is(err, ErrNotProvisioned):
+		o = metrics.LoginDenied
+	case errors.Is(err, ErrTokenValidation), errors.Is(err, ErrInvalidState):
+		o = metrics.LoginFailure
+	default:
+		o = metrics.LoginError
+	}
+	svc.opts.Metrics.OIDCLogin(slug, o)
+	svc.opts.Metrics.OperatorLogin(metrics.LoginOIDC, o)
 }
 
 func truncate(s string, n int) string {

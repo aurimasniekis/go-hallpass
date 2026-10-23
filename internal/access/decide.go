@@ -14,6 +14,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/ids"
 	"github.com/aurimasniekis/go-hallpass/internal/inventory"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/policy"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
@@ -127,10 +128,31 @@ func (svc *Service) Decide(ctx context.Context, in DecideInput) (*DecideResult, 
 		res = &DecideResult{Request: out.request, Decision: out.decision, Grant: out.grant}
 		return nil
 	})
+	svc.observeDecision(in, res, err)
 	if err != nil {
 		return nil, err
 	}
 	return res, nil
+}
+
+// observeDecision counts a decision attempt by channel and outcome (replays are not new decisions).
+func (svc *Service) observeDecision(in DecideInput, res *DecideResult, err error) {
+	var o metrics.DecisionOutcome
+	switch {
+	case err == nil && res != nil && res.Replayed:
+		return
+	case err == nil && in.Approve:
+		o = metrics.DecisionApproved
+	case err == nil:
+		o = metrics.DecisionDenied
+	case errors.Is(err, apperr.ErrConflict):
+		o = metrics.DecisionConflict
+	case errors.Is(err, apperr.ErrForbidden):
+		o = metrics.DecisionForbidden
+	default:
+		o = metrics.DecisionError
+	}
+	svc.opts.Metrics.Decision(metrics.DecisionChannel(in.Channel), o)
 }
 
 type decideParams struct {
@@ -223,6 +245,13 @@ func (svc *Service) decideTx(ctx context.Context, tx *store.Tx, snap *policy.Sna
 	if err := svc.runHooks(ctx, tx, RequestEvent{Kind: "decided", Request: out.request, Decision: out.decision, Grant: out.grant}); err != nil {
 		return nil, err
 	}
+	started := out.grant != nil
+	tx.AfterCommit(func() {
+		svc.opts.Metrics.AccessRequest(metrics.RequestState(state))
+		if started {
+			svc.opts.Metrics.GrantStarted()
+		}
+	})
 	svc.publish(tx, eventbus.TopicRequestUpdated, r.ID, out.request.State)
 	if out.grant != nil {
 		svc.publish(tx, eventbus.TopicGrantUpdated, out.grant.ID, out.grant)

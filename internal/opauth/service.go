@@ -21,6 +21,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/groups"
 	"github.com/aurimasniekis/go-hallpass/internal/ids"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
 )
@@ -48,6 +49,8 @@ type Options struct {
 	Clock            clock.Clock
 	// HashConcurrency bounds simultaneous Argon2id computations (CPU/memory DoS guard).
 	HashConcurrency int
+	// Metrics counts operator login attempts by method and outcome (HP-OBS-004). Nil disables.
+	Metrics *metrics.Metrics
 }
 
 // Service manages operators and their authentication.

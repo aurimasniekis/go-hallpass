@@ -43,7 +43,8 @@ const (
 )
 
 // NewLogger builds the process logger. JSON output uses ECS-aligned top-level keys and every handler
-// redacts sensitive attribute keys. The returned LevelVar allows changing the level at runtime.
+// redacts sensitive attribute keys. Records logged with a context carry its trace and correlation IDs
+// (ContextHandler, HP-OBS-003). The returned LevelVar allows changing the level at runtime.
 func NewLogger(w io.Writer, cfg config.LogConfig) (*slog.Logger, *slog.LevelVar) {
 	lv := new(slog.LevelVar)
 	lv.Set(ParseLevel(cfg.Level))
@@ -56,7 +57,7 @@ func NewLogger(w io.Writer, cfg config.LogConfig) (*slog.Logger, *slog.LevelVar)
 		opts.ReplaceAttr = ecsReplace
 		h = slog.NewJSONHandler(w, opts)
 	}
-	l := slog.New(h).With(
+	l := slog.New(NewContextHandler(h)).With(
 		slog.String(FieldServiceName, "hallpass"),
 		slog.String(FieldServiceVer, buildinfo.Get().Version),
 	)

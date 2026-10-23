@@ -16,10 +16,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"strings"
 	"sync"
 
 	"github.com/aurimasniekis/go-hallpass/internal/ids"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
+	"github.com/aurimasniekis/go-hallpass/internal/obs"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
 )
@@ -128,6 +131,7 @@ func (w *Writer) Append(ctx context.Context, tx *store.Tx, ev Event) (string, er
 			ev.CorrelationID = m.CorrelationID
 		}
 	}
+	ev = withCorrelation(ctx, ev)
 	details, err := canonicalJSON(ev.Details)
 	if err != nil {
 		return "", fmt.Errorf("audit details: %w", err)
@@ -176,6 +180,40 @@ func (w *Writer) Append(ctx context.Context, tx *store.Tx, ev Event) (string, er
 		tx.AfterCommit(func() { _ = sink.Write(rec) })
 	}
 	return id, nil
+}
+
+// CorrelationKey is the details key holding the correlation IDs taken from the context (HP-OBS-003).
+const CorrelationKey = "correlation"
+
+// withCorrelation fills the correlation ID (HTTP request ID, else trace ID) and records the context's trace and
+// lifecycle IDs under details["correlation"], unless the caller set them. The caller's map is not modified.
+func withCorrelation(ctx context.Context, ev Event) Event {
+	traceID, _ := obs.TraceIDs(ctx)
+	ids := obs.IDs(ctx)
+	if ev.CorrelationID == "" {
+		ev.CorrelationID = obs.ID(ctx, obs.FieldHTTPRequestID)
+		if ev.CorrelationID == "" {
+			ev.CorrelationID = traceID
+		}
+	}
+	if traceID == "" && len(ids) == 0 {
+		return ev
+	}
+	if _, set := ev.Details[CorrelationKey]; set {
+		return ev
+	}
+	corr := make(map[string]any, len(ids)+1)
+	if traceID != "" {
+		corr["trace_id"] = traceID
+	}
+	for _, id := range ids {
+		corr[strings.ReplaceAll(strings.TrimPrefix(id.Key(), "hallpass."), ".", "_")] = id.Value()
+	}
+	details := make(map[string]any, len(ev.Details)+1)
+	maps.Copy(details, ev.Details)
+	details[CorrelationKey] = corr
+	ev.Details = details
+	return ev
 }
 
 func nullStr(s string) sql.NullString { return sql.NullString{String: s, Valid: s != ""} }

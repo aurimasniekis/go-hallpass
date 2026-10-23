@@ -46,6 +46,12 @@ func ptr[T any](v T) *T { return &v }
 
 func newFx(t *testing.T) *fx {
 	t.Helper()
+	return newFxWith(t, nil)
+}
+
+// newFxWith builds the fixture; opt (if non-nil) adjusts the access Options.
+func newFxWith(t *testing.T, opt func(*Options)) *fx {
+	t.Helper()
 	clk := clock.NewFake(time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC))
 	s := storetest.Open(t, storetest.WithClock(clk))
 	kr := keyringtest.Load(t, s)
@@ -57,7 +63,11 @@ func newFx(t *testing.T) *fx {
 		inv:    inventory.New(s, aw, bus, inventory.Options{Guard: g, MaxGrantDuration: 24 * time.Hour, Clock: clk})}
 	engine := policy.NewEngine(s, 24*time.Hour, presets)
 	f.pol = policy.NewService(s, aw, bus, engine)
-	f.svc = New(s, kr, aw, bus, engine, Options{Clock: clk, PendingExpiry: 30 * time.Minute})
+	o := Options{Clock: clk, PendingExpiry: 30 * time.Minute}
+	if opt != nil {
+		opt(&o)
+	}
+	f.svc = New(s, kr, aw, bus, engine, o)
 	f.agents.OnDisable(f.svc.AgentDisabledHook)
 	f.agents.OnKeyRevoke(f.svc.KeyRevokedHook)
 	f.inv.OnDisable(f.svc.TargetDisabledHook)

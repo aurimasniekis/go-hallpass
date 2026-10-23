@@ -11,8 +11,10 @@ import (
 	"net"
 	"net/netip"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/crypto/ssh"
 
 	"github.com/aurimasniekis/go-hallpass/internal/access"
@@ -20,6 +22,8 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/audit"
 	"github.com/aurimasniekis/go-hallpass/internal/config"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/tracing"
 	"github.com/aurimasniekis/go-hallpass/internal/sshalg"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 )
@@ -90,6 +94,7 @@ type Server struct {
 	hosts   HostKeySource
 	handler SessionHandler
 	log     *slog.Logger
+	m       *metrics.Metrics
 
 	unauth    chan struct{} // global pre-auth slots
 	mu        sync.Mutex
@@ -112,6 +117,9 @@ type Options struct {
 	Hosts   HostKeySource
 	Handler SessionHandler
 	Logger  *slog.Logger
+	// Metrics records connection results, authentication failures, active connections and refused requests
+	// (HP-OBS-004). Nil disables.
+	Metrics *metrics.Metrics
 }
 
 // New returns a server.
@@ -120,7 +128,7 @@ func New(o Options) *Server {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
 	return &Server{
-		cfg: o.Config, agents: o.Agents, access: o.Access, audit: o.Audit, store: o.Store, hosts: o.Hosts, handler: o.Handler,
+		cfg: o.Config, agents: o.Agents, access: o.Access, audit: o.Audit, store: o.Store, hosts: o.Hosts, handler: o.Handler, m: o.Metrics,
 		log: obs.Component(o.Logger, "sshfront"), unauth: make(chan struct{}, max(o.Config.MaxUnauthenticated, 1)),
 		perIP: map[netip.Addr]int{}, perAgent: map[string]int{}, conns: map[*Conn]struct{}{},
 		authFails: newRateLimiter(20, time.Minute),
@@ -226,7 +234,7 @@ func (s *Server) releasePreAuth(ip netip.Addr) {
 	<-s.unauth
 }
 
-func (s *Server) serverConfig(ctx context.Context, ip netip.Addr, signers []ssh.Signer) *ssh.ServerConfig {
+func (s *Server) serverConfig(ctx context.Context, ip netip.Addr, signers []ssh.Signer, authFailed *atomic.Bool) *ssh.ServerConfig {
 	cfg := &ssh.ServerConfig{
 		Config:                  sshalg.Config(),
 		ServerVersion:           ServerVersion,
@@ -245,10 +253,15 @@ func (s *Server) serverConfig(ctx context.Context, ip netip.Addr, signers []ssh.
 			if err == nil || method == "none" {
 				return
 			}
+			authFailed.Store(true)
 			var ae *agents.AuthError
 			if !errors.As(err, &ae) {
+				if method != "publickey" {
+					s.m.SSHAuthFailed(metrics.AuthMethodRejected)
+				}
 				return
 			}
+			s.m.SSHAuthFailed(metrics.AuthFailReason(ae.Reason))
 			s.recordAuthFailure(ctx, ip, meta, ae)
 		},
 	}
@@ -277,6 +290,7 @@ func (s *Server) serveConn(ctx context.Context, nc net.Conn, signers []ssh.Signe
 	defer nc.Close()
 	ip := addrOf(nc)
 	if !s.acquirePreAuth(ip) {
+		s.m.SSHConnection(s.refusal(metrics.ConnPreAuthLimit))
 		return
 	}
 	preAuth := true
@@ -286,10 +300,22 @@ func (s *Server) serveConn(ctx context.Context, nc net.Conn, signers []ssh.Signe
 		}
 	}()
 	_ = nc.SetDeadline(time.Now().Add(s.cfg.HandshakeTimeout.D()))
-	sconn, chans, reqs, err := ssh.NewServerConn(nc, s.serverConfig(ctx, ip, signers))
+	var authFailed atomic.Bool
+	_, span := tracing.StartKind(ctx, tracing.SpanSSHAuth, trace.SpanKindServer)
+	sconn, chans, reqs, err := ssh.NewServerConn(nc, s.serverConfig(ctx, ip, signers, &authFailed))
 	if err != nil {
+		res := metrics.ConnHandshakeFailed
+		if authFailed.Load() {
+			res = metrics.ConnAuthFailed
+		}
+		tracing.SetAttributes(span, tracing.Outcome("failure"))
+		tracing.End(span, errors.New(string(res)))
+		s.m.SSHConnection(res)
 		return
 	}
+	tracing.SetAttributes(span, tracing.Outcome("success"), tracing.AgentID(sconn.Permissions.Extensions[extAgent]),
+		tracing.KeyID(sconn.Permissions.Extensions[extKey]))
+	tracing.End(span, nil)
 	defer sconn.Close()
 	_ = nc.SetDeadline(time.Time{})
 	s.releasePreAuth(ip)
@@ -303,17 +329,24 @@ func (s *Server) serveConn(ctx context.Context, nc net.Conn, signers []ssh.Signe
 		return
 	}
 	if !s.addConn(c) {
+		s.m.SSHConnection(s.refusal(metrics.ConnAgentLimit))
 		s.log.Warn("agent connection limit reached", slog.String(obs.FieldAgentID, c.AgentID))
 		return
 	}
 	defer s.removeConn(c)
 	if c.ID, err = s.access.OpenConnection(ctx, access.ConnectionInfo{AgentID: c.AgentID, KeyID: c.KeyID, ClientUser: c.ClientUser,
 		ClientVersion: string(sconn.ClientVersion()), SourceIP: ip.String()}); err != nil {
+		s.m.SSHConnection(metrics.ConnResult("storage_error")) // exported as "other"
 		s.log.Error("recording connection failed; closing (fail closed)", obs.Err(err))
 		return
 	}
 	defer func() { _ = s.access.CloseConnection(context.WithoutCancel(ctx), c.ID, c.CloseReason()) }()
+	s.m.SSHConnection(metrics.ConnAccepted)
+	s.m.SSHConnectionOpened()
+	defer s.m.SSHConnectionClosed()
 
+	// Correlation IDs for every log record, span and audit event of this connection (HP-OBS-003).
+	ctx = obs.WithIDs(ctx, obs.AgentID(c.AgentID), obs.KeyID(c.KeyID), obs.ConnectionID(c.ID))
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go s.keepalive(cctx, c)
@@ -335,6 +368,16 @@ func (s *Server) serveConn(ctx context.Context, nc net.Conn, signers []ssh.Signe
 	}
 	cancel()
 	wg.Wait()
+}
+
+// refusal returns shutting_down while the server is closing, otherwise r.
+func (s *Server) refusal(r metrics.ConnResult) metrics.ConnResult {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closing {
+		return metrics.ConnShuttingDown
+	}
+	return r
 }
 
 func (s *Server) addConn(c *Conn) bool {
@@ -367,6 +410,7 @@ func (c *Conn) releaseChannel() {
 // forwarded-tcpip, x11, auth-agent, streamlocal and unknown types — is refused and audited (HP-SSH-007).
 func (s *Server) acceptChannel(ctx context.Context, c *Conn, nch ssh.NewChannel) bool {
 	if nch.ChannelType() != "session" {
+		s.m.SSHRefused(metrics.RefusedChannelType)
 		_ = nch.Reject(ssh.Prohibited, "channel type not permitted by Hallpass")
 		s.AuditDenied(ctx, c, "ssh.channel.denied", map[string]any{"channel_type": truncate(nch.ChannelType(), 64)})
 		return false
@@ -390,6 +434,7 @@ func (s *Server) globalRequests(ctx context.Context, c *Conn, reqs <-chan *ssh.R
 		switch r.Type {
 		case "keepalive@openssh.com", "no-more-sessions@openssh.com", "hostkeys-prove-00@openssh.com":
 		default:
+			s.m.SSHRefused(refusedType(r.Type))
 			s.AuditDenied(ctx, c, "ssh.global_request.denied", map[string]any{"request_type": truncate(r.Type, 64)})
 		}
 	}
@@ -444,6 +489,22 @@ func (s *Server) keepalive(ctx context.Context, c *Conn) {
 				return
 			}
 		}
+	}
+}
+
+// refusedType maps a refused SSH request type to its metric label (HP-SSH-007).
+func refusedType(t string) metrics.RefusedRequest {
+	switch t {
+	case "tcpip-forward", "cancel-tcpip-forward", "streamlocal-forward@openssh.com", "cancel-streamlocal-forward@openssh.com":
+		return metrics.RefusedPortForward
+	case "subsystem":
+		return metrics.RefusedSubsystem
+	case "x11-req":
+		return metrics.RefusedX11
+	case "auth-agent-req@openssh.com", "auth-agent-req":
+		return metrics.RefusedAgentForward
+	default:
+		return metrics.Other
 	}
 }
 

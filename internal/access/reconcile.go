@@ -85,6 +85,9 @@ func (svc *Service) RunBackground(ctx context.Context, sweep time.Duration) {
 	defer sweepT.Stop()
 	policyT := time.NewTicker(time.Minute)
 	defer policyT.Stop()
+	gaugeT := time.NewTicker(GaugeRefresh)
+	defer gaugeT.Stop()
+	svc.RefreshGauges(ctx)
 	reconcile := func() {
 		if c, r, cl, err := svc.ReconcilePolicy(ctx); err != nil && ctx.Err() == nil {
 			svc.log.Warn("policy reconciliation failed", obs.Err(err))
@@ -104,6 +107,26 @@ func (svc *Service) RunBackground(ctx context.Context, sweep time.Duration) {
 			reconcile()
 		case <-policyT.C:
 			reconcile()
+		case <-gaugeT.C:
+			svc.RefreshGauges(ctx)
 		}
+	}
+}
+
+// GaugeRefresh is how often RunBackground re-reads the pending-request and active-grant gauges from the store.
+const GaugeRefresh = 15 * time.Second
+
+// RefreshGauges sets the pending-request and active-grant gauges from the database (authoritative counts that
+// correct any drift of the incremental updates, e.g. after a restart).
+func (svc *Service) RefreshGauges(ctx context.Context) {
+	if svc.opts.Metrics == nil {
+		return
+	}
+	q := svc.s.R()
+	if n, err := q.CountPendingAll(ctx); err == nil {
+		svc.opts.Metrics.SetAccessRequestsPending(int(n))
+	}
+	if n, err := q.CountActiveGrants(ctx); err == nil {
+		svc.opts.Metrics.SetGrantsActive(int(n))
 	}
 }

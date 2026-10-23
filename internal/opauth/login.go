@@ -11,6 +11,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/apperr"
 	"github.com/aurimasniekis/go-hallpass/internal/audit"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
 )
@@ -96,6 +97,27 @@ type LoginResult struct {
 // Login verifies a password. Unknown accounts, wrong passwords and disabled accounts all return
 // ErrInvalidCredentials after the same work (a dummy hash for unknown accounts, HP-AUTH-005).
 func (svc *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error) {
+	res, err := svc.login(ctx, in)
+	svc.observeLogin(metrics.LoginPassword, err)
+	return res, err
+}
+
+// observeLogin counts a login attempt; a disabled login method is not an attempt.
+func (svc *Service) observeLogin(method metrics.LoginMethod, err error) {
+	switch {
+	case err == nil:
+		svc.opts.Metrics.OperatorLogin(method, metrics.LoginSuccess)
+	case errors.Is(err, ErrLocalLoginDisabled):
+	case errors.Is(err, ErrThrottled):
+		svc.opts.Metrics.OperatorLogin(method, metrics.LoginThrottled)
+	case apperr.CodeOf(err) == apperr.CodeUnauthorized, errors.Is(err, apperr.ErrNotFound):
+		svc.opts.Metrics.OperatorLogin(method, metrics.LoginFailure)
+	default:
+		svc.opts.Metrics.OperatorLogin(method, metrics.LoginError)
+	}
+}
+
+func (svc *Service) login(ctx context.Context, in LoginInput) (*LoginResult, error) {
 	if off, err := svc.LocalLoginDisabled(ctx); err != nil {
 		return nil, err
 	} else if off {
@@ -360,6 +382,7 @@ func (svc *Service) RecoveryLogin(ctx context.Context, token string, meta Sessio
 			SourceIP: meta.IP})
 		return err
 	})
+	svc.observeLogin(metrics.LoginRecovery, err)
 	return session, err
 }
 

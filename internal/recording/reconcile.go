@@ -16,6 +16,7 @@ import (
 
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/recording/hprec"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
@@ -44,6 +45,12 @@ func (svc *Service) ReconcileStartup(ctx context.Context) (*ReconcileResult, err
 	}
 	if err := svc.quarantineOrphans(ctx, res); err != nil {
 		return res, err
+	}
+	for range res.Interrupted {
+		svc.opts.Metrics.SegmentClosed(metrics.SegmentInterrupted)
+	}
+	for range res.Failed {
+		svc.opts.Metrics.SegmentClosed(metrics.SegmentFailed)
 	}
 	return res, nil
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/buildinfo"
 	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/policy"
 	"github.com/aurimasniekis/go-hallpass/internal/sshfront/grammar"
 	"github.com/aurimasniekis/go-hallpass/internal/sshproxy"
@@ -35,6 +36,8 @@ type Handler struct {
 	WaitMax     time.Duration
 	// Deny is called for refused session requests (subsystems, forwarding) so they are audited.
 	Deny func(ctx context.Context, c *Conn, action string, details map[string]any)
+	// Metrics counts refused session requests (subsystem, x11, agent forwarding; HP-SSH-007). Nil disables.
+	Metrics *metrics.Metrics
 }
 
 // session is the per-channel state.
@@ -114,6 +117,7 @@ func (s *session) awaitStart(ctx context.Context) (string, bool) {
 				return p.Cmd, true
 			default: // subsystem (sftp), x11-req, auth-agent-req@openssh.com, unknown
 				reply(r, false)
+				s.h.Metrics.SSHRefused(refusedType(r.Type))
 				if s.h.Deny != nil {
 					s.h.Deny(ctx, s.c, "ssh.session_request.denied", map[string]any{"request_type": truncate(r.Type, 64)})
 				}

@@ -11,6 +11,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
 	"github.com/aurimasniekis/go-hallpass/internal/ids"
 	"github.com/aurimasniekis/go-hallpass/internal/inventory"
+	"github.com/aurimasniekis/go-hallpass/internal/obs"
 	"github.com/aurimasniekis/go-hallpass/internal/policy"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
@@ -99,6 +100,13 @@ var ErrCapability = apperr.New(apperr.CodeForbidden, "this role does not permit 
 func (svc *Service) RegisterChannel(ctx context.Context, in RegisterInput) (*ChannelReg, error) {
 	if in.Kind != KindShell && in.Kind != KindExec {
 		return nil, apperr.New(apperr.CodeInvalid, "invalid channel kind")
+	}
+	if svc.opts.StorageReserve != nil {
+		if err := svc.opts.StorageReserve(); err != nil {
+			// Fail closed below the free-space reserve (HP-OPS-006, PLAN §4.5): no new activity that must be recorded.
+			svc.log.Warn("channel refused: storage below reserve", obs.Err(err))
+			return nil, ErrStorageUnavailable
+		}
 	}
 	sess, err := svc.s.R().GetSessionByGrant(ctx, in.GrantID)
 	if errors.Is(err, sql.ErrNoRows) {

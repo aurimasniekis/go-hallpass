@@ -24,6 +24,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/ids"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/opauth"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
@@ -145,6 +146,8 @@ type Options struct {
 	Skew   time.Duration
 	Clock  clock.Clock
 	Logger *slog.Logger
+	// Metrics counts SSO login completions by provider slug and outcome (HP-OBS-004). Nil disables.
+	Metrics *metrics.Metrics
 }
 
 // CallbackPath is the single redirect URI path for all providers (the state identifies the provider).

@@ -9,12 +9,14 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/crypto/ssh"
 
 	"github.com/aurimasniekis/go-hallpass/internal/access"
@@ -24,6 +26,8 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/egress"
 	"github.com/aurimasniekis/go-hallpass/internal/inventory"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/tracing"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 )
 
@@ -85,6 +89,9 @@ type Options struct {
 	DialTimeout time.Duration
 	IdleTimeout time.Duration
 	EnvAllow    []string // global allowlist; roles may add more
+	// Metrics records channel results, active channels, dial latency and rejected environment variables
+	// (HP-OBS-004). Nil disables.
+	Metrics *metrics.Metrics
 }
 
 // Proxy runs destination sessions.
@@ -132,12 +139,25 @@ type Result struct {
 
 // Run executes the full channel lifecycle: register → record → dial → enforce → activate → forward → close.
 func (p *Proxy) Run(ctx context.Context, s *Session) Result {
+	kind := metrics.ChannelKind(s.Kind)
+	_, span := tracing.Start(ctx, tracing.SpanAuthorize, tracing.AgentID(s.AgentID), tracing.GrantID(s.Grant.ID),
+		tracing.ConnectionID(s.ConnectionID))
 	reg, err := p.o.Access.RegisterChannel(ctx, access.RegisterInput{ConnectionID: s.ConnectionID, AgentID: s.AgentID, KeyID: s.KeyID,
 		GrantID: s.Grant.ID, Kind: s.Kind, PTY: s.PTY != nil})
+	tracing.End(span, err)
 	if err != nil {
+		p.o.Metrics.SSHChannel(kind, registerResult(err))
 		return registerFailure(err)
 	}
+	ctx = obs.WithIDs(ctx, obs.GrantID(reg.Grant.ID), obs.SessionID(reg.SessionID), obs.ChannelID(reg.ChannelID))
 	res := p.run(ctx, s, reg)
+	if res.Reason == "failed_before_start" {
+		r := metrics.ChannelFailed
+		if res.GatewayCode == CodeAccessEnded {
+			r = metrics.ChannelDenied
+		}
+		p.o.Metrics.SSHChannel(kind, r)
+	}
 	ci := access.CloseInfo{Failed: res.Reason == "failed_before_start", Reason: res.Reason, ExitStatus: res.ExitStatus, ExitSignal: res.ExitSignal}
 	if res.GatewayCode != 0 {
 		ci.Data = map[string]any{"gateway_exit_code": res.GatewayCode}
@@ -146,6 +166,42 @@ func (p *Proxy) Run(ctx context.Context, s *Session) Result {
 		p.o.Logger.Error("recording channel close failed", slog.String(obs.FieldChannelID, reg.ChannelID), obs.Err(err))
 	}
 	return res
+}
+
+// registerResult classifies a RegisterChannel refusal for metrics.
+func registerResult(err error) metrics.ChannelResult {
+	switch {
+	case errors.Is(err, access.ErrConcurrencyLimit):
+		return metrics.ChannelLimited
+	case errors.Is(err, access.ErrLockdown):
+		return metrics.ChannelLockdown
+	case errors.Is(err, access.ErrStorageUnavailable):
+		return metrics.ChannelNoStorage
+	case errors.Is(err, access.ErrAccessEnded), errors.Is(err, access.ErrCapability), access.IsNotFoundOrForbidden(err):
+		return metrics.ChannelDenied
+	default:
+		return metrics.ChannelFailed
+	}
+}
+
+// dialResult classifies a destination dial outcome for metrics.
+func dialResult(err error) metrics.DialResult {
+	var ne net.Error
+	switch {
+	case err == nil:
+		return metrics.DialOK
+	case errors.Is(err, egress.ErrDenied):
+		return metrics.DialEgressDenied
+	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &ne) && ne.Timeout():
+		return metrics.DialTimeout
+	case strings.Contains(err.Error(), "unable to authenticate"):
+		return metrics.DialAuthFailed
+	default:
+		if _, ok := destssh.IsHostKeyError(err); ok {
+			return metrics.DialHostKey
+		}
+		return metrics.DialError
+	}
 }
 
 func registerFailure(err error) Result {
@@ -204,8 +260,12 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 	if err != nil {
 		return fail(CodeDestinationUnavailable, "login credential", err)
 	}
-	client, err := destssh.Dial(ctx, p.o.Guard, destssh.Target{Host: srv.Address, Port: srv.Port, User: reg.Role.RemoteUser,
+	dctx, dspan := tracing.StartKind(ctx, tracing.SpanDial, trace.SpanKindClient, tracing.ServerID(srv.ID), tracing.RoleID(reg.Role.ID))
+	dialStart := time.Now()
+	client, err := destssh.Dial(dctx, p.o.Guard, destssh.Target{Host: srv.Address, Port: srv.Port, User: reg.Role.RemoteUser,
 		Verifier: ver, Signers: auth.Signers}, p.o.DialTimeout)
+	p.o.Metrics.Dial(dialResult(err), time.Since(dialStart))
+	tracing.End(dspan, err)
 	if err != nil {
 		if _, ok := destssh.IsHostKeyError(err); ok {
 			p.hostKeyAlert(ctx, s, srv.ID, err)
@@ -237,7 +297,9 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 		}
 		_ = rec.PTY(s.PTY)
 	}
-	for _, kv := range FilterEnv(s.Env, p.o.EnvAllow, reg.Role.EnvAllow) {
+	env := FilterEnv(s.Env, p.o.EnvAllow, reg.Role.EnvAllow)
+	p.o.Metrics.SSHEnvRejected(len(s.Env) - len(env)) // HP-SSH-008: names are never exported
+	for _, kv := range env {
 		_ = sess.Setenv(kv[0], kv[1]) // destination sshd AcceptEnv decides; failures are not fatal
 	}
 	stdin, err := sess.StdinPipe()
@@ -270,6 +332,10 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 	if err := p.o.Access.ActivateChannel(ctx, reg, auth.CredentialRef, data); err != nil {
 		return fail(CodeAccessEnded, "activate", err)
 	}
+	kind := metrics.ChannelKind(s.Kind)
+	p.o.Metrics.SSHChannel(kind, metrics.ChannelOpened)
+	p.o.Metrics.SSHChannelOpened(kind)
+	defer p.o.Metrics.SSHChannelClosed(kind)
 
 	// 5. Forward until the destination exits or the channel is terminated.
 	recordInput := reg.Role.RecordInput
