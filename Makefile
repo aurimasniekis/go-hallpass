@@ -68,6 +68,16 @@ sqlc: bin/sqlc
 sqlc-check: bin/sqlc
 	bin/sqlc diff
 
+.PHONY: api api-check
+# HP-API-001: regenerate the operation table / server interface and the UI's TypeScript types from api/openapi.yaml.
+api:
+	go run ./internal/tools/apigen -spec api/openapi.yaml -out internal/httpapi/gen/operations.gen.go
+	cd web && pnpm exec openapi-typescript ../api/openapi.yaml -o src/api/schema.gen.ts
+
+# Fails when generated code drifts from the spec.
+api-check: api
+	git diff --exit-code -- internal/httpapi/gen web/src/api/schema.gen.ts
+
 .PHONY: test-openssh
 # HP-TST-003: real OpenSSH client + in-process gateway + OpenSSH sshd container (requires Docker and ssh).
 test-openssh:

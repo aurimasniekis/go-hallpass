@@ -60,7 +60,7 @@ COPY --from=web /src/web/dist/ web/dist/
 # -buildvcs=false: the build context deliberately excludes .git; version metadata comes from build args instead.
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -buildvcs=false \
+    GOOS=$TARGETOS GOARCH=$TARGETARCH go build -tags embedui -trimpath -buildvcs=false \
       -ldflags "-s -w -buildid= \
         -X github.com/aurimasniekis/go-hallpass/internal/buildinfo.Version=${VERSION} \
         -X github.com/aurimasniekis/go-hallpass/internal/buildinfo.Commit=${COMMIT} \

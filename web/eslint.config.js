@@ -40,6 +40,7 @@ export default defineConfig([
     'dist',
     'node_modules',
     'src/routeTree.gen.ts',
+    'src/api/schema.gen.ts',
     'test-results',
     'playwright-report',
     'blob-report',

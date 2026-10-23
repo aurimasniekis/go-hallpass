@@ -6,3 +6,4 @@ test-results
 playwright-report
 blob-report
 .tanstack
+src/api/schema.gen.ts

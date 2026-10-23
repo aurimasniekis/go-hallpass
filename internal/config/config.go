@@ -64,6 +64,7 @@ type Config struct {
 	Auth      AuthConfig      `yaml:"auth"`
 	Telemetry TelemetryConfig `yaml:"telemetry"`
 	Shutdown  ShutdownConfig  `yaml:"shutdown"`
+	RBAC      RBACConfig      `yaml:"rbac"`
 	Dev       DevConfig       `yaml:"dev"`
 }
 
@@ -169,6 +170,14 @@ type TelemetryConfig struct {
 // ShutdownConfig configures graceful shutdown (HP-OPS-002).
 type ShutdownConfig struct {
 	DrainTimeout Duration `yaml:"drain_timeout"`
+}
+
+// RBACConfig sets the configurable cells of the operator permission matrix (PLAN §12.5); all default to false.
+type RBACConfig struct {
+	AuditorAddressRead     bool `yaml:"auditor_address_read"`
+	ApproverRecordingPlay  bool `yaml:"approver_recording_play"`
+	AuditorRecordingExport bool `yaml:"auditor_recording_export"`
+	ApproversCanLockdown   bool `yaml:"approvers_can_lockdown"`
 }
 
 // DevConfig holds development-only features. Any of them in production mode is a validation error (HP-AUTH-017).

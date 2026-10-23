@@ -344,6 +344,58 @@
   - **Deviation:** the Keycloak/Dex interop smoke tests (PLAN WP14 tests, nightly CI) are not implemented yet. They are
     tracked as an open item and are not claimed as done.
 
+### ADR-0031 — REST API implementation: in-repo generator, conventions and UI embedding
+- **Status:** accepted (WP15). Not security-relevant: no requirement is relaxed.
+- **Context:** PLAN §8.1 names `oapi-codegen` for the strict server. Its OpenAPI 3.1 support is incomplete (it is built
+  on kin-openapi, which targets 3.0), and HP-API-001 requires a 3.1 spec.
+- **Decision:**
+  1. **Spec and code generation:**
+     - `api/openapi.yaml` (3.1) is the source.
+     - `internal/tools/apigen` generates `internal/httpapi/gen/operations.gen.go`: the operation table (method, path,
+       `x-permission`, `x-reauth`, `x-mfa`, `x-idempotency-key`, `x-stream`, `x-redirect`) and a `Server` interface
+       with one method per operation, so a missing handler fails compilation.
+     - `openapi-typescript` generates `web/src/api/schema.gen.ts`.
+     - `make api-check` fails CI on drift.
+  2. **Conformance:** the API tests validate response bodies against the spec's JSON Schemas
+     (`santhosh-tekuri/jsonschema/v6`, draft 2020-12). A negative test proves the validator rejects drift.
+  3. **Single authorization point:** every operation goes through one middleware in this order:
+     1. rate limits (per IP, per session, stricter on auth endpoints);
+     2. Origin/`Sec-Fetch-Site` check for mutations;
+     3. session cookie;
+     4. RBAC `Authorize(x-permission)`;
+     5. CSRF token for authenticated mutations;
+     6. recent auth / MFA gates;
+     7. idempotency replay;
+     8. the handler;
+     9. RFC 9457 problem details.
+     A parameterized test runs the whole matrix (every operation × four roles plus no role × password and SSO
+     principals) and proves local and SSO decisions are identical (HP-RBAC-006).
+  4. **API conventions:**
+     - Durations are integer **seconds** in the API. Domain JSON uses nanoseconds; DTOs shadow those fields.
+     - `PATCH` takes the version from `If-Match` (or the body); with neither, it returns 428.
+     - `validation_failed` → 422; `conflict` and `precondition_failed` → 409; `unauthorized`, `reauth_required` and
+       `mfa_required` → 401.
+     - Mutations without a same-origin `Origin` (or `Sec-Fetch-Site: same-origin`) are refused.
+  5. **Redaction:**
+     - Addresses and ports are redacted without `inventory.address.read`, and host identities need that permission.
+     - Request reasons are returned only with `requests.reason.read`.
+     - SSE events carry only type, resource and ID.
+  6. **SSE:**
+     - in-process hub with a 4096-event ring per boot, 256-event per-client buffer and `reset` on overflow, unknown ID
+       or another boot;
+     - at most 4 streams per web session and 512 in total;
+     - 15 s heartbeat;
+     - the session is re-validated every 30 s (revocation closes the stream) and role changes apply to later events.
+  7. **UI embedding (HP-UI-016):** release and container builds compile with `-tags embedui` and embed `web/dist`.
+     Other builds serve a "UI not included" notice, so Go builds and tests do not depend on a frontend build. The
+     handler serves index.html for client routes (no-cache) and immutable hashed assets, and returns 404 for missing
+     assets.
+  8. **Test-login preview:** the preview is kept in memory per operator and provider for 10 minutes (`GET
+     /oidc-providers/{id}/test-login`), so claims never travel in redirect URLs.
+- **Consequences:** routes, permissions and security flags cannot drift from the spec. Webhook endpoints
+  (`/hooks/*`) and the remaining PLAN §8.2 resources (integrations, notification routes, retention, recording export,
+  system keys and backup) are added with WP16–WP18 and WP23.
+
 ### ADR-0032 — Backup, restore, anchors and break-glass CLI details
 - **Status:** accepted (WP23). Item 2 is a **security-relevant change** and is flagged for operator review.
 - **Decision:**
@@ -407,6 +459,28 @@
      - security fixes for the latest minor release line only.
 - **Not verified:** the release workflow has only been exercised locally (actionlint, docker build, smoke tests,
   Trivy, syft) and has not run on GitHub. `docker/login-action` v4.6.0 resolves to `dbcb8138…`.
+
+### ADR-0034 — Observability implementation details
+- **Status:** accepted (WP22). Not security-relevant.
+- **Decision:**
+  1. **Package naming:** tracing lives in `internal/obs/tracing` (PLAN named it `internal/obs/otel`). Metrics use a
+     dedicated Prometheus registry in `internal/obs/metrics`, with typed, allowlisted label values: unknown values
+     become `other`, and cardinality caps cover transaction names, routes, jobs and OIDC slugs. A nil `*Metrics`
+     disables metrics everywhere.
+  2. **Readiness semantics:** a `degraded` gateway answers `/readyz` with **200** by default, so operators can still
+     reach it; `health.Options.DegradedStatusCode` can make it 503. `starting`, `failed` and `stopping` return 503.
+     Public `/readyz` responses carry only short codes; error details appear only in development mode.
+  3. **Storage reserve:** the reserve is the **larger** of `storage.min_free_bytes` and `storage.min_free_percent`.
+     Below it, readiness degrades and new channels are refused at admission (HP-OPS-006).
+  4. **Tracing:**
+     - OTLP over HTTP only when `telemetry.otlp_endpoint` is set;
+     - an exporter wrapper strips sensitive attributes;
+     - inbound `traceparent` is ignored by default;
+     - request IDs are always generated server-side.
+  5. **Metrics endpoint:** with `telemetry.prometheus` and no `http.metrics_listen`, `/metrics` is served on the main
+     HTTP listener. A separate `metrics_listen` (for example on loopback) is recommended in production.
+  6. **Not implemented:** OTLP *metrics* export (Prometheus only), and copying the trace ID into audit-event
+     correlation for SSH-originated events beyond the audit hook.
 
 ## 2. Open review items (operator decisions required)
 

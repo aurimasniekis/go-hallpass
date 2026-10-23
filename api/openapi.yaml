@@ -1,0 +1,1960 @@
+openapi: 3.1.0
+info:
+  title: Hallpass operator API
+  version: "1.0.0"
+  description: |
+    The operator API behind the Hallpass web UI (PLAN §8). JSON only; errors are RFC 9457 problem details.
+    Authentication uses the `__Host-hp_session` cookie. Mutations require the `X-CSRF-Token` header and a same-origin
+    `Origin`. Changes within v1 are additive only (HP-API-002).
+
+    Vendor extensions on every operation:
+    - `x-permission`: the single RBAC permission checked server-side (`public`, `session`, `session.limited` or a
+      permission from the matrix in PLAN §12.5).
+    - `x-reauth`: recent authentication (5 minutes) is required (HP-AUTH-014); otherwise `reauth_required`.
+    - `x-mfa`: password sessions must have completed MFA recently; otherwise `mfa_required`.
+    - `x-idempotency-key`: the `Idempotency-Key` header is honored for 24 h per operator (HP-API-006).
+    - `x-stream`: Server-Sent Events. `x-redirect`: a browser redirect, not JSON.
+
+    Durations are integer seconds. Timestamps are RFC 3339 UTC. Destination addresses, ports and host-key details
+    are returned only with `inventory.address.read` (HP-SRV-010).
+servers:
+  - url: /
+tags:
+  - {name: auth}
+  - {name: me}
+  - {name: operators}
+  - {name: agents}
+  - {name: inventory}
+  - {name: credentials}
+  - {name: policy}
+  - {name: access}
+  - {name: sessions}
+  - {name: audit}
+  - {name: sso}
+  - {name: system}
+  - {name: live}
+
+paths:
+  # ---------------------------------------------------------------- auth
+  /api/v1/auth/config:
+    get:
+      operationId: getAuthConfig
+      tags: [auth]
+      x-permission: public
+      summary: Login modes and enabled SSO providers.
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AuthConfig"}}}}
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      x-permission: public
+      summary: Password login. Sets the session cookie; the session is limited until MFA completes.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/LoginRequest"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/LoginResult"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/auth/mfa:
+    post:
+      operationId: verifyMFA
+      tags: [auth]
+      x-permission: session.limited
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/CodeRequest"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Me"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      x-permission: session.limited
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/LogoutResult"}}}}
+  /api/v1/auth/reauth:
+    post:
+      operationId: reauth
+      tags: [auth]
+      x-permission: session
+      summary: Re-authenticate a password session (password plus TOTP when enrolled).
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/ReauthRequest"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Me"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/auth/reauth/totp:
+    post:
+      operationId: reauthTOTP
+      tags: [auth]
+      x-permission: session
+      summary: Step-up fallback for SSO sessions whose provider cannot prove a fresh login.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/CodeRequest"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Me"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/auth/bootstrap:
+    post:
+      operationId: bootstrap
+      tags: [auth]
+      x-permission: public
+      summary: Create the first administrator with the one-time setup token.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/BootstrapRequest"}}}
+      responses:
+        "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/Operator"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/auth/invitations/{token}/accept:
+    post:
+      operationId: acceptInvitation
+      tags: [auth]
+      x-permission: public
+      parameters: [{$ref: "#/components/parameters/Token"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/AcceptInvitationRequest"}}}
+      responses:
+        "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/Operator"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/auth/reset/{token}:
+    post:
+      operationId: resetPassword
+      tags: [auth]
+      x-permission: public
+      parameters: [{$ref: "#/components/parameters/Token"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/PasswordRequest"}}}
+      responses:
+        "204": {description: password changed}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/oidc/{provider}/start:
+    get:
+      operationId: oidcStart
+      tags: [sso]
+      x-permission: public
+      x-redirect: true
+      summary: Redirect to the identity provider (purpose login, stepup, test or link).
+      parameters:
+        - {name: provider, in: path, required: true, schema: {type: string}}
+        - {name: purpose, in: query, schema: {type: string, enum: [login, stepup, test, link], default: login}}
+        - {name: return_to, in: query, schema: {type: string}}
+        - {name: link_token, in: query, schema: {type: string}}
+      responses:
+        "302": {description: redirect to the provider}
+  /auth/oidc/callback:
+    get:
+      operationId: oidcCallback
+      tags: [sso]
+      x-permission: public
+      x-redirect: true
+      parameters:
+        - {name: state, in: query, schema: {type: string}}
+        - {name: code, in: query, schema: {type: string}}
+        - {name: error, in: query, schema: {type: string}}
+      responses:
+        "303": {description: redirect into the UI}
+
+  # ---------------------------------------------------------------- me
+  /api/v1/me:
+    get:
+      operationId: getMe
+      tags: [me]
+      x-permission: session.limited
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Me"}}}}
+  /api/v1/me/sessions:
+    get:
+      operationId: listMySessions
+      tags: [me]
+      x-permission: session
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/WebSession"}}}}}}}
+  /api/v1/me/sessions/{id}:
+    delete:
+      operationId: revokeMySession
+      tags: [me]
+      x-permission: session
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "204": {description: revoked}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/me/password:
+    post:
+      operationId: changeMyPassword
+      tags: [me]
+      x-permission: session
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/ChangePasswordRequest"}}}
+      responses:
+        "204": {description: changed}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/me/mfa/totp:
+    post:
+      operationId: beginTOTP
+      tags: [me]
+      x-permission: session.limited
+      summary: Start TOTP enrollment (allowed while enrollment is required).
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/TOTPEnrollment"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: disableTOTP
+      tags: [me]
+      x-permission: session
+      x-reauth: true
+      x-mfa: true
+      responses:
+        "204": {description: disabled}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/me/mfa/totp/confirm:
+    post:
+      operationId: confirmTOTP
+      tags: [me]
+      x-permission: session.limited
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/CodeRequest"}}}
+      responses:
+        "200": {description: recovery codes, shown once, content: {application/json: {schema: {$ref: "#/components/schemas/RecoveryCodes"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/me/recovery-codes:
+    post:
+      operationId: regenerateRecoveryCodes
+      tags: [me]
+      x-permission: session
+      x-reauth: true
+      x-mfa: true
+      responses:
+        "200": {description: new codes, shown once, content: {application/json: {schema: {$ref: "#/components/schemas/RecoveryCodes"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/me/identities:
+    get:
+      operationId: listMyIdentities
+      tags: [me]
+      x-permission: session
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Identity"}}}}}}}
+
+  # ---------------------------------------------------------------- operators
+  /api/v1/operators:
+    get:
+      operationId: listOperators
+      tags: [operators]
+      x-permission: operators.manage
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Operator"}}}}}}}
+    post:
+      operationId: createOperator
+      tags: [operators]
+      x-permission: operators.manage
+      x-reauth: true
+      x-mfa: true
+      x-idempotency-key: true
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/OperatorCreate"}}}
+      responses:
+        "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/Operator"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/operators/{id}:
+    get:
+      operationId: getOperator
+      tags: [operators]
+      x-permission: operators.manage
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Operator"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    patch:
+      operationId: updateOperator
+      tags: [operators]
+      x-permission: operators.manage
+      x-reauth: true
+      x-mfa: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/OperatorPatch"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Operator"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/operators/{id}/reset-token:
+    post:
+      operationId: issueResetToken
+      tags: [operators]
+      x-permission: operators.manage
+      x-reauth: true
+      x-mfa: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: single-use token, shown once, content: {application/json: {schema: {$ref: "#/components/schemas/OneTimeToken"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/operators/{id}/sessions:
+    get:
+      operationId: listOperatorSessions
+      tags: [operators]
+      x-permission: operators.manage
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/WebSession"}}}}}}}
+    delete:
+      operationId: revokeOperatorSessions
+      tags: [operators]
+      x-permission: operators.manage
+      x-reauth: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "204": {description: revoked}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/operators/{id}/identities:
+    get:
+      operationId: listOperatorIdentities
+      tags: [operators]
+      x-permission: operators.manage
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Identity"}}}}}}}
+    post:
+      operationId: linkOperatorIdentity
+      tags: [operators]
+      x-permission: operators.manage
+      x-reauth: true
+      x-mfa: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/IdentityLink"}}}
+      responses:
+        "204": {description: linked}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: unlinkOperatorIdentity
+      tags: [operators]
+      x-permission: operators.manage
+      x-reauth: true
+      parameters:
+        - {$ref: "#/components/parameters/ID"}
+        - {name: issuer, in: query, required: true, schema: {type: string}}
+        - {name: subject, in: query, required: true, schema: {type: string}}
+      responses:
+        "204": {description: unlinked}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/operators/{id}/link-invite:
+    post:
+      operationId: issueLinkInvite
+      tags: [operators]
+      x-permission: operators.manage
+      x-reauth: true
+      x-mfa: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [provider_id], properties: {provider_id: {type: string}}}}}
+      responses:
+        "200": {description: single-use link invitation, content: {application/json: {schema: {$ref: "#/components/schemas/OneTimeToken"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/invitations:
+    post:
+      operationId: createInvitation
+      tags: [operators]
+      x-permission: operators.manage
+      x-reauth: true
+      x-mfa: true
+      x-idempotency-key: true
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/InvitationCreate"}}}
+      responses:
+        "200": {description: single-use invitation token, content: {application/json: {schema: {$ref: "#/components/schemas/OneTimeToken"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # ---------------------------------------------------------------- agents
+  /api/v1/agents:
+    get:
+      operationId: listAgents
+      tags: [agents]
+      x-permission: inventory.read
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Agent"}}}}}}}
+    post:
+      operationId: createAgent
+      tags: [agents]
+      x-permission: inventory.write
+      x-idempotency-key: true
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/AgentCreate"}}}
+      responses:
+        "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/Agent"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/agents/{id}:
+    get:
+      operationId: getAgent
+      tags: [agents]
+      x-permission: inventory.read
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AgentDetail"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    patch:
+      operationId: updateAgent
+      tags: [agents]
+      x-permission: inventory.write
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/AgentPatch"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Agent"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/agents/{id}/disable:
+    post:
+      operationId: disableAgent
+      tags: [agents]
+      x-permission: inventory.write
+      x-idempotency-key: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        content: {application/json: {schema: {$ref: "#/components/schemas/ReasonRequest"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Agent"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/agents/{id}/enable:
+    post:
+      operationId: enableAgent
+      tags: [agents]
+      x-permission: inventory.write
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Agent"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/agents/{id}/keys:
+    post:
+      operationId: addAgentKey
+      tags: [agents]
+      x-permission: inventory.write
+      x-idempotency-key: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [public_key], properties: {public_key: {type: string, description: authorized_keys line}}}}}
+      responses:
+        "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/AgentKey"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/agents/{id}/keys/{kid}/revoke:
+    post:
+      operationId: revokeAgentKey
+      tags: [agents]
+      x-permission: inventory.write
+      x-idempotency-key: true
+      parameters:
+        - {$ref: "#/components/parameters/ID"}
+        - {name: kid, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content: {application/json: {schema: {$ref: "#/components/schemas/ReasonRequest"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AgentKey"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/agents/{id}/effective-access:
+    get:
+      operationId: getAgentEffectiveAccess
+      tags: [agents, policy]
+      x-permission: policy.read
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/EffectiveAccess"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # ---------------------------------------------------------------- inventory
+  /api/v1/groups:
+    get:
+      operationId: listGroups
+      tags: [inventory]
+      x-permission: inventory.read
+      parameters:
+        - {name: kind, in: query, schema: {type: string, enum: [agent, server, operator]}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Group"}}}}}}}
+  /api/v1/servers:
+    get:
+      operationId: listServers
+      tags: [inventory]
+      x-permission: inventory.read
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Server"}}}}}}}
+    post:
+      operationId: createServer
+      tags: [inventory]
+      x-permission: inventory.write
+      x-idempotency-key: true
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/ServerInput"}}}
+      responses:
+        "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/Server"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/servers/{id}:
+    get:
+      operationId: getServer
+      tags: [inventory]
+      x-permission: inventory.read
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Server"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    patch:
+      operationId: updateServer
+      tags: [inventory]
+      x-permission: inventory.write
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/ServerInput"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Server"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/servers/{id}/effective-access:
+    get:
+      operationId: getServerEffectiveAccess
+      tags: [inventory, policy]
+      x-permission: policy.read
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/EffectiveAccess"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/servers/{id}/host-identities:
+    get:
+      operationId: listHostIdentities
+      tags: [inventory]
+      x-permission: inventory.address.read
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/HostIdentity"}}}}}}}
+    post:
+      operationId: addHostIdentity
+      tags: [inventory]
+      x-permission: inventory.write
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [public_key], properties: {public_key: {type: string, description: known_hosts or authorized_keys style line}}}}}
+      responses:
+        "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/HostIdentity"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/servers/{id}/host-identities:scan:
+    post:
+      operationId: scanHostIdentities
+      tags: [inventory]
+      x-permission: inventory.write
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: scanned keys (pending confirmation), content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/HostIdentity"}}}}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/host-identities/{id}/confirm:
+    post:
+      operationId: confirmHostIdentity
+      tags: [inventory]
+      x-permission: inventory.write
+      x-reauth: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/HostIdentity"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/host-identities/{id}/retire:
+    post:
+      operationId: retireHostIdentity
+      tags: [inventory]
+      x-permission: inventory.write
+      x-reauth: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/HostIdentity"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/host-cas:
+    post:
+      operationId: createHostCA
+      tags: [inventory]
+      x-permission: inventory.write
+      x-reauth: true
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [name, public_key], properties: {name: {type: string}, public_key: {type: string}, max_validity: {type: integer, description: seconds}}}}}
+      responses:
+        "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/HostCA"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/servers/{id}/host-ca-binding:
+    put:
+      operationId: bindHostCA
+      tags: [inventory]
+      x-permission: inventory.write
+      x-reauth: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [host_ca_id, principals], properties: {host_ca_id: {type: string}, principals: {type: array, items: {type: string}}}}}}
+      responses:
+        "204": {description: bound}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/host-duplicate-exceptions:
+    post:
+      operationId: addHostDuplicateException
+      tags: [inventory]
+      x-permission: inventory.write
+      x-reauth: true
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [fingerprint, server_a, server_b, justification], properties: {fingerprint: {type: string}, server_a: {type: string}, server_b: {type: string}, justification: {type: string}}}}}
+      responses:
+        "204": {description: added}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/servers/{id}/roles:
+    get:
+      operationId: listRoles
+      tags: [inventory]
+      x-permission: inventory.read
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Role"}}}}}}}
+    post:
+      operationId: createRole
+      tags: [inventory]
+      x-permission: inventory.write
+      x-idempotency-key: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/RoleInput"}}}
+      responses:
+        "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/Role"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/roles/{id}:
+    get:
+      operationId: getRole
+      tags: [inventory]
+      x-permission: inventory.read
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Role"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    patch:
+      operationId: updateRole
+      tags: [inventory]
+      x-permission: inventory.write
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/RoleInput"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Role"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # ---------------------------------------------------------------- credentials
+  /api/v1/roles/{id}/credentials:
+    get:
+      operationId: listCredentials
+      tags: [credentials]
+      x-permission: credentials.manage
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/LoginCredential"}}}}}}}
+  /api/v1/roles/{id}/credentials:generate:
+    post:
+      operationId: generateCredential
+      tags: [credentials]
+      x-permission: credentials.manage
+      x-reauth: true
+      x-mfa: true
+      x-idempotency-key: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "201": {description: created (pending until probed and activated), content: {application/json: {schema: {$ref: "#/components/schemas/LoginCredential"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/roles/{id}/credentials:import:
+    post:
+      operationId: importCredential
+      tags: [credentials]
+      x-permission: credentials.manage
+      x-reauth: true
+      x-mfa: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [private_key_pem], properties: {private_key_pem: {type: string, writeOnly: true}}}}}
+      responses:
+        "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/LoginCredential"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/credentials/{id}/probe:
+    post:
+      operationId: probeCredential
+      tags: [credentials]
+      x-permission: credentials.manage
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/LoginCredential"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/credentials/{id}/activate:
+    post:
+      operationId: activateCredential
+      tags: [credentials]
+      x-permission: credentials.manage
+      x-reauth: true
+      x-mfa: true
+      parameters:
+        - {$ref: "#/components/parameters/ID"}
+        - {name: force, in: query, schema: {type: boolean, default: false}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/LoginCredential"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/credentials/{id}/revoke:
+    post:
+      operationId: revokeCredential
+      tags: [credentials]
+      x-permission: credentials.manage
+      x-reauth: true
+      x-mfa: true
+      x-idempotency-key: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        content: {application/json: {schema: {$ref: "#/components/schemas/ReasonRequest"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/LoginCredential"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/user-cas:
+    get:
+      operationId: listUserCAs
+      tags: [credentials]
+      x-permission: credentials.manage
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/UserCA"}}}}}}}
+    post:
+      operationId: createUserCA
+      tags: [credentials]
+      x-permission: credentials.manage
+      x-reauth: true
+      x-mfa: true
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [name], properties: {name: {type: string}}}}}
+      responses:
+        "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/UserCA"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/roles/{id}/cert-binding:
+    put:
+      operationId: bindRoleCert
+      tags: [credentials]
+      x-permission: credentials.manage
+      x-reauth: true
+      x-mfa: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [user_ca_id, principals], properties: {user_ca_id: {type: string}, principals: {type: array, items: {type: string}}, ttl: {type: integer, description: seconds}}}}}
+      responses:
+        "204": {description: bound}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: unbindRoleCert
+      tags: [credentials]
+      x-permission: credentials.manage
+      x-reauth: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "204": {description: unbound}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # ---------------------------------------------------------------- policy
+  /api/v1/policy/rules:
+    get:
+      operationId: listPolicyRules
+      tags: [policy]
+      x-permission: policy.read
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/PolicyRule"}}}}}}}
+    post:
+      operationId: createPolicyRule
+      tags: [policy]
+      x-permission: policy.write
+      x-idempotency-key: true
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/PolicyRule"}}}
+      responses:
+        "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/PolicyRule"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/policy/rules/{id}:
+    get:
+      operationId: getPolicyRule
+      tags: [policy]
+      x-permission: policy.read
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/PolicyRule"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    patch:
+      operationId: updatePolicyRule
+      tags: [policy]
+      x-permission: policy.write
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/PolicyRule"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/PolicyRule"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: deletePolicyRule
+      tags: [policy]
+      x-permission: policy.write
+      x-reauth: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "204": {description: deleted}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/policy/approver-rules:
+    get:
+      operationId: listApproverRules
+      tags: [policy]
+      x-permission: policy.read
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/ApproverRule"}}}}}}}
+    post:
+      operationId: createApproverRule
+      tags: [policy]
+      x-permission: policy.write
+      x-reauth: true
+      x-idempotency-key: true
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/ApproverRule"}}}
+      responses:
+        "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/ApproverRule"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/policy/approver-rules/{id}:
+    patch:
+      operationId: updateApproverRule
+      tags: [policy]
+      x-permission: policy.write
+      x-reauth: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/ApproverRule"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/ApproverRule"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: deleteApproverRule
+      tags: [policy]
+      x-permission: policy.write
+      x-reauth: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "204": {description: deleted}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/policy/version:
+    get:
+      operationId: getPolicyVersion
+      tags: [policy]
+      x-permission: policy.read
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [version], properties: {version: {type: integer}}}}}}
+
+  # ---------------------------------------------------------------- requests, grants, sessions
+  /api/v1/requests:
+    get:
+      operationId: listRequests
+      tags: [access]
+      x-permission: requests.read
+      parameters:
+        - {$ref: "#/components/parameters/Limit"}
+        - {$ref: "#/components/parameters/Cursor"}
+        - {name: state, in: query, schema: {type: string, enum: [pending, approved, denied, expired, canceled]}}
+        - {name: agent_id, in: query, schema: {type: string}}
+        - {name: server_id, in: query, schema: {type: string}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/RequestPage"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/requests/{id}:
+    get:
+      operationId: getRequest
+      tags: [access]
+      x-permission: requests.read
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AccessRequest"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/requests/{id}/approve:
+    post:
+      operationId: approveRequest
+      tags: [access]
+      x-permission: requests.decide
+      x-idempotency-key: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        content: {application/json: {schema: {type: object, properties: {duration: {type: integer, description: "seconds; 0 = requested"}, comment: {type: string}}}}}
+      responses:
+        "200": {description: decision recorded, content: {application/json: {schema: {$ref: "#/components/schemas/Decision"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/requests/{id}/deny:
+    post:
+      operationId: denyRequest
+      tags: [access]
+      x-permission: requests.decide
+      x-idempotency-key: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        content: {application/json: {schema: {type: object, properties: {comment: {type: string}}}}}
+      responses:
+        "200": {description: decision recorded, content: {application/json: {schema: {$ref: "#/components/schemas/Decision"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/requests/{id}/cancel:
+    post:
+      operationId: cancelRequest
+      tags: [access]
+      x-permission: requests.cancel
+      x-idempotency-key: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AccessRequest"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/grants:
+    get:
+      operationId: listGrants
+      tags: [access]
+      x-permission: requests.read
+      parameters:
+        - {$ref: "#/components/parameters/Limit"}
+        - {$ref: "#/components/parameters/Cursor"}
+        - {name: state, in: query, schema: {type: string, enum: [active, expired, revoked]}}
+        - {name: agent_id, in: query, schema: {type: string}}
+        - {name: server_id, in: query, schema: {type: string}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/GrantPage"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/grants/{id}:
+    get:
+      operationId: getGrant
+      tags: [access]
+      x-permission: requests.read
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Grant"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/grants/{id}/revoke:
+    post:
+      operationId: revokeGrant
+      tags: [access]
+      x-permission: grants.revoke
+      x-idempotency-key: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        content: {application/json: {schema: {$ref: "#/components/schemas/ReasonRequest"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Grant"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/access-sessions:
+    get:
+      operationId: listAccessSessions
+      tags: [sessions]
+      x-permission: sessions.read
+      parameters:
+        - {$ref: "#/components/parameters/Limit"}
+        - {$ref: "#/components/parameters/Cursor"}
+        - {name: state, in: query, schema: {type: string, enum: [open, closing, closed]}}
+        - {name: agent_id, in: query, schema: {type: string}}
+        - {name: server_id, in: query, schema: {type: string}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AccessSessionPage"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/access-sessions/{id}:
+    get:
+      operationId: getAccessSession
+      tags: [sessions]
+      x-permission: sessions.read
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AccessSession"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/access-sessions/{id}/timeline:
+    get:
+      operationId: getSessionTimeline
+      tags: [sessions]
+      x-permission: sessions.read
+      parameters:
+        - {$ref: "#/components/parameters/ID"}
+        - {$ref: "#/components/parameters/Limit"}
+        - {name: after_seq, in: query, schema: {type: integer, minimum: 0, default: 0}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/TimelinePage"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/access-sessions/{id}/channels:
+    get:
+      operationId: listSessionChannels
+      tags: [sessions]
+      x-permission: sessions.read
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Channel"}}}}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/access-sessions/{id}/segments:
+    get:
+      operationId: listSessionSegments
+      tags: [sessions]
+      x-permission: sessions.read
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Segment"}}}}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/recordings/{id}/records:
+    get:
+      operationId: getRecordingRecords
+      tags: [sessions]
+      x-permission: recording.play
+      summary: Decrypted records of one segment, at most 256 KiB per page. Every access is audited.
+      parameters:
+        - {$ref: "#/components/parameters/ID"}
+        - {name: from_seq, in: query, schema: {type: integer, minimum: 0, default: 0}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/RecordPage"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/activities:
+    get:
+      operationId: listActivities
+      tags: [sessions]
+      x-permission: sessions.read
+      summary: Live channels.
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Channel"}}}}}}}
+  /api/v1/activities/{id}/terminate:
+    post:
+      operationId: terminateActivity
+      tags: [sessions]
+      x-permission: activities.terminate
+      x-idempotency-key: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "202": {description: termination requested, content: {application/json: {schema: {type: object, required: [terminated], properties: {terminated: {type: boolean}}}}}}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # ---------------------------------------------------------------- audit
+  /api/v1/audit-events:
+    get:
+      operationId: listAuditEvents
+      tags: [audit]
+      x-permission: audit.read
+      parameters:
+        - {$ref: "#/components/parameters/Limit"}
+        - {$ref: "#/components/parameters/Cursor"}
+        - {name: action, in: query, schema: {type: string}}
+        - {name: target_id, in: query, schema: {type: string}}
+        - {name: actor_id, in: query, schema: {type: string}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AuditPage"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/audit-events/verify:
+    get:
+      operationId: verifyAuditChain
+      tags: [audit]
+      x-permission: audit.verify
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AuditVerify"}}}}
+
+  # ---------------------------------------------------------------- SSO settings
+  /api/v1/oidc-providers:
+    get:
+      operationId: listOIDCProviders
+      tags: [sso]
+      x-permission: auth.settings
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/OIDCProvider"}}}}}}}
+    post:
+      operationId: createOIDCProvider
+      tags: [sso]
+      x-permission: auth.settings
+      x-reauth: true
+      x-mfa: true
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/OIDCProviderInput"}}}
+      responses:
+        "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/OIDCProvider"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/oidc-providers/{id}:
+    get:
+      operationId: getOIDCProvider
+      tags: [sso]
+      x-permission: auth.settings
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/OIDCProvider"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    patch:
+      operationId: updateOIDCProvider
+      tags: [sso]
+      x-permission: auth.settings
+      x-reauth: true
+      x-mfa: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/OIDCProviderInput"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/OIDCProvider"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: deleteOIDCProvider
+      tags: [sso]
+      x-permission: auth.settings
+      x-reauth: true
+      x-mfa: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "204": {description: deleted}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/oidc-providers/{id}/mappings:
+    get:
+      operationId: listOIDCMappings
+      tags: [sso]
+      x-permission: auth.settings
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/OIDCMapping"}}}}}}}
+    post:
+      operationId: addOIDCMapping
+      tags: [sso]
+      x-permission: auth.settings
+      x-reauth: true
+      x-mfa: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [group_value], properties: {group_value: {type: string}, role: {type: string}, group_id: {type: string}}}}}
+      responses:
+        "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/OIDCMapping"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/oidc-providers/{id}/mappings/{mid}:
+    delete:
+      operationId: deleteOIDCMapping
+      tags: [sso]
+      x-permission: auth.settings
+      x-reauth: true
+      parameters:
+        - {$ref: "#/components/parameters/ID"}
+        - {name: mid, in: path, required: true, schema: {type: string}}
+      responses:
+        "204": {description: deleted}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/oidc-providers/{id}/test-login:
+    get:
+      operationId: getOIDCTestLogin
+      tags: [sso]
+      x-permission: auth.settings
+      summary: The caller's latest test-login preview for this provider (kept 10 minutes; HP-OIDC-014).
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/OIDCTestResult"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/settings/auth:
+    get:
+      operationId: getAuthSettings
+      tags: [sso]
+      x-permission: auth.settings
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AuthSettings"}}}}
+    put:
+      operationId: putAuthSettings
+      tags: [sso]
+      x-permission: auth.settings
+      x-reauth: true
+      x-mfa: true
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/AuthSettings"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AuthSettings"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # ---------------------------------------------------------------- system
+  /api/v1/system/status:
+    get:
+      operationId: getSystemStatus
+      tags: [system]
+      x-permission: dashboard.view
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/SystemStatus"}}}}
+  /api/v1/system/lockdown:
+    post:
+      operationId: enableLockdown
+      tags: [system]
+      x-permission: system.lockdown.enable
+      x-reauth: true
+      x-idempotency-key: true
+      summary: Emergency lockdown - every grant is suspended and no new access is possible.
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/SystemStatus"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: liftLockdown
+      tags: [system]
+      x-permission: system.lockdown.lift
+      x-reauth: true
+      x-mfa: true
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/SystemStatus"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/system/gateway-host-keys:
+    get:
+      operationId: listGatewayHostKeys
+      tags: [system]
+      x-permission: dashboard.view
+      summary: Public gateway host keys for agent known_hosts pinning (not secret).
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/GatewayHostKey"}}}}}}}
+  /api/v1/stats/overview:
+    get:
+      operationId: getStatsOverview
+      tags: [system]
+      x-permission: dashboard.view
+      parameters:
+        - {name: range, in: query, schema: {type: string, enum: [24h, 7d, 30d], default: 24h}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/StatsOverview"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # ---------------------------------------------------------------- live
+  /api/v1/events:
+    get:
+      operationId: streamEvents
+      tags: [live]
+      x-permission: session
+      x-stream: true
+      summary: Server-Sent Events filtered per subscriber (PLAN §8.3).
+      parameters:
+        - {name: Last-Event-ID, in: header, schema: {type: string}}
+      responses:
+        "200": {description: event stream, content: {text/event-stream: {schema: {type: string}}}}
+
+components:
+  parameters:
+    ID: {name: id, in: path, required: true, schema: {type: string, maxLength: 64}}
+    Token: {name: token, in: path, required: true, schema: {type: string, maxLength: 128}}
+    Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+    Cursor: {name: cursor, in: query, schema: {type: string, maxLength: 256}}
+  responses:
+    Problem:
+      description: error
+      content: {application/problem+json: {schema: {$ref: "#/components/schemas/Problem"}}}
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type: {type: string}
+        title: {type: string}
+        status: {type: integer}
+        code: {type: string, description: "stable machine-readable code, e.g. forbidden, not_found, conflict, reauth_required, mfa_required, rate_limited, validation_failed"}
+        detail: {type: string}
+        instance: {type: string}
+        errors:
+          type: array
+          items: {type: object, required: [field, message], properties: {field: {type: string}, message: {type: string}}}
+    Timestamp: {type: string, format: date-time}
+    NullableTimestamp: {type: [string, "null"], format: date-time}
+    StringMap: {type: [object, "null"], additionalProperties: {type: string}}
+    StringList: {type: [array, "null"], items: {type: string}}
+    AuthConfig:
+      type: object
+      required: [local_login, providers, bootstrap_required]
+      properties:
+        local_login: {type: boolean}
+        bootstrap_required: {type: boolean}
+        providers:
+          type: array
+          items: {type: object, required: [slug, display_name], properties: {slug: {type: string}, display_name: {type: string}}}
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties: {email: {type: string}, password: {type: string, writeOnly: true}}
+    LoginResult:
+      type: object
+      required: [mfa_pending, must_enroll, me]
+      properties: {mfa_pending: {type: boolean}, must_enroll: {type: boolean}, me: {$ref: "#/components/schemas/Me"}}
+    CodeRequest:
+      type: object
+      required: [code]
+      properties: {code: {type: string, description: TOTP or recovery code}}
+    ReauthRequest:
+      type: object
+      required: [password]
+      properties: {password: {type: string, writeOnly: true}, code: {type: string}}
+    LogoutResult:
+      type: object
+      required: [provider_logout_url]
+      properties: {provider_logout_url: {type: [string, "null"], description: optional RP-initiated logout at the IdP (not a global logout)}}
+    BootstrapRequest:
+      type: object
+      required: [token, email, display_name, password]
+      properties: {token: {type: string}, email: {type: string}, display_name: {type: string}, password: {type: string, writeOnly: true}}
+    AcceptInvitationRequest:
+      type: object
+      required: [display_name, password]
+      properties: {display_name: {type: string}, password: {type: string, writeOnly: true}}
+    PasswordRequest:
+      type: object
+      required: [password]
+      properties: {password: {type: string, writeOnly: true}}
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties: {current_password: {type: string, writeOnly: true}, new_password: {type: string, writeOnly: true}}
+    ReasonRequest:
+      type: object
+      properties: {reason: {type: string, maxLength: 1000}}
+    OneTimeToken:
+      type: object
+      required: [token, expires_at]
+      properties: {token: {type: string}, expires_at: {$ref: "#/components/schemas/Timestamp"}, url: {type: string}}
+    TOTPEnrollment:
+      type: object
+      required: [secret, uri]
+      properties: {secret: {type: string}, uri: {type: string}}
+    RecoveryCodes:
+      type: object
+      required: [codes]
+      properties: {codes: {type: array, items: {type: string}}}
+    Me:
+      type: object
+      required: [operator, permissions, session, csrf_token]
+      properties:
+        operator: {$ref: "#/components/schemas/Operator"}
+        permissions: {type: array, items: {type: string}}
+        csrf_token: {type: string}
+        session:
+          type: object
+          required: [id, method, auth_at, expires_at, limited, needs_enroll]
+          properties:
+            id: {type: string}
+            method: {type: string, enum: [password, oidc, breakglass]}
+            auth_at: {$ref: "#/components/schemas/Timestamp"}
+            mfa_at: {$ref: "#/components/schemas/NullableTimestamp"}
+            expires_at: {$ref: "#/components/schemas/Timestamp"}
+            limited: {type: boolean}
+            needs_enroll: {type: boolean}
+    Operator:
+      type: object
+      required: [id, display_name, enabled, provisioned_via, roles, role_assignments, groups, has_password, mfa_enrolled, mfa_required, version, created_at]
+      properties:
+        id: {type: string}
+        email: {type: string}
+        display_name: {type: string}
+        enabled: {type: boolean}
+        provisioned_via: {type: string}
+        roles: {type: array, items: {type: string, enum: [administrator, approver, auditor, viewer]}}
+        role_assignments:
+          type: [array, "null"]
+          items: {type: object, required: [role, source], properties: {role: {type: string}, source: {type: string, enum: [manual, sso]}, source_ref: {type: string}}}
+        groups: {$ref: "#/components/schemas/StringList"}
+        has_password: {type: boolean}
+        mfa_enrolled: {type: boolean}
+        mfa_required: {type: boolean}
+        version: {type: integer}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+        last_login_at: {$ref: "#/components/schemas/Timestamp"}
+    OperatorCreate:
+      type: object
+      required: [email, display_name]
+      properties:
+        email: {type: string}
+        display_name: {type: string}
+        roles: {type: array, items: {type: string}}
+        mfa_required: {type: boolean}
+    OperatorPatch:
+      type: object
+      properties:
+        roles: {type: array, items: {type: string}, description: manual roles (SSO-mapped roles are managed by the provider)}
+        enabled: {type: boolean}
+        groups: {type: array, items: {type: string}}
+    InvitationCreate:
+      type: object
+      required: [email]
+      properties: {email: {type: string}, roles: {type: array, items: {type: string}}}
+    WebSession:
+      type: object
+      required: [id, auth_method, created_at, last_seen_at, expires_at, ip, user_agent, current]
+      properties:
+        id: {type: string}
+        auth_method: {type: string}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+        last_seen_at: {$ref: "#/components/schemas/Timestamp"}
+        expires_at: {$ref: "#/components/schemas/Timestamp"}
+        ip: {type: string}
+        user_agent: {type: string}
+        current: {type: boolean}
+    Identity:
+      type: object
+      required: [issuer, subject, provider_id, operator_id, linked_via, created_at]
+      properties:
+        issuer: {type: string}
+        subject: {type: string}
+        provider_id: {type: string}
+        operator_id: {type: string}
+        linked_via: {type: string}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+        last_login_at: {$ref: "#/components/schemas/NullableTimestamp"}
+    IdentityLink:
+      type: object
+      required: [provider_id, subject]
+      properties: {provider_id: {type: string}, subject: {type: string}}
+    Agent:
+      type: object
+      required: [id, name, description, enabled, source_cidrs, groups, labels, version, created_at, updated_at]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        description: {type: string}
+        enabled: {type: boolean}
+        source_cidrs: {$ref: "#/components/schemas/StringList"}
+        groups: {$ref: "#/components/schemas/StringList"}
+        labels: {$ref: "#/components/schemas/StringMap"}
+        version: {type: integer}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+        created_by: {type: string}
+        updated_at: {$ref: "#/components/schemas/Timestamp"}
+        updated_by: {type: string}
+        disabled_at: {$ref: "#/components/schemas/Timestamp"}
+    AgentDetail:
+      allOf:
+        - {$ref: "#/components/schemas/Agent"}
+        - type: object
+          required: [keys]
+          properties: {keys: {type: array, items: {$ref: "#/components/schemas/AgentKey"}}}
+    AgentCreate:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string}
+        description: {type: string}
+        enabled: {type: boolean}
+        source_cidrs: {type: array, items: {type: string}}
+        groups: {type: array, items: {type: string}}
+        labels: {type: object, additionalProperties: {type: string}}
+        public_keys: {type: array, items: {type: string}}
+    AgentPatch:
+      type: object
+      required: [version]
+      properties:
+        version: {type: integer}
+        name: {type: string}
+        description: {type: string}
+        source_cidrs: {type: array, items: {type: string}}
+        groups: {type: array, items: {type: string}}
+        labels: {type: object, additionalProperties: {type: string}}
+    AgentKey:
+      type: object
+      required: [id, agent_id, fingerprint, algorithm, public_key, state, created_at]
+      properties:
+        id: {type: string}
+        agent_id: {type: string}
+        fingerprint: {type: string}
+        algorithm: {type: string}
+        bits: {type: integer}
+        public_key: {type: string}
+        comment: {type: string}
+        state: {type: string, enum: [active, revoked]}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+        created_by: {type: string}
+        revoked_at: {$ref: "#/components/schemas/Timestamp"}
+        last_used_at: {$ref: "#/components/schemas/Timestamp"}
+    Group:
+      type: object
+      required: [id, kind, name]
+      properties: {id: {type: string}, kind: {type: string}, name: {type: string}}
+    Server:
+      type: object
+      required: [id, alias, display_name, enabled, groups, labels, version, created_at, updated_at, address_redacted]
+      properties:
+        id: {type: string}
+        alias: {type: string}
+        display_name: {type: string}
+        description: {type: string}
+        environment: {type: string}
+        address: {type: string, description: "empty unless the caller has inventory.address.read"}
+        port: {type: integer, description: "0 unless the caller has inventory.address.read"}
+        address_redacted: {type: boolean}
+        enabled: {type: boolean}
+        host_ca_id: {type: string}
+        host_ca_principals: {$ref: "#/components/schemas/StringList"}
+        metadata: {$ref: "#/components/schemas/StringMap"}
+        groups: {$ref: "#/components/schemas/StringList"}
+        labels: {$ref: "#/components/schemas/StringMap"}
+        version: {type: integer}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+        updated_at: {$ref: "#/components/schemas/Timestamp"}
+        active_host_identities: {type: integer}
+    ServerInput:
+      type: object
+      properties:
+        version: {type: integer}
+        alias: {type: string}
+        display_name: {type: string}
+        description: {type: string}
+        environment: {type: string}
+        address: {type: string}
+        port: {type: integer}
+        enabled: {type: boolean}
+        metadata: {type: object, additionalProperties: {type: string}}
+        groups: {type: array, items: {type: string}}
+        labels: {type: object, additionalProperties: {type: string}}
+    Role:
+      type: object
+      required: [id, server_id, alias, remote_user, capabilities, default_duration, max_duration, recording_mode, enabled, version]
+      properties:
+        id: {type: string}
+        server_id: {type: string}
+        alias: {type: string}
+        display_name: {type: string}
+        description: {type: string}
+        remote_user: {type: string}
+        capabilities: {$ref: "#/components/schemas/StringList"}
+        default_duration: {type: integer, description: seconds}
+        max_duration: {type: integer, description: seconds}
+        max_concurrent: {type: integer}
+        max_concurrent_per_agent: {type: integer}
+        record_input: {type: boolean}
+        recording_mode: {type: string}
+        env_allow: {$ref: "#/components/schemas/StringList"}
+        approval_channels: {$ref: "#/components/schemas/StringList"}
+        restriction_notes: {type: string}
+        retention_class: {type: string}
+        labels: {$ref: "#/components/schemas/StringMap"}
+        enabled: {type: boolean}
+        version: {type: integer}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+        updated_at: {$ref: "#/components/schemas/Timestamp"}
+    RoleInput:
+      type: object
+      properties:
+        version: {type: integer}
+        alias: {type: string}
+        display_name: {type: string}
+        description: {type: string}
+        remote_user: {type: string}
+        capabilities: {type: array, items: {type: string}}
+        default_duration: {type: integer, description: seconds}
+        max_duration: {type: integer, description: seconds}
+        max_concurrent: {type: integer}
+        max_concurrent_per_agent: {type: integer}
+        record_input: {type: boolean}
+        recording_mode: {type: string}
+        env_allow: {type: array, items: {type: string}}
+        approval_channels: {type: array, items: {type: string}}
+        restriction_notes: {type: string}
+        retention_class: {type: string}
+        labels: {type: object, additionalProperties: {type: string}}
+        enabled: {type: boolean}
+    HostIdentity:
+      type: object
+      required: [id, server_id, algorithm, public_key, fingerprint, state, enrolled_via, created_at]
+      properties:
+        id: {type: string}
+        server_id: {type: string}
+        algorithm: {type: string}
+        public_key: {type: string}
+        fingerprint: {type: string}
+        state: {type: string}
+        enrolled_via: {type: string}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+        created_by: {type: string}
+        confirmed_at: {$ref: "#/components/schemas/Timestamp"}
+        confirmed_by: {type: string}
+    HostCA:
+      type: object
+      required: [id, name, public_key, fingerprint, max_validity, state]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        public_key: {type: string}
+        fingerprint: {type: string}
+        max_validity: {type: integer, description: seconds}
+        state: {type: string}
+    LoginCredential:
+      type: object
+      required: [id, role_id, kind, algorithm, public_key, fingerprint, state, created_at, authorized_keys_line]
+      properties:
+        id: {type: string}
+        role_id: {type: string}
+        kind: {type: string}
+        algorithm: {type: string}
+        public_key: {type: string}
+        fingerprint: {type: string}
+        state: {type: string}
+        probe_ok_at: {$ref: "#/components/schemas/Timestamp"}
+        probe_error: {type: string}
+        activated_at: {$ref: "#/components/schemas/Timestamp"}
+        retire_after: {$ref: "#/components/schemas/Timestamp"}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+        created_by: {type: string}
+        authorized_keys_line: {type: string}
+    UserCA:
+      type: object
+      required: [id, name, algorithm, public_key, fingerprint, external, state]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        algorithm: {type: string}
+        public_key: {type: string}
+        fingerprint: {type: string}
+        external: {type: boolean}
+        state: {type: string}
+    GatewayHostKey:
+      type: object
+      required: [id, algorithm, public_key, fingerprint, state, created_at]
+      properties:
+        id: {type: string}
+        algorithm: {type: string}
+        public_key: {type: string}
+        fingerprint: {type: string}
+        state: {type: string}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+    Selector:
+      type: object
+      description: Subject, target, role or operator selector (PLAN §9). An empty selector matches nothing.
+      additionalProperties: true
+    PolicyRule:
+      type: object
+      required: [name, effect, subjects, targets, roles, enabled]
+      properties:
+        id: {type: string, readOnly: true}
+        name: {type: string}
+        description: {type: string}
+        effect: {type: string, enum: [allow, deny]}
+        level: {type: string, enum: [visible, requestable, auto_approve]}
+        subjects: {$ref: "#/components/schemas/Selector"}
+        targets: {$ref: "#/components/schemas/Selector"}
+        roles: {$ref: "#/components/schemas/Selector"}
+        max_duration: {type: integer, description: seconds}
+        auto_max_duration: {type: integer, description: seconds}
+        require_reason: {type: boolean}
+        enabled: {type: boolean}
+        version: {type: integer}
+    ApproverRule:
+      type: object
+      required: [name, operators, targets, roles, enabled]
+      properties:
+        id: {type: string, readOnly: true}
+        name: {type: string}
+        description: {type: string}
+        operators: {$ref: "#/components/schemas/Selector"}
+        targets: {$ref: "#/components/schemas/Selector"}
+        roles: {$ref: "#/components/schemas/Selector"}
+        max_duration: {type: integer, description: seconds}
+        enabled: {type: boolean}
+        version: {type: integer}
+    EffectiveAccess:
+      type: object
+      required: [policy_version, items]
+      properties:
+        policy_version: {type: integer}
+        items:
+          type: array
+          items:
+            type: object
+            required: [agent_id, server_id, role_id, level]
+            properties:
+              agent_id: {type: string}
+              agent_name: {type: string}
+              server_id: {type: string}
+              server_alias: {type: string}
+              role_id: {type: string}
+              role_alias: {type: string}
+              level: {type: string}
+              require_reason: {type: boolean}
+              max_duration: {type: integer, description: seconds}
+              auto_max_duration: {type: integer, description: seconds}
+              rules: {type: array, items: {type: string}}
+    AccessRequest:
+      type: object
+      required: [id, agent_id, server_id, role_id, requested_duration, state, policy_version, created_at, expires_at, has_reason]
+      properties:
+        id: {type: string}
+        agent_id: {type: string}
+        agent_key_id: {type: string}
+        server_id: {type: string}
+        role_id: {type: string}
+        requested_duration: {type: integer, description: seconds}
+        state: {type: string, enum: [pending, approved, denied, expired, canceled]}
+        state_reason: {type: string}
+        policy_version: {type: integer}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+        expires_at: {$ref: "#/components/schemas/Timestamp"}
+        decided_at: {$ref: "#/components/schemas/Timestamp"}
+        has_reason: {type: boolean}
+        reason: {type: [string, "null"], description: "untrusted agent text; only with requests.reason.read"}
+    RequestPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/AccessRequest"}}
+        next_cursor: {type: [string, "null"]}
+    Decision:
+      type: object
+      required: [request]
+      properties:
+        request: {$ref: "#/components/schemas/AccessRequest"}
+        grant: {oneOf: [{$ref: "#/components/schemas/Grant"}, {type: "null"}]}
+    Grant:
+      type: object
+      required: [id, request_id, agent_id, server_id, role_id, remote_user, capabilities, starts_at, expires_at, state]
+      properties:
+        id: {type: string}
+        request_id: {type: string}
+        decision_id: {type: string}
+        agent_id: {type: string}
+        server_id: {type: string}
+        role_id: {type: string}
+        remote_user: {type: string}
+        capabilities: {$ref: "#/components/schemas/StringList"}
+        policy_version: {type: integer}
+        starts_at: {$ref: "#/components/schemas/Timestamp"}
+        expires_at: {$ref: "#/components/schemas/Timestamp"}
+        state: {type: string, enum: [active, expired, revoked]}
+        ended_at: {$ref: "#/components/schemas/Timestamp"}
+        end_reason: {type: string}
+        session_id: {type: string}
+    GrantPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/Grant"}}
+        next_cursor: {type: [string, "null"]}
+    AccessSession:
+      type: object
+      required: [id, grant_id, state, opened_at, agent_id, server_id, role_id, remote_user, grant_expires_at, grant_state, retention_class]
+      properties:
+        id: {type: string}
+        grant_id: {type: string}
+        state: {type: string, enum: [open, closing, closed]}
+        opened_at: {$ref: "#/components/schemas/Timestamp"}
+        closed_at: {$ref: "#/components/schemas/NullableTimestamp"}
+        close_reason: {type: string}
+        retention_class: {type: string}
+        delete_after: {$ref: "#/components/schemas/NullableTimestamp"}
+        agent_id: {type: string}
+        server_id: {type: string}
+        role_id: {type: string}
+        remote_user: {type: string}
+        grant_expires_at: {$ref: "#/components/schemas/Timestamp"}
+        grant_state: {type: string}
+        channels_total: {type: integer}
+        channels_live: {type: integer}
+    AccessSessionPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/AccessSession"}}
+        next_cursor: {type: [string, "null"]}
+    TimelineEvent:
+      type: object
+      required: [id, type, at, data]
+      properties:
+        id: {type: string}
+        seq: {type: [integer, "null"]}
+        type: {type: string}
+        at: {$ref: "#/components/schemas/Timestamp"}
+        connection_id: {type: string}
+        channel_id: {type: string}
+        segment_id: {type: string}
+        data: {type: object}
+    TimelinePage:
+      type: object
+      required: [items, next_after_seq]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/TimelineEvent"}}
+        next_after_seq: {type: [integer, "null"]}
+    Channel:
+      type: object
+      required: [id, session_id, connection_id, agent_id, role_id, kind, pty, state, opened_at]
+      properties:
+        id: {type: string}
+        session_id: {type: string}
+        connection_id: {type: string}
+        grant_id: {type: string}
+        agent_id: {type: string}
+        role_id: {type: string}
+        kind: {type: string}
+        pty: {type: boolean}
+        state: {type: string}
+        opened_at: {$ref: "#/components/schemas/Timestamp"}
+        closed_at: {$ref: "#/components/schemas/NullableTimestamp"}
+        close_reason: {type: string}
+        exit_status: {type: [integer, "null"]}
+        exit_signal: {type: string}
+    Segment:
+      type: object
+      required: [id, session_id, channel_id, ordinal, state, opened_at]
+      properties:
+        id: {type: string}
+        session_id: {type: string}
+        channel_id: {type: string}
+        ordinal: {type: integer}
+        state: {type: string}
+        records: {type: [integer, "null"]}
+        bytes: {type: [integer, "null"]}
+        first_seq: {type: [integer, "null"]}
+        last_seq: {type: [integer, "null"]}
+        end_reason: {type: string}
+        opened_at: {$ref: "#/components/schemas/Timestamp"}
+        finalized_at: {$ref: "#/components/schemas/NullableTimestamp"}
+        verify_result: {type: string}
+    RecordPage:
+      type: object
+      required: [segment_id, records, next_seq, more, complete, incomplete]
+      properties:
+        segment_id: {type: string}
+        records:
+          type: array
+          items:
+            type: object
+            required: [type, seq, time, stream, data]
+            properties:
+              type: {type: string, description: versioned record type, e.g. terminal.output@1}
+              seq: {type: integer}
+              time: {$ref: "#/components/schemas/Timestamp"}
+              offset_ms: {type: integer}
+              stream: {type: string}
+              data: {type: string, description: base64 payload (untrusted bytes)}
+        next_seq: {type: integer}
+        more: {type: boolean}
+        complete: {type: boolean}
+        incomplete: {type: boolean}
+    AuditEvent:
+      type: object
+      required: [id, seq, at, actor_type, action, outcome, details]
+      properties:
+        id: {type: string}
+        seq: {type: integer}
+        at: {$ref: "#/components/schemas/Timestamp"}
+        actor_type: {type: string}
+        actor_id: {type: string}
+        action: {type: string}
+        target_type: {type: string}
+        target_id: {type: string}
+        outcome: {type: string}
+        source_ip: {type: string}
+        correlation_id: {type: string}
+        details: {type: object}
+    AuditPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/AuditEvent"}}
+        next_cursor: {type: [string, "null"]}
+    AuditVerify:
+      type: object
+      required: [ok, events]
+      properties: {ok: {type: boolean}, events: {type: integer}, problem: {type: string}}
+    OIDCProvider:
+      type: object
+      required: [id, slug, display_name, issuer, client_id, has_client_secret, scopes, provisioning, enabled, version]
+      properties:
+        id: {type: string}
+        slug: {type: string}
+        display_name: {type: string}
+        issuer: {type: string}
+        client_id: {type: string}
+        has_client_secret: {type: boolean}
+        scopes: {type: array, items: {type: string}}
+        groups_claim: {type: string}
+        provisioning: {type: string, enum: [preprovisioned, jit]}
+        jit: {type: object}
+        allow_private_network: {type: boolean}
+        allow_cross_origin_endpoints: {type: boolean}
+        ca_bundle_pem: {type: string}
+        stepup_fallback: {type: string}
+        acr_values: {$ref: "#/components/schemas/StringList"}
+        end_session_enabled: {type: boolean}
+        enabled: {type: boolean}
+        test_login_ok_at: {$ref: "#/components/schemas/NullableTimestamp"}
+        version: {type: integer}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+        updated_at: {$ref: "#/components/schemas/Timestamp"}
+        redirect_uri: {type: string, description: the exact redirect URI to register at the provider}
+    OIDCProviderInput:
+      type: object
+      description: Provider fields; client_secret is write-only (omit to keep, empty string to remove).
+      properties:
+        version: {type: integer}
+        slug: {type: string}
+        display_name: {type: string}
+        issuer: {type: string}
+        client_id: {type: string}
+        client_secret: {type: string, writeOnly: true}
+        scopes: {type: array, items: {type: string}}
+        groups_claim: {type: string}
+        provisioning: {type: string}
+        jit: {type: object}
+        allow_private_network: {type: boolean}
+        allow_cross_origin_endpoints: {type: boolean}
+        ca_bundle_pem: {type: string}
+        stepup_fallback: {type: string}
+        acr_values: {type: array, items: {type: string}}
+        end_session_enabled: {type: boolean}
+        enabled: {type: boolean}
+    OIDCMapping:
+      type: object
+      required: [id, provider_id, group_value]
+      properties:
+        id: {type: string}
+        provider_id: {type: string}
+        group_value: {type: string}
+        role: {type: string}
+        group_id: {type: string}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+    OIDCTestResult:
+      type: object
+      required: [claims, would_provision, mapped_roles, mapped_groups, effective_roles]
+      properties:
+        claims: {type: object}
+        linked_operator_id: {type: string}
+        would_provision: {type: boolean}
+        provision_reason: {type: string}
+        mapped_roles: {type: array, items: {type: string}}
+        mapped_groups: {type: array, items: {type: string}}
+        effective_roles: {type: array, items: {type: string}}
+    AuthSettings:
+      type: object
+      required: [local_login_disabled]
+      properties: {local_login_disabled: {type: boolean}}
+    SystemStatus:
+      type: object
+      required: [lockdown, version, boot_id, pending_requests, active_grants, live_channels, storage_ok]
+      properties:
+        lockdown: {type: boolean}
+        version: {type: string}
+        boot_id: {type: string}
+        pending_requests: {type: integer}
+        active_grants: {type: integer}
+        live_channels: {type: integer}
+        storage_ok: {type: boolean}
+        policy_version: {type: integer}
+    StatsOverview:
+      type: object
+      required: [range, bucket_seconds, requests, sessions]
+      properties:
+        range: {type: string}
+        bucket_seconds: {type: integer}
+        requests_by_state: {type: object, additionalProperties: {type: integer}}
+        requests:
+          type: array
+          items: {type: object, required: [t, n], properties: {t: {$ref: "#/components/schemas/Timestamp"}, n: {type: integer}}}
+        sessions:
+          type: array
+          items: {type: object, required: [t, n], properties: {t: {$ref: "#/components/schemas/Timestamp"}, n: {type: integer}}}

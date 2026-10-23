@@ -89,6 +89,16 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 archives=()
+# HP-UI-016: release binaries embed the built UI (web/dist) via the embedui build tag.
+tags=embedui
+if [[ ! -f web/dist/index.html ]]; then
+  if [[ "${ALLOW_NO_UI:-}" != "1" ]]; then
+    echo "web/dist/index.html missing: run 'pnpm build' in web/ first (or ALLOW_NO_UI=1 for a UI-less build)" >&2
+    exit 1
+  fi
+  tags=
+fi
+
 for platform in "${platforms[@]}"; do
   goos=${platform%/*}
   goarch=${platform#*/}
@@ -97,7 +107,7 @@ for platform in "${platforms[@]}"; do
   mkdir -p "$stage"
   echo "build $platform -> $name.tar.gz" >&2
   CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch GOFLAGS=-mod=readonly \
-    "$go_cmd" build -trimpath -buildvcs="$buildvcs" -ldflags "$ldflags" -o "$stage/hallpass" ./cmd/hallpass
+    "$go_cmd" build -tags "$tags" -trimpath -buildvcs="$buildvcs" -ldflags "$ldflags" -o "$stage/hallpass" ./cmd/hallpass
   cp deploy/examples/hallpass.example.yaml "$stage/"
   [[ -f deploy/systemd/hallpass.service ]] && cp deploy/systemd/hallpass.service "$stage/"
   [[ -f CHANGELOG.md ]] && cp CHANGELOG.md "$stage/"

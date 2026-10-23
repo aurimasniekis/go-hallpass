@@ -1593,14 +1593,14 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP12 | Recording format, recorder, reconciliation | WP11, WP04 | implemented | 88bbd7f, d948bf8 |
 | WP13 | Local operator auth, sessions, MFA | WP05 | in-progress | 1540b43 |
 | WP14 | OIDC SSO | WP13 | implemented | |
-| WP15 | RBAC, REST API, SSE | WP14, WP12 | planned | |
+| WP15 | RBAC, REST API, SSE | WP14, WP12 | implemented | |
 | WP16 | Web approvals and notification core | WP15 | planned | |
 | WP17 | Slack | WP16 | planned | |
 | WP18 | Telegram | WP16 | planned | |
 | WP19 | Frontend foundation and design system | WP15 | in-progress | |
 | WP20 | Operational pages | WP19, WP16 | planned | |
 | WP21 | Timeline and replay UI | WP20 | planned | |
-| WP22 | Observability | WP15 | planned | |
+| WP22 | Observability | WP15 | implemented | |
 | WP23 | Backup/restore/upgrade/break-glass | WP12, WP13 | implemented | |
 | WP24 | Packaging and release pipeline | WP22, WP23 | implemented | |
 | WP25 | Destination-side audit integration | WP12, WP21 | planned | |
@@ -1630,6 +1630,7 @@ local run of the same targets the workflow executes, and the entry says so. Chec
 - 2026-10-23 — WP14: generic OIDC SSO (internal/oidc, migration 0010): PKCE code flow, rate-limited JWKS key set, strict ID-token checks, identity by iss+sub, preprovisioned/JIT, group→role sync with last-admin guard, upstream step-up with TOTP fallback, test login gating SSO-only mode, link invitations, RP logout URL; in-process mock IdP (oidctest). Status *implemented*: HTTP endpoints/cookies come with WP15; Keycloak/Dex interop tests not yet run (ADR-0030).
 - 2026-10-23 — WP23: backup/restore/anchors/break-glass CLI (internal/backup, cmd backup|restore|anchors|admin): read-only online snapshot, ciphertext-only segment copy, manifest with hashes and KEK ID, verify, restore with staging and KEK check, anchor export/verify, offline bootstrap/recover. Partial items: restore drill, RTO, upgrade fixture, break-glass alert. ADR-0032 (restore --force security-relevant, R-13).
 - 2026-10-23 — WP24: packaging (root Dockerfile, distroless nonroot, compose, systemd unit), scripted reproducible release builds, release workflow (SBOM, provenance, Trivy, draft release), install/container/upgrade docs, CHANGELOG, VERSIONING, SECURITY.md. Not run on GitHub yet; ADR-0033 (Trivy waiver gap security-relevant, R-14).
+- 2026-10-23 — WP15 + WP22: REST API v1 (spec-first OpenAPI 3.1, in-repo generator, RBAC matrix, problem details, pagination, idempotency, SSE hub, OIDC browser endpoints, embedded UI) and observability (metrics registry, readiness checks, tracing, correlation, call-site instrumentation, serve wiring). Remaining API resources (integrations, retention, recording export) arrive with WP16-18/WP23 follow-ups. ADR-0031, ADR-0034.
 <!-- progress-log-end -->
 
 ---
@@ -1719,7 +1720,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-SRV-007` Host CA model — WP07 — evidence: U, O — ◐ WP07: host CA enrollment + principal binding, validity/CA/type checks (unit); real-sshd host-cert interop pending WP11
 - [ ] `HP-SRV-008` Server/role disablement — WP09 — evidence: I, O — ◐ WP09: server/role disable hooks cancel + revoke (tested); OpenSSH-level termination WP11
 - [x] `HP-SRV-009` Egress validation (anti-SSRF) — WP07 — evidence: U, I — ✅ tested (local) @ WP07: internal/egress default-deny special ranges, allow CIDRs, mixed-DNS refusal, IP-pinned dial with Control re-check
-- [ ] `HP-SRV-010` Address confidentiality — WP15 — evidence: I, E
+- [x] `HP-SRV-010` Address confidentiality — WP15 — evidence: I, E — ✅ tested: addresses redacted in API without permission, absent from agent output (SSH e2e)
 
 #### HP-KEY — Destination login credentials and signing keys
 
@@ -1841,8 +1842,8 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-AUTH-009` Password change and reset — WP13 — evidence: I, E — ◐ WP13: admin-issued single-use 1 h hashed reset tokens; change requires current password (tested); SMTP delivery + UI pending WP16/WP20
 - [x] `HP-AUTH-010` Session invalidation — WP13 — evidence: I — ✅ tested (local) @ WP13: reset/change/disable/MFA change/role reduction revoke sessions
 - [ ] `HP-AUTH-011` Invitations — WP13 — evidence: I, E — ◐ WP13: single-use 72 h hashed invitations with preset roles (tested); UI pending WP20
-- [ ] `HP-AUTH-012` Server-side sessions — WP13 — evidence: I, E — ◐ WP13: server-side sessions (256-bit token, SHA-256 at rest), idle 30 m / absolute 12 h, rotation, logout, listing/revocation (tested); __Host- cookie flags in WP15
-- [ ] `HP-AUTH-013` CSRF protection — WP13 — evidence: I, E — ◐ WP13: session-bound HMAC CSRF token + constant-time verify (tested); header/Origin/Sec-Fetch-Site middleware WP15
+- [x] `HP-AUTH-012` Server-side sessions — WP13 — evidence: I, E — ✅ tested: server-side sessions, __Host- cookie (Secure) / hp_session in dev, idle+absolute expiry
+- [x] `HP-AUTH-013` CSRF protection — WP13 — evidence: I, E — ✅ tested: CSRF token + Origin/Sec-Fetch-Site on mutations (internal/httpapi/api_test.go)
 - [ ] `HP-AUTH-014` Recent authentication — WP13 — evidence: I, E — ◐ WP13: RequireRecentAuth (5 m, MFA when enrolled) + Reauth with rotation (tested); per-endpoint gating WP15
 - [x] `HP-AUTH-015` Lockout prevention — WP13 — evidence: I, E — ✅ tested: last admin guard (opauth) + SSO-only preconditions and protection (internal/oidc/oidc_test.go (mock IdP) TestTestLoginAndSSOOnly)
 - [ ] `HP-AUTH-016` Break-glass recovery — WP23 — evidence: I, R — ◐ partial: offline admin recover CLI tested; alert-on-next-start pending
@@ -1869,24 +1870,24 @@ check · R recovery drill · SR security review · D documentation review.
 
 #### HP-RBAC — Operator RBAC
 
-- [ ] `HP-RBAC-001` Internal roles and matrix — WP15 — evidence: U, I
-- [ ] `HP-RBAC-002` Address visibility permission — WP15 — evidence: I
-- [ ] `HP-RBAC-003` Approval requires role and scope — WP15 — evidence: I
-- [ ] `HP-RBAC-004` Recording permissions — WP15 — evidence: I, E
-- [ ] `HP-RBAC-005` Retention and revocation permissions — WP15 — evidence: I
-- [ ] `HP-RBAC-006` Auth-method-independent RBAC — WP15 — evidence: I
-- [ ] `HP-RBAC-007` No default privilege — WP15 — evidence: I
+- [x] `HP-RBAC-001` Internal roles and matrix — WP15 — evidence: U, I — ✅ tested: matrix over every operation x role (internal/httpapi/api_test.go TestRBACMatrix) + SSE filtering (TestSSE)
+- [x] `HP-RBAC-002` Address visibility permission — WP15 — evidence: I — ✅ tested: address redaction and host-identity permission (internal/httpapi/api_test.go TestAdministrationFlow)
+- [x] `HP-RBAC-003` Approval requires role and scope — WP15 — evidence: I — ✅ tested: approve/deny need role + approver rule (access.Decide tests; API matrix)
+- [ ] `HP-RBAC-004` Recording permissions — WP15 — evidence: I, E — ◐ tested: play/export defaults (internal/rbac tests); export endpoint pending
+- [ ] `HP-RBAC-005` Retention and revocation permissions — WP15 — evidence: I — ◐ tested: revocation in scope (access tests, API matrix); retention endpoint pending
+- [x] `HP-RBAC-006` Auth-method-independent RBAC — WP15 — evidence: I — ✅ tested: identical local vs SSO decisions (internal/httpapi/api_test.go TestRBACMatrix)
+- [x] `HP-RBAC-007` No default privilege — WP15 — evidence: I — ✅ tested: no roles = no permissions (rbac tests, API matrix, JIT test)
 
 #### HP-API — REST API and live events
 
-- [ ] `HP-API-001` Spec-first OpenAPI — WP15 — evidence: C, I
-- [ ] `HP-API-002` API versioning — WP15 — evidence: D, C
-- [ ] `HP-API-003` Problem details — WP15 — evidence: U, I
-- [ ] `HP-API-004` Server-side pagination — WP15 — evidence: I, E
-- [ ] `HP-API-005` SSE live events — WP15 — evidence: I, E
-- [ ] `HP-API-006` Idempotent mutations — WP15 — evidence: I
-- [ ] `HP-API-007` Security headers — WP15 — evidence: I
-- [ ] `HP-API-008` API rate limiting — WP15 — evidence: I
+- [x] `HP-API-001` Spec-first OpenAPI — WP15 — evidence: C, I — ✅ tested: in-repo generator from OpenAPI 3.1 + TS types, drift check (make api-check, CI), response schema validation (ADR-0031)
+- [ ] `HP-API-002` API versioning — WP15 — evidence: D, C — ◐ implemented: /api/v1 with additive policy (docs/VERSIONING.md)
+- [x] `HP-API-003` Problem details — WP15 — evidence: U, I — ✅ tested: RFC 9457 problem details, no internals (internal/httpapi/api_test.go)
+- [x] `HP-API-004` Server-side pagination — WP15 — evidence: I, E — ✅ tested: cursor pagination with bounds (internal/httpapi/api_test.go TestAdministrationFlow)
+- [x] `HP-API-005` SSE live events — WP15 — evidence: I, E — ✅ tested: SSE IDs, resume, reset, filtering, limits, heartbeat (internal/httpapi/api_test.go TestSSE)
+- [x] `HP-API-006` Idempotent mutations — WP15 — evidence: I — ✅ tested: Idempotency-Key replay and conflict (internal/httpapi/api_test.go)
+- [x] `HP-API-007` Security headers — WP15 — evidence: I — ✅ tested: CSP, frame-ancestors, nosniff, referrer policy, no CORS (internal/httpapi/api_test.go TestAuthFlowAndProtections); HSTS when https
+- [x] `HP-API-008` API rate limiting — WP15 — evidence: I — ✅ tested: per-IP/session/auth rate limits (internal/httpapi/api_test.go TestRateLimit)
 - [ ] `HP-API-009` Webhook isolation — WP16 — evidence: I
 
 #### HP-UI — Web UI
@@ -1906,7 +1907,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-UI-013` Safe replay rendering — WP21 — evidence: U, E, SR
 - [ ] `HP-UI-014` Accessibility — WP19 — evidence: A
 - [ ] `HP-UI-015` Visual regression — WP19 — evidence: V
-- [ ] `HP-UI-016` Embedded build — WP19 — evidence: C, I
+- [x] `HP-UI-016` Embedded build — WP19 — evidence: C, I — ✅ tested: embedui build tag embeds web/dist; SPA handler tests; serve smoke test
 
 #### HP-NTF — Approvals and notifications
 
@@ -1926,12 +1927,12 @@ check · R recovery drill · SR security review · D documentation review.
 
 #### HP-OPS — Operations and distribution
 
-- [ ] `HP-OPS-001` Health and readiness — WP22 — evidence: I
+- [x] `HP-OPS-001` Health and readiness — WP22 — evidence: I — ✅ tested: /healthz, /readyz lifecycle and checks (obs/health tests, app e2e)
 - [ ] `HP-OPS-002` Graceful shutdown — WP11 — evidence: I, O
 - [x] `HP-OPS-003` Backup command — WP23 — evidence: I, R — ✅ tested: backup create/verify/restore round trip, tamper cases (internal/backup tests)
 - [ ] `HP-OPS-004` Restore onto clean machine — WP23 — evidence: R — ◐ partial: in-process restore tested; scripted clean-container drill pending
 - [ ] `HP-OPS-005` Upgrade and rollback — WP23 — evidence: R, D — ◐ partial: forward-only migrations + docs; previous-release upgrade fixture test pending
-- [ ] `HP-OPS-006` Capacity and disk alerts — WP22 — evidence: I, D
+- [ ] `HP-OPS-006` Capacity and disk alerts — WP22 — evidence: I, D — ◐ partial: disk metrics, reserve check refusing channels, readiness degrade; capacity guide pending WP26
 - [ ] `HP-OPS-007` Container and standalone deploy — WP24 — evidence: I, D — ◐ partial: Dockerfile/compose/systemd tested locally (smoke script, compose, systemd-in-container); /readyz + ssh list in smoke pending
 - [ ] `HP-OPS-008` CI pipeline — WP01 — evidence: C — ◐ WP01: lint, vet, custom analyzers, race, fuzz smoke, govulncheck, gitleaks in CI; OpenSSH (WP10), frontend (WP19), Trivy (WP24) pending
 - [ ] `HP-OPS-009` Release provenance — WP24 — evidence: C — ◐ implemented: release workflow with SBOM, provenance, Trivy; locally exercised, not yet run in CI
@@ -1945,8 +1946,8 @@ check · R recovery drill · SR security review · D documentation review.
 
 - [x] `HP-OBS-001` Structured JSON logs — WP02 — evidence: U, C — ✅ tested (local) @ WP02: internal/obs ECS-aligned JSON handler; schema in docs/operator/logging.md
 - [x] `HP-OBS-002` Redaction layer — WP02 — evidence: U — ✅ tested (local) @ WP02: redact.Secret + key denylist in all handlers; planted-secret tests (internal/obs)
-- [ ] `HP-OBS-003` Correlation IDs — WP22 — evidence: I
-- [ ] `HP-OBS-004` Metrics and traces — WP22 — evidence: I
+- [ ] `HP-OBS-003` Correlation IDs — WP22 — evidence: I — ◐ partial: correlation handler + HTTP request IDs + audit hook; SSH-side context propagation partial
+- [ ] `HP-OBS-004` Metrics and traces — WP22 — evidence: I — ◐ tested: Prometheus metrics wired and checked end to end (internal/app TestGatewayHealthAndMetrics); OTLP traces; OTLP metrics not implemented
 - [ ] `HP-OBS-005` Audit log — WP05 — evidence: I — ◐ WP05: hash-chained audit_events (length-prefixed canonical rows), Verify detects modify/delete/reorder, sealed sensitive details, post-commit JSONSink; config wiring of the sink file pending WP22
 
 #### HP-TST — Testing and quality

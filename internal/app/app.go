@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -24,6 +25,9 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/jobs"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/fsstat"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/health"
+	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/oidc"
 	"github.com/aurimasniekis/go-hallpass/internal/opauth"
 	"github.com/aurimasniekis/go-hallpass/internal/outbox"
@@ -31,6 +35,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/recording"
 	"github.com/aurimasniekis/go-hallpass/internal/sshproxy"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
+	webui "github.com/aurimasniekis/go-hallpass/web"
 )
 
 // App holds every long-lived component.
@@ -55,6 +60,8 @@ type App struct {
 	Access      *access.Service
 	Enforcer    *access.Enforcer
 	Recording   *recording.Service
+	Metrics     *metrics.Metrics
+	Health      *health.Checker
 	Auth        *opauth.Service
 	OIDC        *oidc.Service
 	Proxy       *sshproxy.Proxy
@@ -62,6 +69,11 @@ type App struct {
 	// Recorders opens channel recordings; nil means recording is unavailable and mandatory-recording roles fail
 	// closed. New sets it to Recording.
 	Recorders sshproxy.RecorderFactory
+
+	// HTTPListener overrides http.listen (tests); when nil and http.listen is empty, no HTTP API is served.
+	HTTPListener net.Listener
+	// UI serves the embedded web application (nil: API only).
+	UI http.Handler
 }
 
 // Option customizes New.
@@ -72,7 +84,9 @@ func WithClock(c clock.Clock) Option { return func(a *App) { a.Clock = c } }
 
 // New opens storage and the keyring, wires services and runs startup reconciliation (PLAN §3.4 steps 1–7).
 func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Option) (*App, error) {
-	a := &App{Cfg: cfg, Log: log, Clock: clock.System{}, BootID: ids.New(ids.Boot)}
+	a := &App{Cfg: cfg, Log: log, Clock: clock.System{}, BootID: ids.New(ids.Boot), Metrics: metrics.New()}
+	ui, _ := webui.Dist()
+	a.UI = webui.Handler(ui)
 	for _, o := range opts {
 		o(a)
 	}
@@ -87,7 +101,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	}
 	if a.Store, err = store.Open(ctx, store.Options{
 		DataDir: cfg.DataDir, AllowNetworkFS: cfg.Storage.AllowNetworkFS, PreMigrationSnapshots: cfg.Storage.PreMigrationSnapshots,
-		Logger: obs.Component(log, "store"), Clock: a.Clock,
+		Logger: obs.Component(log, "store"), Clock: a.Clock, Metrics: a.Metrics,
 	}); err != nil {
 		return nil, err
 	}
@@ -105,8 +119,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	}
 	a.Audit = audit.NewWriter(a.Keyring)
 	a.Bus = eventbus.New()
-	a.Jobs = jobs.NewRunner(a.Store, jobs.Options{Logger: log, Clock: a.Clock})
-	a.Outbox = outbox.New(a.Store, a.Keyring, outbox.Options{Logger: log, Clock: a.Clock})
+	a.Jobs = jobs.NewRunner(a.Store, jobs.Options{Logger: log, Clock: a.Clock, Metrics: a.Metrics})
+	a.Outbox = outbox.New(a.Store, a.Keyring, outbox.Options{Logger: log, Clock: a.Clock, Metrics: a.Metrics})
 	a.Agents = agents.New(a.Store, a.Keyring, a.Audit, a.Bus, a.Clock)
 	a.Inventory = inventory.New(a.Store, a.Audit, a.Bus, inventory.Options{Guard: a.Guard, MaxGrantDuration: cfg.Access.MaxGrantDuration.D(),
 		Clock: a.Clock, DialTimeout: cfg.SSH.DialTimeout.D()})
@@ -121,7 +135,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	a.Access = access.New(a.Store, a.Keyring, a.Audit, a.Bus, a.Engine, access.Options{
 		PendingExpiry: cfg.Access.PendingExpiry.D(), RequestsPerAgentHour: cfg.Access.RequestsPerAgentHour,
 		MaxPendingPerAgent: cfg.Access.MaxPendingPerAgent, MinRemainingToConnect: cfg.Access.MinRemainingToConnect.D(),
-		DefaultRetention: cfg.Recording.DefaultRetention.D(), BootID: a.BootID, Clock: a.Clock, Logger: log,
+		DefaultRetention: cfg.Recording.DefaultRetention.D(), BootID: a.BootID, Clock: a.Clock, Logger: log, Metrics: a.Metrics,
+		StorageReserve: fsstat.ReserveCheck(cfg.DataDir, cfg.Storage.MinFreeBytes, cfg.Storage.MinFreePercent),
 	})
 	a.Agents.OnDisable(a.Access.AgentDisabledHook)
 	a.Agents.OnKeyRevoke(a.Access.KeyRevokedHook)
@@ -130,14 +145,23 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	rc := cfg.Recording
 	a.Recording = recording.New(a.Store, a.Keyring, a.Access.Sequencer(), recording.Options{
 		Durability: rc.Durability, FlushInterval: rc.FlushInterval.D(), SegmentMaxBytes: rc.SegmentMaxBytes, SegmentMaxAge: rc.SegmentMaxAge.D(),
-		QueueRecords: rc.QueueRecords, QueueBytes: rc.QueueBytes, BlockTimeout: rc.BlockTimeout.D(), Clock: a.Clock, Logger: log,
+		QueueRecords: rc.QueueRecords, QueueBytes: rc.QueueBytes, BlockTimeout: rc.BlockTimeout.D(), Clock: a.Clock, Logger: log, Metrics: a.Metrics,
 	})
 	a.Recorders = a.Recording
 	a.Auth = opauth.New(a.Store, a.Keyring, a.Audit, a.Bus, opauth.Options{PasswordMinBytes: cfg.Auth.PasswordMinBytes,
 		SessionIdle: cfg.Auth.SessionIdleTimeout.D(), SessionAbsolute: cfg.Auth.SessionAbsoluteTimeout.D(), ReauthWindow: cfg.Auth.ReauthWindow.D(),
-		Clock: a.Clock})
+		Clock: a.Clock, Metrics: a.Metrics})
 	a.OIDC = oidc.New(a.Store, a.Keyring, a.Audit, a.Bus, a.Auth, oidc.Options{PublicURL: cfg.PublicURL, DevMode: !cfg.IsProduction(),
-		Clock: a.Clock, Logger: log})
+		Clock: a.Clock, Logger: log, Metrics: a.Metrics})
+	a.Health = health.New(health.Options{ExposeDetails: !cfg.IsProduction()})
+	a.Health.MustRegister(
+		health.StoreHealth("store", a.Store.Health()),
+		health.StoreWritable("store.writable", a.Store.W()),
+		health.DirWritable("recordings.writable", a.Store.Path(store.RecordingsDir)),
+		health.DiskSpace("disk.data", cfg.DataDir, cfg.Storage.MinFreeBytes, cfg.Storage.MinFreePercent),
+	)
+	_ = a.Metrics.Register(a.Health.Collector())
+	a.Metrics.ObserveFilesystem(metrics.VolumeData, cfg.DataDir)
 
 	if err := a.Credentials.EnsureGatewayHostKey(ctx); err != nil {
 		return nil, fmt.Errorf("gateway host key: %w", err)
@@ -166,7 +190,7 @@ func (a *App) NewProxy() *sshproxy.Proxy {
 	a.Proxy = sshproxy.New(sshproxy.Options{
 		Access: a.Access, Inventory: a.Inventory, Credentials: a.Credentials, Guard: a.Guard, Enforcer: a.Enforcer,
 		Recorders: a.Recorders, Audit: a.Audit, Store: a.Store, Logger: a.Log, DialTimeout: a.Cfg.SSH.DialTimeout.D(),
-		IdleTimeout: a.Cfg.SSH.IdleTimeout.D(), EnvAllow: a.Cfg.SSH.EnvAllow,
+		IdleTimeout: a.Cfg.SSH.IdleTimeout.D(), EnvAllow: a.Cfg.SSH.EnvAllow, Metrics: a.Metrics,
 	})
 	return a.Proxy
 }

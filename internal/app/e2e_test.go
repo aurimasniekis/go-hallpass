@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -63,6 +64,7 @@ func startGateway(t *testing.T, tweaks ...func(*config.Config)) *gw {
 	cfg.Egress.AllowCIDRs = []string{"127.0.0.0/8"}
 	cfg.Egress.AllowSpecialCIDRs = []string{"127.0.0.1/32"}
 	cfg.Shutdown.DrainTimeout = config.Duration(500 * time.Millisecond)
+	cfg.HTTP.Listen = ""
 	for _, tw := range tweaks {
 		tw(cfg)
 	}
@@ -664,4 +666,58 @@ func TestGatewayAuthMethodsAndAlgorithms(t *testing.T) {
 	c, err := ssh.Dial("tcp", g.addr, cfg(ssh.PublicKeys(sha512)))
 	must(t, err)
 	_ = c.Close()
+}
+
+// HP-OPS-001, HP-OBS-004: health/readiness endpoints and Prometheus metrics fed by real SSH traffic.
+func TestGatewayHealthAndMetrics(t *testing.T) {
+	var httpLn net.Listener
+	g := startGateway(t, func(c *config.Config) {
+		c.Telemetry.Prometheus = true
+		var err error
+		httpLn, err = net.Listen("tcp", "127.0.0.1:0") //nolint:noctx // test listener
+		must(t, err)
+		c.PublicURL = "http://" + httpLn.Addr().String()
+	})
+	// Serve the infrastructure endpoints of the running gateway on the reserved listener.
+	base := "http://" + httpLn.Addr().String()
+	go func() { _ = http.Serve(httpLn, g.a.RootHandlerForTest()) }() //nolint:gosec // test server
+	get := func(path string) (int, string) {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, base+path, nil)
+		res, err := http.DefaultClient.Do(req)
+		must(t, err)
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(b)
+	}
+	if code, _ := get("/healthz"); code != 200 {
+		t.Fatalf("healthz %d", code)
+	}
+	var code int
+	var body string
+	for range 50 {
+		if code, body = get("/readyz"); code == 200 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if code != 200 || !strings.Contains(body, `"status":"ready"`) {
+		t.Fatalf("readyz %d %s", code, body)
+	}
+	if _, _, c := g.run("exec web1 -- true"); c != 0 {
+		t.Fatalf("exec %d", c)
+	}
+	if _, err := g.client(sshkeys.Ed25519(t)); err == nil {
+		t.Fatal("unknown key accepted")
+	}
+	_, metrics := get("/metrics")
+	for _, want := range []string{"hallpass_ssh_connections_total", "hallpass_ssh_auth_failures_total", "hallpass_access_grants_active",
+		"hallpass_recording_records_total", "hallpass_store_tx_duration_seconds", "hallpass_http_requests_total", "hallpass_readiness_state"} {
+		if !strings.Contains(metrics, want) {
+			t.Errorf("metric %s missing", want)
+		}
+	}
+	g.stop()
+	if code, _ := get("/readyz"); code != 503 {
+		t.Fatalf("readyz after shutdown %d", code)
+	}
 }

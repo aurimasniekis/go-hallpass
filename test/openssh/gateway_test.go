@@ -70,6 +70,7 @@ func startGateway(t *testing.T) *Gateway {
 	cfg.Egress.AllowCIDRs = []string{"127.0.0.0/8"}
 	cfg.Egress.AllowSpecialCIDRs = []string{"127.0.0.1/32"}
 	cfg.Shutdown.DrainTimeout = config.Duration(500 * time.Millisecond)
+	cfg.HTTP.Listen = ""
 	ctx := context.Background()
 	logs := &syncBuffer{}
 	a, err := app.New(ctx, cfg, slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
