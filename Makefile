@@ -47,6 +47,15 @@ fuzz-smoke:
 coverage:
 	./scripts/coverage-floor.sh
 
+.PHONY: test-fault soak-smoke
+# HP-TST-005: fault-injection catalog (docs/TEST_STRATEGY.md §4); Go only, no Docker.
+test-fault:
+	$(GO) test -tags fault -count=1 -timeout 20m ./test/fault/
+
+# HP-TST-006: short in-process soak; RG-5 needs the 24 h run on reference hardware (-duration 24h -out report.json).
+soak-smoke:
+	$(GO) run ./test/soak -duration 30s
+
 vuln:
 	govulncheck ./...
 
