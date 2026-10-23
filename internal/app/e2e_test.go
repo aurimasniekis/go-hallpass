@@ -876,3 +876,19 @@ func TestGatewayAgentKeepalive(t *testing.T) {
 		t.Fatal("silent agent connection not closed")
 	}
 }
+
+// A shell without a PTY works (piped scripts) but tells the agent on stderr that it is non-interactive.
+func TestGatewayShellWithoutPTYHint(t *testing.T) {
+	g := startGateway(t)
+	c, err := g.client(g.key)
+	must(t, err)
+	defer c.Close()
+	s, err := c.NewSession()
+	must(t, err)
+	var out, errb syncBuf
+	s.Stdin, s.Stdout, s.Stderr = strings.NewReader("echo piped\n"), &out, &errb
+	must(t, s.Run("connect web1 --role inspect"))
+	if !strings.Contains(out.String(), "echo piped") || !strings.Contains(errb.String(), "ssh -t") {
+		t.Fatalf("stdout %q stderr %q", out.String(), errb.String())
+	}
+}

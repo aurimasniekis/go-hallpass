@@ -601,6 +601,10 @@ func (s *session) connect(ctx context.Context, alias string, o grammar.Opts, wai
 	}
 	if s.pty != nil {
 		s.notice(fmt.Sprintf("connecting to %s as %s (access until %s)", vs.Server.Alias, vr.Role.Name, g.ExpiresAt.UTC().Format(time.RFC3339)))
+	} else if kind == access.KindShell && !o.JSON {
+		// Without a PTY the destination runs a non-interactive shell: no prompt, no line editing. That is right for
+		// piped scripts but confusing interactively, so say so (stderr only; stdout stays the destination's).
+		s.notice("no terminal requested: this is a non-interactive shell (no prompt); use ssh -t for an interactive session")
 	}
 	res := s.h.Proxy.Run(ctx, &sshproxy.Session{
 		ConnectionID: s.c.ID, AgentID: s.c.AgentID, KeyID: s.c.KeyID, SourceIP: s.c.SourceIP.String(), Grant: g, Kind: kind,
