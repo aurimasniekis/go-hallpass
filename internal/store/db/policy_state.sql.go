@@ -22,7 +22,9 @@ func (q *Queries) BumpPolicyVersion(ctx context.Context, updatedAt int64) (int64
 }
 
 const setLockdown = `-- name: SetLockdown :execrows
-UPDATE policy_state SET lockdown = ?, lockdown_by = ?, lockdown_at = ?, updated_at = ? WHERE id = 1 AND lockdown != ?
+UPDATE policy_state SET lockdown = ?1, lockdown_by = ?2, lockdown_at = ?3,
+  updated_at = ?4
+WHERE id = 1 AND lockdown != ?1
 `
 
 type SetLockdownParams struct {
@@ -30,7 +32,6 @@ type SetLockdownParams struct {
 	LockdownBy sql.NullString
 	LockdownAt sql.NullInt64
 	UpdatedAt  int64
-	Lockdown_2 int64
 }
 
 func (q *Queries) SetLockdown(ctx context.Context, arg SetLockdownParams) (int64, error) {
@@ -39,7 +40,6 @@ func (q *Queries) SetLockdown(ctx context.Context, arg SetLockdownParams) (int64
 		arg.LockdownBy,
 		arg.LockdownAt,
 		arg.UpdatedAt,
-		arg.Lockdown_2,
 	)
 	if err != nil {
 		return 0, err

@@ -55,8 +55,8 @@ Each requirement maps to exactly one owning work package (§19) and to test laye
 ### 3.1 Component view
 
 ```
-                         ┌──────────────────────────── hallpass (single process) ────────────────────────────┐
- Agent (ssh) ──TB-1────▶ │ sshfront ─▶ grammar ─▶ access (requests/grants/sessions) ◀─▶ policy (snapshots)    │
+                         ┌──────────────────────────── hallpass (single process) ──────────────────────────────┐
+ Agent (ssh) ──TB-1────▶ │ sshfront ─▶ grammar ─▶ access (requests/grants/sessions) ◀─▶ policy (snapshots)     │
                          │    │                       │        ▲                                               │
                          │    ▼                       ▼        │ decisions                                     │
                          │ sshproxy ──▶ credentials ──┘   notify (web/slack/telegram) ◀──TB-4── Slack/Telegram │
@@ -67,7 +67,7 @@ Each requirement maps to exactly one owning work package (§19) and to test laye
                          │    ▼                                    │                                           │
                          │ store (SQLite writer + readers) ─ audit ─ jobs/scheduler ─ enforcer ─ eventbus      │
                          │    ▲                                                                                │
- Operator browser ─TB-3─▶│ httpapi (REST /api/v1, SSE, embedded UI) ─ opauth (local) ─ oidc ──TB-5──▶ IdP     │
+ Operator browser ─TB-3─▶│ httpapi (REST /api/v1, SSE, embedded UI) ─ opauth (local) ─ oidc ──TB-5──▶ IdP      │
                          │ obs (slog, OTel, /metrics, /healthz, /readyz)                                       │
                          └───────────────▲─────────────────────────────────────────────────────────────────────┘
  Host admin (CLI: bootstrap, recover, backup, restore, verify, keys) ──TB-8── data dir (0700) ──TB-6
@@ -1584,8 +1584,8 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP05 | Audit, jobs, outbox | WP04 | tested | 3327bc9 |
 | WP06 | Agents and keys | WP05 | tested | bdf3f05 |
 | WP07 | Servers, host identities, roles, credentials/CA | WP06 | tested | 6284850 |
-| WP08 | Policy engine and effective access | WP07 | tested | |
-| WP09 | Request/grant/session lifecycle and enforcer | WP08 | planned | |
+| WP08 | Policy engine and effective access | WP07 | tested | d4b4e2a |
+| WP09 | Request/grant/session lifecycle and enforcer | WP08 | tested | |
 | WP10 | SSH front end | WP09 | planned | |
 | WP11 | SSH data plane | WP10 | planned | |
 | WP12 | Recording format, recorder, reconciliation | WP11, WP04 | planned | |
@@ -1621,6 +1621,7 @@ local run of the same targets the workflow executes, and the entry says so. Chec
 - **WP06** (2026-10-23): migration 0003 (groups, labels, agents, agent_keys, agent_groups), `internal/agents` (strict key parsing/algorithm policy, global key uniqueness with tombstones, revocation with sealed reasons, enable/disable, in-transaction hooks for WP09 cascades, Authenticate with failure reasons and source CIDRs, policy-version bumps, audit), `internal/groups` (group/label validation and persistence), `internal/apperr`, `internal/testutil/sshkeys`, audit request metadata. Tested locally (-race), FuzzParseAgentKey 20 s.
 - **WP07** (2026-10-23): migrations 0004/0005, `internal/inventory` (servers, roles, aliases/reserved words, host identities with paste/scan/confirm/retire, duplicate detection + audited exceptions, host CAs with principal binding, strict Verifier), `internal/credentials` (managed/imported login keys sealed with the credential key, authorized_keys suggestion, probe/activate/overlap/retire/revoke, user CAs + per-connection certificates, Signer/SignerResolver abstraction, gateway host keys with staged rotation), `internal/egress` (anti-SSRF guard), `internal/destssh` (sole outbound dialer, verifier mandatory), `internal/sshalg`, `internal/testutil/sshtest` (in-process destination), config `egress.source_addresses`. txscope analyzer refined (SSH I/O only; AfterCommit callbacks exempt). Tested locally (-race); real-OpenSSH interop deferred to WP10/WP11 harness.
 - **WP08** (2026-10-23): migration 0006 (policy_rules, approver_rules, agent_owners), `internal/policy` (selectors with Kubernetes-style label expressions and empty-matches-nothing semantics, immutable compiled Snapshot: Evaluate/Visible/ResolveServer/ResolveRole with single ErrNotFoundOrForbidden, durations/presets/auto-approve, CanApprove with self-approval prohibition; Engine with per-version cache, consistent ReadTx loading, WhatIf; CRUD service with in-tx version bump + audit + policy.changed), `store.ReadTx`, docs/operator/policy.md. Evaluate ≈1.2 µs, Visible over 2,000 servers × 3 roles × 100 rules ≈8.5 ms (M-series laptop, not RH-1). Coverage 81.8%. Tested locally (-race), FuzzRuleJSON 20 s.
+- **WP09** (2026-10-23): migration 0007 (requests, decisions, grants, sessions, connections, channels, timeline), `internal/access` (CreateRequest with dedup/idempotency/rate limits/sealed sanitized reasons/auto-approval; Decide via one transactional path with authority, self-approval, channel, policy and duration rechecks; grants with time-authoritative expiry; lockdown; disable/key-revoke/target cascades; ReconcilePolicy (cancel/revoke/clamp); channel registration with atomic concurrency limits and full revalidation; per-session Sequencer with DB-reserved blocks; timeline events with idempotency keys; Enforcer (events + ticker + DB reconciliation, registration-race guard); startup reconciliation; background loop). Decide no longer writes state on its rejection paths (would roll back). Tests: 30+ cases incl. concurrency races, enforcement bound (in-process), lost-event path; coverage 80.8%; FuzzSanitizeReason 15 s. Frontend foundation, HPREC1 format and SSH grammar started in parallel by sub-agents (separate directories; committed separately after review).
 <!-- progress-log-end -->
 
 ---
@@ -1693,10 +1694,10 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-AGT-002` Multiple keys per agent — WP06 — evidence: U, I — ✅ tested (local) @ WP06: multiple keys per agent, active/revoked, actor/time history
 - [x] `HP-AGT-003` Globally unique key ownership — WP06 — evidence: I — ✅ tested (local) @ WP06: unique fingerprint incl. tombstoned revoked keys (TestKeyUniquenessAcrossAgents)
 - [x] `HP-AGT-004` Validated key parsing — WP06 — evidence: U, Z — ✅ tested (local) @ WP06: ParseAgentKey policy table + FuzzParseAgentKey (20 s local smoke)
-- [ ] `HP-AGT-005` Immediate key revocation — WP09 — evidence: O, I — ◐ WP06: revoked key rejected at next auth (TestAuthenticate) + in-tx revoke hooks; enforcer termination pending WP09
+- [ ] `HP-AGT-005` Immediate key revocation — WP09 — evidence: O, I — ◐ WP09: key revoke → enforcer terminates that key's channels (tested); last key → grants revoked; OpenSSH interop WP10/11
 - [x] `HP-AGT-006` No agent private keys — WP06 — evidence: U — ✅ tested (local) @ WP06: private-key input rejected without echo; no private-key storage path exists
 - [ ] `HP-AGT-007` Source CIDR restriction — WP10 — evidence: O, D — ◐ WP06: source CIDR check in agents.Authenticate (incl. IPv4-mapped); SSH wiring + docs pending WP10
-- [ ] `HP-AGT-008` Agent disablement — WP09 — evidence: I, O — ◐ WP06: disable rejects auth + in-tx disable hooks + agent.disabled event; grant revocation/termination pending WP09
+- [ ] `HP-AGT-008` Agent disablement — WP09 — evidence: I, O — ◐ WP09: disable hook cancels requests, revokes grants (tested); enforcer termination tested in-process; OpenSSH WP11
 - [x] `HP-AGT-009` Agent audit history — WP06 — evidence: I — ✅ tested (local) @ WP06: audit events for create/update/enable/disable/key add/revoke (hash-chain verified)
 
 #### HP-SRV — Destination servers and roles
@@ -1708,7 +1709,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-SRV-005` Host key rotation — WP07 — evidence: I, O — ◐ WP07: pending/active/retired states, changed key → HostKeyError before auth (TestHostKeyMismatchBlocksLogin); alerting + exit 88 wiring WP11
 - [x] `HP-SRV-006` Duplicate host identity detection — WP07 — evidence: I — ✅ tested (local) @ WP07: duplicate active fingerprint rejected; justified, audited exception required
 - [ ] `HP-SRV-007` Host CA model — WP07 — evidence: U, O — ◐ WP07: host CA enrollment + principal binding, validity/CA/type checks (unit); real-sshd host-cert interop pending WP11
-- [ ] `HP-SRV-008` Server/role disablement — WP09 — evidence: I, O
+- [ ] `HP-SRV-008` Server/role disablement — WP09 — evidence: I, O — ◐ WP09: server/role disable hooks cancel + revoke (tested); OpenSSH-level termination WP11
 - [x] `HP-SRV-009` Egress validation (anti-SSRF) — WP07 — evidence: U, I — ✅ tested (local) @ WP07: internal/egress default-deny special ranges, allow CIDRs, mixed-DNS refusal, IP-pinned dial with Control re-check
 - [ ] `HP-SRV-010` Address confidentiality — WP15 — evidence: I, E
 
@@ -1731,7 +1732,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-POL-005` Role and server visibility — WP08 — evidence: U — ✅ tested (local) @ WP08: role/server visibility, disabled invisible
 - [x] `HP-POL-006` Separated permissions — WP08 — evidence: U, I — ✅ tested (local) @ WP08: separate Evaluate (visibility/request), CanApprove (approval authority); activity check = grant revalidation in WP09
 - [x] `HP-POL-007` Policy versioning — WP08 — evidence: I — ✅ tested (local) @ WP08: policy_version bumped in-tx by policy, agent, inventory changes; engine rebuilds snapshot on version change
-- [ ] `HP-POL-008` Policy change effects — WP09 — evidence: I
+- [x] `HP-POL-008` Policy change effects — WP09 — evidence: I — ✅ tested (local) @ WP09: ReconcilePolicy cancels/revokes/clamps; run on policy.changed + every minute (TestBackgroundLoopAppliesPolicyAndExpiry)
 - [ ] `HP-POL-009` Effective-access preview — WP08 — evidence: U, E — ◐ WP08: PreviewAgent/PreviewServer with deciding rule + Engine.WhatIf tested; UI pending WP20
 - [ ] `HP-POL-010` Hidden-target non-disclosure — WP10 — evidence: U, O, I
 - [x] `HP-POL-011` Approver authority rules — WP08 — evidence: U, I — ✅ tested (local) @ WP08: approver rules + internal role required; admins need rules too
@@ -1741,35 +1742,35 @@ check · R recovery drill · SR security review · D documentation review.
 
 #### HP-REQ — Access requests
 
-- [ ] `HP-REQ-001` Request state machine — WP09 — evidence: U, P
-- [ ] `HP-REQ-002` Request record — WP09 — evidence: U, I
-- [ ] `HP-REQ-003` Deduplication and idempotency — WP09 — evidence: I, O
-- [ ] `HP-REQ-004` Pending expiry — WP09 — evidence: I
+- [ ] `HP-REQ-001` Request state machine — WP09 — evidence: U, P — ◐ WP09: CAS transitions from pending only (TransitionRequest WHERE state='pending'); unit + concurrency tests; randomized op-sequence property test pending WP26
+- [x] `HP-REQ-002` Request record — WP09 — evidence: U, I — ✅ tested (local) @ WP09: request record incl. sealed reason, key, policy version, timestamps, actors
+- [ ] `HP-REQ-003` Deduplication and idempotency — WP09 — evidence: I, O — ◐ WP09: partial unique pending index + dedup return + idempotency key (tested); SSH-level interop pending WP10
+- [x] `HP-REQ-004` Pending expiry — WP09 — evidence: I — ✅ tested (local) @ WP09: 30m default pending expiry, sweep + time-authoritative decision check
 - [ ] `HP-REQ-005` Wait vs expiry vs duration — WP10 — evidence: O, D
-- [ ] `HP-REQ-006` Cancellation — WP09 — evidence: I, O
-- [ ] `HP-REQ-007` Request rate limits — WP09 — evidence: I, S
-- [ ] `HP-REQ-008` Bounded untrusted reason — WP09 — evidence: U, Z
+- [ ] `HP-REQ-006` Cancellation — WP09 — evidence: I, O — ◐ WP09: CancelByAgent (own only) / CancelByOperator (admin or in-scope approver), idempotent; SSH command WP10
+- [ ] `HP-REQ-007` Request rate limits — WP09 — evidence: I, S — ◐ WP09: per-agent hourly + pending caps (tested); load test pending WP26
+- [x] `HP-REQ-008` Bounded untrusted reason — WP09 — evidence: U, Z — ✅ tested (local) @ WP09: SanitizeReason strips C0/C1/Cf (bidi, zero-width), collapses whitespace, ≤1000 runes; FuzzSanitizeReason 15 s
 - [ ] `HP-REQ-009` Status polling — WP10 — evidence: O
 
 #### HP-GRT — Grants and enforcement
 
-- [ ] `HP-GRT-001` Transactional decision and grant — WP09 — evidence: I, FI
-- [ ] `HP-GRT-002` Grant record — WP09 — evidence: U, I
-- [ ] `HP-GRT-003` No implicit extension — WP09 — evidence: U, I
-- [ ] `HP-GRT-004` Active grant reuse — WP09 — evidence: I, O
-- [ ] `HP-GRT-005` Deterministic overlap selection — WP09 — evidence: U, P
-- [ ] `HP-GRT-006` Atomic concurrency limits — WP09 — evidence: I, S
-- [ ] `HP-GRT-007` Race resolution — WP09 — evidence: U, I
-- [ ] `HP-GRT-008` Enforcement bound — WP09 — evidence: I, O, S
-- [ ] `HP-GRT-009` Operator revocation — WP09 — evidence: I, E
-- [ ] `HP-GRT-010` Approval after expiry — WP09 — evidence: I
-- [ ] `HP-GRT-011` Emergency lockdown — WP09 — evidence: I, E
+- [ ] `HP-GRT-001` Transactional decision and grant — WP09 — evidence: I, FI — ◐ WP09: decision+grant+session in one writer tx, start = tx time (tested); crash fault injection FI-01 pending WP26
+- [x] `HP-GRT-002` Grant record — WP09 — evidence: U, I — ✅ tested (local) @ WP09: grant record with scope, capabilities, policy version
+- [x] `HP-GRT-003` No implicit extension — WP09 — evidence: U, I — ✅ tested (local) @ WP09: reuse never changes expiry; extensions only via new requests
+- [ ] `HP-GRT-004` Active grant reuse — WP09 — evidence: I, O — ◐ WP09: FindActiveGrant (tested); SSH connect reuse pending WP10
+- [ ] `HP-GRT-005` Deterministic overlap selection — WP09 — evidence: U, P — ◐ WP09: latest expiry then lowest ID (SQL ORDER BY) + min-remaining cutoff tested; property test pending WP26
+- [ ] `HP-GRT-006` Atomic concurrency limits — WP09 — evidence: I, S — ◐ WP09: counts + insert in one writer tx; 12 concurrent registrations vs limit 2 → exactly 2 (tested); load test WP26
+- [x] `HP-GRT-007` Race resolution — WP09 — evidence: U, I — ✅ tested (local) @ WP09: CAS + 20 concurrent deciders exactly one decision; replay idempotent; expiry/policy rechecked in-tx
+- [ ] `HP-GRT-008` Enforcement bound — WP09 — evidence: I, O, S — ◐ WP09: enforcer (events + 1 s ticker + DB reconciliation with overlap window); event path < 1 s and lost-event path within 5 s tested in-process; OpenSSH + load measurement pending WP11/WP26
+- [ ] `HP-GRT-009` Operator revocation — WP09 — evidence: I, E — ◐ WP09: RevokeGrant (admin or in-scope approver, audited, sealed note, event) tested; UI WP20
+- [x] `HP-GRT-010` Approval after expiry — WP09 — evidence: I — ✅ tested (local) @ WP09: expired request not approvable; new approval → new grant + session
+- [ ] `HP-GRT-011` Emergency lockdown — WP09 — evidence: I, E — ◐ WP09: SetLockdown revokes all grants, cancels pending, blocks requests/channels (tested); UI/CLI WP20/WP23
 
 #### HP-SES — Access sessions
 
-- [ ] `HP-SES-001` Session per grant — WP09 — evidence: I
-- [ ] `HP-SES-002` Connections and channels — WP09 — evidence: I, O
-- [ ] `HP-SES-003` Session closure — WP09 — evidence: I
+- [x] `HP-SES-001` Session per grant — WP09 — evidence: I — ✅ tested (local) @ WP09: 1:1 session created in approval tx
+- [ ] `HP-SES-002` Connections and channels — WP09 — evidence: I, O — ◐ WP09: ssh_connections/ssh_channels with states, close reasons, boot IDs (tested); OpenSSH-level WP11
+- [x] `HP-SES-003` Session closure — WP09 — evidence: I — ✅ tested (local) @ WP09: closing while channels live, closed with reason when grant ended and channels closed
 - [ ] `HP-SES-004` Detached processes — WP25 — evidence: D
 - [ ] `HP-SES-005` Live activity view — WP20 — evidence: E
 
@@ -1816,7 +1817,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-DB-010` Filesystem permissions — WP03 — evidence: I — ✅ tested (local) @ WP03/WP04: data dir 0700 + owner, DB files 0600, KEK file mode/owner refusal
 - [ ] `HP-DB-011` Bounded growth — WP03 — evidence: I, S — ◐ WP03: incremental auto_vacuum, Checkpoint/IncrementalVacuum/Sizes; retention jobs + metrics pending WP05/WP12/WP22
 - [ ] `HP-DB-012` Consistent backup primitive — WP03 — evidence: I, R — ◐ WP03: Snapshot (VACUUM INTO, fsync, 0600) primitive tested; segment copy + manifest pending WP23
-- [ ] `HP-DB-013` Crash reconciliation — WP09 — evidence: FI, I
+- [ ] `HP-DB-013` Crash reconciliation — WP09 — evidence: FI, I — ◐ WP09: ReconcileStartup (interrupted connections/channels + timeline, expiry, policy, sessions) tested; segment reconciliation WP12; kill -9 fault tests WP26
 - [ ] `HP-DB-014` Recovery objectives — WP23 — evidence: R, D
 
 #### HP-AUTH — Operator authentication and browser sessions

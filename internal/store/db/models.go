@@ -8,6 +8,36 @@ import (
 	"database/sql"
 )
 
+type AccessRequest struct {
+	ID                 string
+	AgentID            string
+	AgentKeyID         string
+	ServerID           string
+	RoleID             string
+	ReasonEnc          []byte
+	RequestedDurationS int64
+	State              string
+	StateReason        sql.NullString
+	IdempotencyKey     sql.NullString
+	PolicyVersion      int64
+	CreatedAt          int64
+	ExpiresAt          int64
+	DecidedAt          sql.NullInt64
+	UpdatedAt          int64
+}
+
+type AccessSession struct {
+	ID             string
+	GrantID        string
+	State          string
+	SeqReserved    int64
+	OpenedAt       int64
+	ClosedAt       sql.NullInt64
+	CloseReason    sql.NullString
+	RetentionClass string
+	DeleteAfter    sql.NullInt64
+}
+
 type Agent struct {
 	ID              string
 	Name            string
@@ -48,6 +78,21 @@ type AgentKey struct {
 type AgentOwner struct {
 	AgentID    string
 	OperatorID string
+}
+
+type ApprovalDecision struct {
+	ID                string
+	RequestID         string
+	Outcome           string
+	ActorType         string
+	ActorID           string
+	Channel           string
+	ApprovedDurationS sql.NullInt64
+	CommentEnc        []byte
+	PolicyVersion     int64
+	ApproverRuleID    sql.NullString
+	IdempotencyKey    sql.NullString
+	DecidedAt         int64
 }
 
 type ApproverRule struct {
@@ -102,6 +147,25 @@ type GatewayHostKey struct {
 	State             string
 	CreatedAt         int64
 	UpdatedAt         int64
+}
+
+type Grant struct {
+	ID               string
+	RequestID        string
+	DecisionID       string
+	AgentID          string
+	ServerID         string
+	RoleID           string
+	RemoteUser       string
+	CapabilitiesJson string
+	PolicyVersion    int64
+	StartsAt         int64
+	ExpiresAt        int64
+	State            string
+	EndedAt          sql.NullInt64
+	EndReason        sql.NullString
+	RevokedBy        sql.NullString
+	UpdatedAt        int64
 }
 
 type Group struct {
@@ -318,6 +382,54 @@ type Setting struct {
 	Value     string
 	UpdatedAt int64
 	UpdatedBy sql.NullString
+}
+
+type SshChannel struct {
+	ID              string
+	ConnectionID    string
+	AccessSessionID string
+	GrantID         string
+	AgentID         string
+	RoleID          string
+	Kind            string
+	Pty             int64
+	CredentialRef   sql.NullString
+	State           string
+	ExitStatus      sql.NullInt64
+	ExitSignal      sql.NullString
+	OpenedAt        int64
+	ClosedAt        sql.NullInt64
+	CloseReason     sql.NullString
+	BootID          string
+}
+
+type SshConnection struct {
+	ID            string
+	AgentID       string
+	AgentKeyID    string
+	ClientUser    string
+	ClientVersion string
+	SourceIp      string
+	State         string
+	OpenedAt      int64
+	ClosedAt      sql.NullInt64
+	CloseReason   sql.NullString
+	BootID        string
+}
+
+type TimelineEvent struct {
+	ID              string
+	AccessSessionID sql.NullString
+	RequestID       sql.NullString
+	Seq             sql.NullInt64
+	Type            string
+	SchemaVersion   int64
+	At              int64
+	ConnectionID    sql.NullString
+	ChannelID       sql.NullString
+	SegmentID       sql.NullString
+	DataJson        string
+	IdempotencyKey  string
 }
 
 type UserCa struct {
