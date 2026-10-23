@@ -19,6 +19,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -863,6 +864,44 @@ func TestRateLimit(t *testing.T) {
 }
 
 func res4(codes []int) bool { return codes[0] == 429 }
+
+// HP-API-008: the strict per-IP limit applies to unauthenticated requests; signed-in operators (possibly many behind
+// one NAT) are limited per session, with only a generous per-IP flood guard (4x) in front.
+func TestRateLimitAnonymousVersusSession(t *testing.T) {
+	h := newHarness(t)
+	viewer := h.principalClient([]string{opauth.RoleViewer}, opauth.MethodPassword)
+	base, _ := url.Parse(h.base)
+	var cookie *http.Cookie
+	for _, ck := range viewer.hc.Jar.Cookies(base) {
+		cookie = ck
+	}
+	api := httpapi.New(httpapi.Deps{Store: h.a.Store, Audit: h.a.Audit, Auth: h.a.Auth, OIDC: h.a.OIDC, Matrix: h.matrix, BootID: h.a.BootID,
+		Agents: h.a.Agents}, httpapi.Options{PublicURL: h.base, Clock: h.clk, IPRate: 3, SessionRate: 1000})
+	srv := httptest.NewServer(api.Handler())
+	defer srv.Close()
+	get := func(path string, ck *http.Cookie) int {
+		req, _ := http.NewRequestWithContext(h.ctx, http.MethodGet, srv.URL+path, nil)
+		if ck != nil {
+			req.AddCookie(ck)
+		}
+		res, err := http.DefaultClient.Do(req)
+		must(t, err)
+		_ = res.Body.Close()
+		return res.StatusCode
+	}
+	for i := range 8 {
+		if code := get("/api/v1/agents", cookie); code != 200 {
+			t.Fatalf("authenticated request %d limited by the anonymous per-IP rate: %d", i, code)
+		}
+	}
+	codes := []int{}
+	for range 4 {
+		codes = append(codes, get("/api/v1/auth/config", nil))
+	}
+	if codes[2] != 200 || codes[3] != 429 {
+		t.Fatalf("anonymous codes %v", codes)
+	}
+}
 
 var _ = sync.Mutex{}
 

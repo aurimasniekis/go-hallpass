@@ -254,7 +254,9 @@ func (s *Server) wrap(op *gen.Operation, h gen.Handler) http.Handler {
 		start := s.o.Clock.Now()
 		ip := s.clientIP(r)
 		authOp := strings.HasPrefix(op.Path, "/api/v1/auth/") || strings.HasPrefix(op.Path, "/auth/")
-		if !s.limits.allow("ip:"+ip, s.o.IPRate) || (authOp && op.Method != http.MethodGet && !s.limits.allow("auth:"+ip, s.o.AuthRate)) {
+		// Per-IP flood guard for every request (operators behind one NAT share it, so it is generous); unauthenticated
+		// requests get the stricter IPRate below, authenticated ones the per-session SessionRate (HP-API-008).
+		if !s.limits.allow("ip:"+ip, 4*s.o.IPRate) || (authOp && op.Method != http.MethodGet && !s.limits.allow("auth:"+ip, s.o.AuthRate)) {
 			w.Header().Set("Retry-After", "60")
 			s.problem(w, r, apperr.New(apperr.CodeRateLimited, "too many requests; slow down"))
 			return
@@ -273,7 +275,8 @@ func (s *Server) wrap(op *gen.Operation, h gen.Handler) http.Handler {
 				c.Principal = p
 			}
 		}
-		if c.Principal != nil && !s.limits.allow("ses:"+c.Principal.SessionID, s.o.SessionRate) {
+		if (c.Principal == nil && !s.limits.allow("anon:"+ip, s.o.IPRate)) ||
+			(c.Principal != nil && !s.limits.allow("ses:"+c.Principal.SessionID, s.o.SessionRate)) {
 			w.Header().Set("Retry-After", "60")
 			s.problem(w, r, apperr.New(apperr.CodeRateLimited, "too many requests; slow down"))
 			return
