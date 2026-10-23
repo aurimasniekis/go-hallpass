@@ -257,6 +257,7 @@ func (svc *Service) link(ctx context.Context, lr chat.LinkRequest) string {
 		return "Hallpass could not process the link code."
 	}
 	var opID string
+	display := truncate(chat.CleanText(lr.UserName, 64), 64)
 	err = svc.s.W().TxNamed(ctx, "notify.link", func(tx *store.Tx) error {
 		row, err := tx.Q.UseLinkCode(ctx, db.UseLinkCodeParams{Now: sql.NullInt64{Int64: tx.NowMicros(), Valid: true}, Hash: h})
 		if err != nil {
@@ -270,7 +271,7 @@ func (svc *Service) link(ctx context.Context, lr chat.LinkRequest) string {
 		}
 		opID = row.OperatorID
 		if err := tx.Q.UpsertProviderLink(ctx, db.UpsertProviderLinkParams{Provider: lr.Provider, Workspace: lr.Workspace, ProviderUserID: lr.UserID,
-			OperatorID: row.OperatorID, Display: truncate(chat.CleanText(lr.UserName, 64), 64), LinkedAt: tx.NowMicros(), LinkedVia: "link_code"}); err != nil {
+			OperatorID: row.OperatorID, Display: display, LinkedAt: tx.NowMicros(), LinkedVia: "link_code"}); err != nil {
 			return err
 		}
 		_, err = svc.audit.Append(ctx, tx, audit.Event{Actor: audit.Actor{Type: audit.ActorOperator, ID: row.OperatorID}, Action: "provider_link.linked",
@@ -345,12 +346,13 @@ func (svc *Service) LinkProviderUser(ctx context.Context, actor audit.Actor, ope
 		len(l.Workspace) > 64 || len(l.ProviderUserID) > 64 {
 		return invalid("provider, workspace and provider_user_id are required")
 	}
+	display := truncate(l.Display, 64)
 	return svc.s.W().TxNamed(ctx, "notify.link_admin", func(tx *store.Tx) error {
 		if _, err := tx.Q.GetOperator(ctx, operatorID); err != nil {
 			return apperr.New(apperr.CodeNotFound, "operator not found")
 		}
 		if err := tx.Q.UpsertProviderLink(ctx, db.UpsertProviderLinkParams{Provider: l.Provider, Workspace: l.Workspace, ProviderUserID: l.ProviderUserID,
-			OperatorID: operatorID, Display: truncate(l.Display, 64), LinkedAt: tx.NowMicros(), LinkedVia: "admin"}); err != nil {
+			OperatorID: operatorID, Display: display, LinkedAt: tx.NowMicros(), LinkedVia: "admin"}); err != nil {
 			return err
 		}
 		_, err := svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "provider_link.linked", Target: audit.Target{Type: "operator", ID: operatorID},

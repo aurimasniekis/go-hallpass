@@ -187,10 +187,10 @@ func (svc *Service) CreateIntegration(ctx context.Context, actor audit.Actor, in
 	if err != nil {
 		return nil, err
 	}
-	enabled := in.Enabled == nil || *in.Enabled
+	enabled := b2i(in.Enabled == nil || *in.Enabled)
 	err = svc.s.W().TxNamed(ctx, "notify.create_integration", func(tx *store.Tx) error {
 		if err := tx.Q.InsertIntegration(ctx, db.InsertIntegrationParams{ID: id, Provider: in.Provider, Name: strings.TrimSpace(*in.Name),
-			ConfigJson: string(cfg), SecretsEnc: enc, Enabled: b2i(enabled), CreatedAt: tx.NowMicros(), UpdatedAt: tx.NowMicros()}); err != nil {
+			ConfigJson: string(cfg), SecretsEnc: enc, Enabled: enabled, CreatedAt: tx.NowMicros(), UpdatedAt: tx.NowMicros()}); err != nil {
 			if store.IsConstraint(err) {
 				return apperr.New(apperr.CodeAlreadyExists, "an integration with this name exists")
 			}
@@ -273,8 +273,9 @@ func (svc *Service) UpdateIntegration(ctx context.Context, actor audit.Actor, id
 	if in.Enabled != nil {
 		enabled = *in.Enabled
 	}
+	enabledInt := b2i(enabled)
 	err = svc.s.W().TxNamed(ctx, "notify.update_integration", func(tx *store.Tx) error {
-		n, err := tx.Q.UpdateIntegration(ctx, db.UpdateIntegrationParams{Name: name, ConfigJson: string(cfg), SecretsEnc: enc, Enabled: b2i(enabled),
+		n, err := tx.Q.UpdateIntegration(ctx, db.UpdateIntegrationParams{Name: name, ConfigJson: string(cfg), SecretsEnc: enc, Enabled: enabledInt,
 			UpdatedAt: tx.NowMicros(), ID: id, Version: in.Version})
 		if err != nil {
 			return err
@@ -366,13 +367,13 @@ func (svc *Service) CreateRoute(ctx context.Context, actor audit.Actor, in Route
 	}
 	targets, _ := json.Marshal(in.Targets)
 	id := ids.New(ids.Route)
-	enabled := in.Enabled == nil || *in.Enabled
+	enabled := b2i(in.Enabled == nil || *in.Enabled)
 	err := svc.s.W().TxNamed(ctx, "notify.create_route", func(tx *store.Tx) error {
 		if _, err := tx.Q.GetIntegration(ctx, in.IntegrationID); err != nil {
 			return apperr.New(apperr.CodeNotFound, "integration not found")
 		}
 		if err := tx.Q.InsertRoute(ctx, db.InsertRouteParams{ID: id, IntegrationID: in.IntegrationID, Destination: in.Destination,
-			TargetsJson: string(targets), Enabled: b2i(enabled), CreatedAt: tx.NowMicros()}); err != nil {
+			TargetsJson: string(targets), Enabled: enabled, CreatedAt: tx.NowMicros()}); err != nil {
 			if store.IsConstraint(err) {
 				return apperr.New(apperr.CodeAlreadyExists, "this destination already has a route")
 			}
