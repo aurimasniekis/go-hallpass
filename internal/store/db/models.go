@@ -707,6 +707,11 @@ type SshConnection struct {
 	BootID        string
 }
 
+type StoreSpaceProbe struct {
+	ID   int64
+	Data []byte
+}
+
 type TimelineEvent struct {
 	ID              string
 	AccessSessionID sql.NullString

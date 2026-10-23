@@ -147,6 +147,18 @@ func (w *Writer) attempt(ctx context.Context, fn func(tx *Tx) error) (hooks []fu
 	return tx.afterCommit, nil
 }
 
+// spaceProbe commits a transaction that allocates 64 KiB of new pages and frees them again: it succeeds only when
+// the database can grow (disk-full recovery, HP-DB-009).
+func (w *Writer) spaceProbe(ctx context.Context) error {
+	return w.TxNamed(ctx, "store.space_probe", func(tx *Tx) error {
+		if _, err := tx.SQL.ExecContext(ctx, `INSERT OR REPLACE INTO store_space_probe (id, data) VALUES (1, zeroblob(65536))`); err != nil {
+			return err
+		}
+		_, err := tx.SQL.ExecContext(ctx, `DELETE FROM store_space_probe`)
+		return err
+	})
+}
+
 // Exec runs a statement outside an explicit transaction on the writer (maintenance: VACUUM, checkpoints).
 func (w *Writer) Exec(ctx context.Context, query string, args ...any) error {
 	_, err := w.db.ExecContext(ctx, query, args...)

@@ -375,6 +375,24 @@ func TestHealthTransitions(t *testing.T) {
 	if h.Status().State != HealthDegraded {
 		t.Fatal("disk full should degrade")
 	}
+	// HP-DB-009: a small successful transaction proves nothing about free space; only the space probe clears it.
+	h.Observe(nil)
+	probeErr := fmt.Errorf("%w: still full", ErrFull)
+	h.probe = func(context.Context) error { return probeErr }
+	if h.Status().State != HealthDegraded || h.AcceptsWrites() {
+		t.Fatal("disk full cleared by an unrelated success or a failing probe")
+	}
+	probeErr = nil
+	if !h.AcceptsWrites() {
+		t.Fatalf("successful probe did not recover: %+v", h.Status())
+	}
+	h.Degrade("low disk")
+	h.Observe(nil)
+	if h.Status().State != HealthDegraded {
+		t.Fatal("external degradation cleared by an unrelated success")
+	}
+	h.Recover("low disk")
+	h.Observe(fmt.Errorf("%w: x", ErrFull))
 	for range ioFailThreshold {
 		h.Observe(fmt.Errorf("%w: x", ErrIO))
 	}

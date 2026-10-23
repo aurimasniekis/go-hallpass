@@ -131,7 +131,11 @@ func (s *Store) open(ctx context.Context, opts Options) error {
 	s.wdb.SetConnMaxLifetime(0)
 	s.wdb.SetConnMaxIdleTime(0)
 	if err := s.wdb.PingContext(ctx); err != nil {
-		return classify(fmt.Errorf("open database: %w", err))
+		err = classify(fmt.Errorf("open database: %w", err))
+		if errors.Is(err, ErrCorrupt) {
+			return fmt.Errorf("%w; restore from the latest verified backup (docs/operator/storage.md)", err)
+		}
+		return err
 	}
 	if err := secureFiles(s.dir); err != nil {
 		return err
@@ -161,6 +165,9 @@ func (s *Store) open(ctx context.Context, opts Options) error {
 		return err
 	}
 	s.writer = &Writer{db: s.wdb, clock: s.clock, health: s.health, observer: opts.TxObserver, metrics: opts.Metrics}
+	s.health.mu.Lock()
+	s.health.probe = s.writer.spaceProbe
+	s.health.mu.Unlock()
 	s.reader = db.New(s.rdb)
 	opts.Metrics.SetStoreSizes(s.Sizes())
 	return nil
