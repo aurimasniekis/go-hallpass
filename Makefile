@@ -29,6 +29,7 @@ vet:
 
 lint:
 	golangci-lint run ./...
+	golangci-lint run --build-tags openssh ./test/...
 
 tools-test:
 	cd tools && $(GO) test ./...
@@ -66,6 +67,11 @@ sqlc: bin/sqlc
 # CI drift check: generated code must match the committed SQL.
 sqlc-check: bin/sqlc
 	bin/sqlc diff
+
+.PHONY: test-openssh
+# HP-TST-003: real OpenSSH client + in-process gateway + OpenSSH sshd container (requires Docker and ssh).
+test-openssh:
+	go test -tags openssh -count=1 -timeout 15m -v ./test/openssh/
 
 .PHONY: test-netfs
 # HP-DB-007: verify network/FUSE filesystem refusal on Linux (Docker bind mounts are FUSE on Docker Desktop).

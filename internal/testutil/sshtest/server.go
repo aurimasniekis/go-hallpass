@@ -43,8 +43,19 @@ type Server struct {
 	userCA     ssh.PublicKey
 	principals map[string][]string // user → accepted principals
 	logins     []Login
+	envs       [][2]string
 	Exec       ExecFunc
+	// ExitSignal, when set and returning a signal name for a command, ends that exec with exit-signal instead of
+	// exit-status.
+	ExitSignal func(cmd string) string
 	wg         sync.WaitGroup
+}
+
+// Envs returns the environment variables sessions requested, in order.
+func (s *Server) Envs() [][2]string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.envs)
 }
 
 // Start launches a server on 127.0.0.1 with the given host keys (one Ed25519 key when none).
@@ -189,6 +200,16 @@ func (s *Server) session(ch ssh.Channel, reqs <-chan *ssh.Request) {
 			_ = req.Reply(true, nil)
 			status := s.Exec(p.Cmd, ch, ch, ch.Stderr())
 			_ = ch.CloseWrite()
+			if s.ExitSignal != nil {
+				if sig := s.ExitSignal(p.Cmd); sig != "" {
+					_, _ = ch.SendRequest("exit-signal", false, ssh.Marshal(struct {
+						Signal     string
+						CoreDumped bool
+						Msg, Lang  string
+					}{Signal: sig}))
+					return
+				}
+			}
 			_, _ = ch.SendRequest("exit-status", false, exitStatus(status))
 			return
 		case "shell":
@@ -196,7 +217,15 @@ func (s *Server) session(ch ssh.Channel, reqs <-chan *ssh.Request) {
 			_, _ = io.Copy(ch, ch)
 			_, _ = ch.SendRequest("exit-status", false, exitStatus(0))
 			return
-		case "pty-req", "env", "window-change":
+		case "env":
+			var e struct{ Name, Value string }
+			if ssh.Unmarshal(req.Payload, &e) == nil {
+				s.mu.Lock()
+				s.envs = append(s.envs, [2]string{e.Name, e.Value})
+				s.mu.Unlock()
+			}
+			_ = req.Reply(true, nil)
+		case "pty-req", "window-change":
 			_ = req.Reply(req.Type != "window-change", nil)
 		default:
 			_ = req.Reply(false, nil)

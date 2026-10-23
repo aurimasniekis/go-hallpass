@@ -43,7 +43,7 @@ func TestParse(t *testing.T) {
 			`request web1 --role inspect --reason "check disk usage" --duration 30m --wait --wait-timeout=5m --idempotency-key abc.DEF_12-3 --json`,
 			Request{Alias: "web1", Opts: Opts{
 				Role: "inspect", Reason: "check disk usage", Duration: 30 * time.Minute, Wait: bp(true),
-				WaitTimeout: dp(5 * time.Minute), IdempotencyKey: "abc.DEF_12-3", JSON: true,
+				WaitTimeout: dp(5 * time.Minute), IdempotencyKey: "abc.DEF_12-3", JSON: true, // gitleaks:allow (test idempotency key, not a secret)
 			}},
 		},
 		{"request web1 --json --role=inspect --duration=1h30m", Request{Alias: "web1", Opts: Opts{Role: "inspect", Duration: 90 * time.Minute, JSON: true}}},

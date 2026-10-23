@@ -8,3 +8,7 @@ description = "Planning docs mention secret names, not values"
 paths = [
   '''docs/PROMPT\.md''',
 ]
+# Exact test literal: an idempotency-key fixture in the grammar tests (also marked gitleaks:allow inline).
+regexes = [
+  '''abc\.DEF_12-3''',
+]

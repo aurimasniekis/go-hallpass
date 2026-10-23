@@ -1,0 +1,13 @@
+# Destination OpenSSH server for Hallpass interop tests (HP-TST-003). Host keys are generated at container start;
+# no key material is baked into the image or committed to the repository.
+FROM alpine:3.22
+RUN apk add --no-cache openssh-server bash coreutils procps \
+ && for u in ro deploy; do adduser -D -s /bin/bash "$u" && passwd -u "$u" >/dev/null 2>&1 || true; \
+      mkdir -p "/home/$u/.ssh" && chmod 700 "/home/$u/.ssh" && touch "/home/$u/.ssh/authorized_keys" \
+      && chmod 600 "/home/$u/.ssh/authorized_keys" && chown -R "$u:$u" "/home/$u/.ssh"; done \
+ && mkdir -p /etc/ssh/principals && touch /etc/ssh/user_ca.pub
+COPY sshd_config /etc/ssh/sshd_config
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod 755 /entrypoint.sh
+EXPOSE 22
+ENTRYPOINT ["/entrypoint.sh"]

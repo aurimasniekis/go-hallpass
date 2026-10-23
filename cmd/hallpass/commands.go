@@ -28,6 +28,9 @@ func rootCommands() []*command {
 		{name: "version", summary: "print version information", run: runVersion},
 		configCommands(),
 		keysCommands(),
+		hostkeyCommands(),
+		verifyCommand(),
+		serveCommand(),
 		{name: "migrate", summary: "apply pending database migrations (takes the data-directory lock)", run: runMigrate},
 	}
 }

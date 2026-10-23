@@ -111,3 +111,44 @@ func TestKeysLifecycle(t *testing.T) {
 		t.Fatalf("status with new KEK: exit %d %s %s", code, out.String(), errb.String())
 	}
 }
+
+func TestHostkeyLifecycle(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "hp.yaml")
+	content := "mode: development\npublic_url: http://localhost:8080\nkek:\n  file: \"\"\ndata_dir: " + filepath.Join(dir, "data") + "\n"
+	if err := os.WriteFile(cfg, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	for _, args := range [][]string{
+		{"hostkey", "show", "--config", cfg},
+		{"hostkey", "stage", "--config", cfg},
+		{"hostkey", "promote", "--config", cfg},
+	} {
+		var out, errb bytes.Buffer
+		if code := run(ctx, args, &out, &errb); code != 0 {
+			t.Fatalf("%v exit %d: %s", args, code, errb.String())
+		}
+	}
+	var out, errb bytes.Buffer
+	if code := run(ctx, []string{"hostkey", "show", "--config", cfg, "--json"}, &out, &errb); code != 0 || !strings.Contains(out.String(), "ecdsa-sha2-nistp256") {
+		t.Fatalf("exit %d %s", code, out.String())
+	}
+}
+
+func TestVerifyEmptyStore(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "hp.yaml")
+	content := "mode: development\npublic_url: http://localhost:8080\nkek:\n  file: \"\"\ndata_dir: " + filepath.Join(dir, "data") + "\n"
+	if err := os.WriteFile(cfg, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if code := run(context.Background(), []string{"verify", "--config", cfg}, &out, &errb); code != 0 || !strings.Contains(out.String(), "integrity chain: ok") {
+		t.Fatalf("exit %d %s %s", code, out.String(), errb.String())
+	}
+	out.Reset()
+	if code := run(context.Background(), []string{"verify", "--config", cfg, "--json"}, &out, &errb); code != 0 || !strings.Contains(out.String(), `"chain_ok":true`) {
+		t.Fatalf("exit %d %s", code, out.String())
+	}
+}

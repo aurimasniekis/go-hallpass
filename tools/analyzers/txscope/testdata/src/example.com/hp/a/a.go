@@ -2,6 +2,7 @@ package a
 
 import (
 	"net"
+	"net/netip"
 
 	"golang.org/x/crypto/ssh"
 	"os"
@@ -25,6 +26,8 @@ func bad(w *store.Writer, ch chan int, f *os.File) error {
 		_, _ = ssh.Dial("tcp", "x")      // want `call to golang.org/x/crypto/ssh.Dial inside store transaction`
 		_ = (&ssh.Client{}).NewSession() // want `call to golang.org/x/crypto/ssh.NewSession inside store transaction`
 		_ = ssh.FingerprintSHA256(nil)
+		_ = netip.MustParseAddr("192.0.2.1").String()
+		_ = notify.EnqueueTx(q)
 		q.AfterCommit(func() { _ = notify.Send() })
 		return q.Insert()
 	})

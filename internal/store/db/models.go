@@ -220,6 +220,16 @@ type HostIdentity struct {
 	RetiredBy         sql.NullString
 }
 
+type IntegrityChain struct {
+	Seq            int64
+	SegmentID      string
+	ManifestSha256 []byte
+	PrevHash       []byte
+	Hash           []byte
+	Mac            []byte
+	At             int64
+}
+
 type Job struct {
 	ID          string
 	Kind        string
@@ -380,6 +390,38 @@ type PolicyState struct {
 	LockdownBy sql.NullString
 	LockdownAt sql.NullInt64
 	UpdatedAt  int64
+}
+
+type QuarantineFile struct {
+	ID             int64
+	OriginalPath   string
+	QuarantinePath string
+	Reason         string
+	At             int64
+}
+
+type RecordingSegment struct {
+	ID               string
+	AccessSessionID  string
+	ChannelID        string
+	Ordinal          int64
+	Path             string
+	Format           string
+	KeyID            string
+	WrappedDek       []byte
+	HeaderSha256     []byte
+	State            string
+	FirstSeq         sql.NullInt64
+	LastSeq          sql.NullInt64
+	Records          sql.NullInt64
+	Frames           sql.NullInt64
+	Bytes            sql.NullInt64
+	CiphertextSha256 []byte
+	EndReason        sql.NullString
+	OpenedAt         int64
+	FinalizedAt      sql.NullInt64
+	VerifiedAt       sql.NullInt64
+	VerifyResult     sql.NullString
 }
 
 type RecoveryCode struct {

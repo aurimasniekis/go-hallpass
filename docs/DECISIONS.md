@@ -243,6 +243,67 @@
 - **Alternatives:** koanf/viper (more dependencies and looser unknown-key handling).
 - **Consequences:** One small dependency, strict typo detection, and override names derived mechanically (`hallpass config env`).
 
+### ADR-0026 — HPREC1 format refinements
+- **Status:** accepted (WP12). Not security-relevant: no requirement is relaxed.
+- **Context:** PLAN §13.3 sketched the segment format. An independent implementation needed exact encodings.
+- **Decision:** Adopt the refinements listed in `docs/formats/hprec1.md` §12:
+  - binary `HPK1` key slots with a SHA-256 checksum instead of zero-padded JSON;
+  - `prev_segment_sha256` = the previous segment's `ciphertext_sha256` (required for ordinal > 0);
+  - per-frame timestamp bases;
+  - records never span frames, and the maximum payload is 65 472 bytes (the recorder splits larger writes);
+  - `ciphertext_sha256` covers the frame region only;
+  - a fixed binary footer, in its own final frame when it does not fit;
+  - canonical decoding everywhere;
+  - recovery copies the original to quarantine only when bytes are actually discarded.
+- **Consequences:** Every accepted file has exactly one encoding. The construction still needs external review (R-02).
+
+### ADR-0027 — SSH grammar interpretations
+- **Status:** accepted (WP10). Not security-relevant: each item is stricter than, or equal to, PLAN §7.
+- **Decision:**
+  1. The NUL/C0 control-character and UTF-8 checks apply to the whole input, including the remote command after
+     `--`. Multi-line remote commands (LF inside quotes or heredocs) are therefore rejected with exit 81. Allowing LF
+     after `--` would need a new ADR.
+  2. The alias or request ID must directly follow the command word, as in the EBNF. Options may then come in any
+     order, each at most once.
+  3. `status` rejects `--no-wait` (`--wait=false` works). `--wait=` accepts `true/false/yes/no/1/0`.
+  4. Option words are recognized quoted or unquoted, but a quoted `--` never acts as the separator. In
+     `--opt value` form, an unquoted value starting with `-` counts as a missing value; use `--opt=value`.
+  5. `cancel --json` emits `hallpass.status/v1` because §7.7 defines no cancel schema.
+  6. Agents see the level `auto`, which the gateway maps from the policy level `auto_approve`.
+  7. Wait-timeout and shorthand hints never echo reasons. Echoed words are quoted and capped at 64 bytes.
+  8. The parser accepts any positive `--duration`. Presets and maximums are enforced by policy at request time.
+  9. `ps` is reserved, per GOAL HP-SSH-017 (PLAN §7.4 omitted it). The alias rules live in the leaf package
+     `internal/inventory/alias`, so the grammar has no storage or I/O dependency. A depguard rule enforces this.
+     No server can already use the alias `ps`, because no release predates this rule.
+- **Consequences:** The agent guide (`docs/agent/guide.md`) documents these behaviors.
+
+### ADR-0028 — Recorder pipeline and recording consistency details
+- **Status:** accepted (WP11/WP12). Not security-relevant: consistent with ADR-0019.
+- **Decision:**
+  - Each channel gets a recorder that inserts the segment row, then creates and fsyncs the file before the
+    destination session starts (HP-REC-007).
+  - Records go through a bounded queue. Producers block when the queue is full (SSH window backpressure). After
+    `recording.block_timeout` the recording fails, and mandatory-recording channels are terminated (exit 80).
+    Nothing is dropped silently.
+  - Sequence assignment and hand-off to the writer are one critical section per recorder, so concurrently recorded
+    streams (stdout, stderr, stdin) reach the file in sequence order. A regression test covers this. An OpenSSH test
+    found the race: out-of-order appends failed the recording.
+  - Segments roll over by size (pending bytes included) and by age. Each new segment chains to its predecessor's
+    ciphertext hash.
+  - Finalization appends the manifest to the HMAC'd integrity chain in the same transaction as the row update.
+  - The exit status is delivered to the agent before the final frame is committed. A crash in that window leaves an
+    `interrupted` segment holding everything up to the last group commit (≤ 250 ms), the same bound as ADR-0019.
+  - Startup reconciliation:
+    - verifies final files whose row is still `open` and finalizes them;
+    - recovers `.partial` files to their authentic prefix, quarantining the original when bytes are discarded;
+    - quarantines unrecoverable partial files and marks them `failed`;
+    - marks rows with no file as `missing`;
+    - moves unreferenced files to quarantine.
+  - Retention schedules `delete_after = closed_at + recording.default_retention` for closed sessions, deletes segment
+    files and keeps tombstone rows.
+- **Consequences:** `hallpass verify` checks segment headers and ciphertext hashes against the database, final
+  frames, and the integrity chain's hash links and MACs. External anchoring (HP-CRY-008) remains WP23 work.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

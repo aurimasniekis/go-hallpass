@@ -1,0 +1,211 @@
+// Package app wires Hallpass components together and runs the process lifecycle (PLAN §3.4).
+package app
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net"
+	"os"
+	"sync"
+	"time"
+
+	"github.com/aurimasniekis/go-hallpass/internal/access"
+	"github.com/aurimasniekis/go-hallpass/internal/agents"
+	"github.com/aurimasniekis/go-hallpass/internal/audit"
+	"github.com/aurimasniekis/go-hallpass/internal/clock"
+	"github.com/aurimasniekis/go-hallpass/internal/config"
+	"github.com/aurimasniekis/go-hallpass/internal/credentials"
+	"github.com/aurimasniekis/go-hallpass/internal/egress"
+	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
+	"github.com/aurimasniekis/go-hallpass/internal/ids"
+	"github.com/aurimasniekis/go-hallpass/internal/inventory"
+	"github.com/aurimasniekis/go-hallpass/internal/jobs"
+	"github.com/aurimasniekis/go-hallpass/internal/keyring"
+	"github.com/aurimasniekis/go-hallpass/internal/obs"
+	"github.com/aurimasniekis/go-hallpass/internal/outbox"
+	"github.com/aurimasniekis/go-hallpass/internal/policy"
+	"github.com/aurimasniekis/go-hallpass/internal/recording"
+	"github.com/aurimasniekis/go-hallpass/internal/sshproxy"
+	"github.com/aurimasniekis/go-hallpass/internal/store"
+)
+
+// App holds every long-lived component.
+type App struct {
+	Cfg    *config.Config
+	Log    *slog.Logger
+	Clock  clock.Clock
+	BootID string
+
+	Store       *store.Store
+	Keyring     *keyring.Keyring
+	Audit       *audit.Writer
+	Bus         *eventbus.Bus
+	Jobs        *jobs.Runner
+	Outbox      *outbox.Outbox
+	Guard       *egress.Guard
+	Agents      *agents.Service
+	Inventory   *inventory.Service
+	Credentials *credentials.Service
+	Engine      *policy.Engine
+	Policy      *policy.Service
+	Access      *access.Service
+	Enforcer    *access.Enforcer
+	Recording   *recording.Service
+	Proxy       *sshproxy.Proxy
+
+	// Recorders opens channel recordings; nil means recording is unavailable and mandatory-recording roles fail
+	// closed. New sets it to Recording.
+	Recorders sshproxy.RecorderFactory
+}
+
+// Option customizes New.
+type Option func(*App)
+
+// WithClock overrides the clock (tests).
+func WithClock(c clock.Clock) Option { return func(a *App) { a.Clock = c } }
+
+// New opens storage and the keyring, wires services and runs startup reconciliation (PLAN §3.4 steps 1–7).
+func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Option) (*App, error) {
+	a := &App{Cfg: cfg, Log: log, Clock: clock.System{}, BootID: ids.New(ids.Boot)}
+	for _, o := range opts {
+		o(a)
+	}
+	setUmask()
+	kek, err := keyring.LoadKEK(keyring.Source{Kind: cfg.KEK.Source, File: cfg.KEK.File, Production: cfg.IsProduction(),
+		DataDir: cfg.DataDir, Environ: os.Environ()})
+	if err != nil {
+		return nil, err
+	}
+	if !cfg.IsProduction() && cfg.KEK.File == "" {
+		log.Warn("using a development KEK stored inside the data directory; never use this in production")
+	}
+	if a.Store, err = store.Open(ctx, store.Options{
+		DataDir: cfg.DataDir, AllowNetworkFS: cfg.Storage.AllowNetworkFS, PreMigrationSnapshots: cfg.Storage.PreMigrationSnapshots,
+		Logger: obs.Component(log, "store"), Clock: a.Clock,
+	}); err != nil {
+		return nil, err
+	}
+	ok := false
+	defer func() {
+		if !ok {
+			_ = a.Store.Close()
+		}
+	}()
+	if a.Keyring, err = keyring.Load(ctx, a.Store, kek); err != nil {
+		return nil, err
+	}
+	if a.Guard, err = egress.New(cfg.Egress.AllowCIDRs, cfg.Egress.AllowSpecialCIDRs, nil, cfg.SSH.DialTimeout.D()); err != nil {
+		return nil, err
+	}
+	a.Audit = audit.NewWriter(a.Keyring)
+	a.Bus = eventbus.New()
+	a.Jobs = jobs.NewRunner(a.Store, jobs.Options{Logger: log, Clock: a.Clock})
+	a.Outbox = outbox.New(a.Store, a.Keyring, outbox.Options{Logger: log, Clock: a.Clock})
+	a.Agents = agents.New(a.Store, a.Keyring, a.Audit, a.Bus, a.Clock)
+	a.Inventory = inventory.New(a.Store, a.Audit, a.Bus, inventory.Options{Guard: a.Guard, MaxGrantDuration: cfg.Access.MaxGrantDuration.D(),
+		Clock: a.Clock, DialTimeout: cfg.SSH.DialTimeout.D()})
+	a.Credentials = credentials.New(a.Store, a.Keyring, a.Audit, a.Bus, a.Inventory, credentials.Options{
+		Guard: a.Guard, SourceAddresses: cfg.Egress.SourceAddresses, DialTimeout: cfg.SSH.DialTimeout.D(), Clock: a.Clock})
+	presets := make([]time.Duration, len(cfg.Access.DurationPresets))
+	for i, p := range cfg.Access.DurationPresets {
+		presets[i] = p.D()
+	}
+	a.Engine = policy.NewEngine(a.Store, cfg.Access.MaxGrantDuration.D(), presets)
+	a.Policy = policy.NewService(a.Store, a.Audit, a.Bus, a.Engine)
+	a.Access = access.New(a.Store, a.Keyring, a.Audit, a.Bus, a.Engine, access.Options{
+		PendingExpiry: cfg.Access.PendingExpiry.D(), RequestsPerAgentHour: cfg.Access.RequestsPerAgentHour,
+		MaxPendingPerAgent: cfg.Access.MaxPendingPerAgent, MinRemainingToConnect: cfg.Access.MinRemainingToConnect.D(),
+		DefaultRetention: cfg.Recording.DefaultRetention.D(), BootID: a.BootID, Clock: a.Clock, Logger: log,
+	})
+	a.Agents.OnDisable(a.Access.AgentDisabledHook)
+	a.Agents.OnKeyRevoke(a.Access.KeyRevokedHook)
+	a.Inventory.OnDisable(a.Access.TargetDisabledHook)
+	a.Enforcer = access.NewEnforcer(a.Access, a.Bus, cfg.Access.EnforcementTick.D())
+	rc := cfg.Recording
+	a.Recording = recording.New(a.Store, a.Keyring, a.Access.Sequencer(), recording.Options{
+		Durability: rc.Durability, FlushInterval: rc.FlushInterval.D(), SegmentMaxBytes: rc.SegmentMaxBytes, SegmentMaxAge: rc.SegmentMaxAge.D(),
+		QueueRecords: rc.QueueRecords, QueueBytes: rc.QueueBytes, BlockTimeout: rc.BlockTimeout.D(), Clock: a.Clock, Logger: log,
+	})
+	a.Recorders = a.Recording
+
+	if err := a.Credentials.EnsureGatewayHostKey(ctx); err != nil {
+		return nil, fmt.Errorf("gateway host key: %w", err)
+	}
+	res, err := a.Access.ReconcileStartup(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("startup reconciliation: %w", err)
+	}
+	if res.Channels > 0 || res.Connections > 0 {
+		log.Warn("reconciled activity interrupted by the previous process", slog.Int64("connections", res.Connections), slog.Int("channels", res.Channels))
+	}
+	rr, err := a.Recording.ReconcileStartup(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("recording reconciliation: %w", err)
+	}
+	if *rr != (recording.ReconcileResult{}) {
+		log.Warn("reconciled recordings after restart", slog.Int("finalized", rr.Finalized), slog.Int("interrupted", rr.Interrupted),
+			slog.Int("missing", rr.Missing), slog.Int("failed", rr.Failed), slog.Int("orphans", rr.Orphans))
+	}
+	ok = true
+	return a, nil
+}
+
+// NewProxy builds the data plane once the recorder is known.
+func (a *App) NewProxy() *sshproxy.Proxy {
+	a.Proxy = sshproxy.New(sshproxy.Options{
+		Access: a.Access, Inventory: a.Inventory, Credentials: a.Credentials, Guard: a.Guard, Enforcer: a.Enforcer,
+		Recorders: a.Recorders, Audit: a.Audit, Store: a.Store, Logger: a.Log, DialTimeout: a.Cfg.SSH.DialTimeout.D(),
+		IdleTimeout: a.Cfg.SSH.IdleTimeout.D(), EnvAllow: a.Cfg.SSH.EnvAllow,
+	})
+	return a.Proxy
+}
+
+// RunBackground starts background workers and returns a function that waits for them after ctx is canceled.
+func (a *App) RunBackground(ctx context.Context) (wait func()) {
+	var wg sync.WaitGroup
+	log := a.Log
+	wg.Go(func() { a.Jobs.Run(ctx) })
+	wg.Go(func() { a.Outbox.Run(ctx, 4) })
+	wg.Go(func() { a.Enforcer.Run(ctx) })
+	wg.Go(func() { a.Access.RunBackground(ctx, time.Second) })
+	wg.Go(func() {
+		jobs.Periodic(ctx, log, "credentials.retire_due", time.Minute, false, func(ctx context.Context) error {
+			_, err := a.Credentials.RetireDue(ctx)
+			return err
+		})
+	})
+	wg.Go(func() {
+		jobs.Periodic(ctx, log, "recording.retention", 10*time.Minute, false, func(ctx context.Context) error {
+			_, err := a.Recording.ApplyRetention(ctx, a.Cfg.Recording.DefaultRetention.D())
+			return err
+		})
+	})
+	wg.Go(func() {
+		jobs.Periodic(ctx, log, "store.wal_checkpoint", 5*time.Minute, false, func(ctx context.Context) error {
+			return a.Store.Checkpoint(ctx, "TRUNCATE")
+		})
+	})
+	wg.Go(func() {
+		jobs.Periodic(ctx, log, "store.integrity_check", 24*time.Hour, false, func(ctx context.Context) error {
+			return a.Store.IntegrityCheck(ctx)
+		})
+	})
+	return wg.Wait
+}
+
+// Close releases storage.
+func (a *App) Close() error { return a.Store.Close() }
+
+// Listen opens a TCP listener.
+func Listen(ctx context.Context, addr string) (net.Listener, error) {
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("listen %s: %w", addr, err)
+	}
+	return ln, nil
+}
+
+// ErrShutdown marks a clean shutdown.
+var ErrShutdown = errors.New("shutdown")

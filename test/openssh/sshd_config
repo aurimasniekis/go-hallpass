@@ -1,0 +1,18 @@
+Port 22
+ListenAddress 0.0.0.0
+HostKey /etc/ssh/ssh_host_ed25519_key
+HostKey /etc/ssh/ssh_host_ecdsa_key
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+PermitRootLogin no
+AuthorizedKeysFile .ssh/authorized_keys
+TrustedUserCAKeys /etc/ssh/user_ca.pub
+AuthorizedPrincipalsFile /etc/ssh/principals/%u
+AcceptEnv LANG LC_* HALLPASS_TEST_*
+AllowTcpForwarding no
+X11Forwarding no
+ClientAliveInterval 30
+ClientAliveCountMax 3
+LogLevel VERBOSE
+Subsystem sftp internal-sftp

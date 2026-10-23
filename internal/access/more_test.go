@@ -152,3 +152,29 @@ func TestCancelAndDecideEdgeCases(t *testing.T) {
 		t.Fatal("revoked a missing grant")
 	}
 }
+
+func TestRecentGrantsAndChannelCounts(t *testing.T) {
+	f := newFx(t)
+	g := f.grant(time.Hour)
+	conn := f.conn()
+	reg, err := f.register(conn, g.ID, KindExec, false)
+	must(t, err)
+	total, live, err := f.svc.SessionChannelCounts(f.ctx, g.SessionID)
+	if err != nil || total != 1 || live != 1 {
+		t.Fatalf("%d %d %v", total, live, err)
+	}
+	must(t, f.svc.CloseChannel(f.ctx, reg, CloseInfo{Reason: "exit_status"}))
+	if total, live, _ = f.svc.SessionChannelCounts(f.ctx, g.SessionID); total != 1 || live != 0 {
+		t.Fatalf("%d %d", total, live)
+	}
+	f.clk.Advance(2 * time.Hour)
+	_, _, err = f.svc.ExpireDue(f.ctx)
+	must(t, err)
+	gs, err := f.svc.RecentGrantsForAgent(f.ctx, f.agent.ID, f.svc.Clock().Now().Add(-24*time.Hour))
+	if err != nil || len(gs) != 1 || gs[0].SessionID != g.SessionID {
+		t.Fatalf("%+v %v", gs, err)
+	}
+	if gs, _ = f.svc.RecentGrantsForAgent(f.ctx, f.agent.ID, f.svc.Clock().Now()); len(gs) != 0 {
+		t.Fatalf("ended grant listed as recent: %+v", gs)
+	}
+}

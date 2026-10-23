@@ -31,6 +31,9 @@ var bannedPkgs = []string{
 	"os/exec",
 }
 
+// pureNetPkgs are net subpackages with no I/O (value types and parsing); they are allowed inside transactions.
+var pureNetPkgs = map[string]bool{"net/netip": true, "net/url": true}
+
 const sshPkg = "golang.org/x/crypto/ssh"
 
 // sshIOFuncs are package-level x/crypto/ssh functions that perform network I/O. Pure helpers (parsing,
@@ -140,11 +143,19 @@ func checkCall(pass *analysis.Pass, call *ast.CallExpr) {
 		}
 		return
 	}
+	if pureNetPkgs[path] {
+		return
+	}
 	for _, b := range bannedPkgs {
 		if path == b || strings.HasPrefix(path, b+"/") {
 			pass.Reportf(call.Pos(), "call to %s.%s inside store transaction: no network or SSH I/O while holding the writer", path, fn.Name())
 			return
 		}
+	}
+	if takesStoreTx(fn) {
+		// Transaction-scoped helpers receive the transaction explicitly (for example recording.finalizeRowTx or an
+		// outbox enqueue): they are designed to run inside it and do only database work.
+		return
 	}
 	for _, b := range bannedInternal {
 		if strings.HasSuffix(path, b) || strings.Contains(path, b+"/") {
@@ -152,6 +163,21 @@ func checkCall(pass *analysis.Pass, call *ast.CallExpr) {
 			return
 		}
 	}
+}
+
+// takesStoreTx reports whether fn has a parameter that is a pointer to a type declared in an internal/store package.
+func takesStoreTx(fn *types.Func) bool {
+	params := fn.Signature().Params()
+	for i := range params.Len() {
+		p, ok := params.At(i).Type().(*types.Pointer)
+		if !ok {
+			continue
+		}
+		if named, ok := p.Elem().(*types.Named); ok && named.Obj().Pkg() != nil && strings.HasSuffix(named.Obj().Pkg().Path(), "/internal/store") {
+			return true
+		}
+	}
+	return false
 }
 
 func isSSHIO(fn *types.Func) bool {

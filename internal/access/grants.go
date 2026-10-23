@@ -9,6 +9,7 @@ import (
 
 	"github.com/aurimasniekis/go-hallpass/internal/apperr"
 	"github.com/aurimasniekis/go-hallpass/internal/audit"
+	"github.com/aurimasniekis/go-hallpass/internal/clock"
 	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
 	"github.com/aurimasniekis/go-hallpass/internal/policy"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
@@ -414,3 +415,32 @@ func b2i(b bool) int64 {
 	}
 	return 0
 }
+
+// RecentGrantsForAgent lists active grants and grants that ended after since (for `sessions --all`).
+func (svc *Service) RecentGrantsForAgent(ctx context.Context, agentID string, since time.Time) ([]*Grant, error) {
+	rows, err := svc.s.R().RecentGrantsForAgent(ctx, db.RecentGrantsForAgentParams{AgentID: agentID, EndedAt: sql.NullInt64{Int64: since.UnixMicro(), Valid: true}})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Grant, 0, len(rows))
+	for _, r := range rows {
+		g := grantFromRow(r)
+		if sess, err := svc.s.R().GetSessionByGrant(ctx, g.ID); err == nil {
+			g.SessionID = sess.ID
+		}
+		out = append(out, g)
+	}
+	return out, nil
+}
+
+// SessionChannelCounts returns total and live channel counts of an access session.
+func (svc *Service) SessionChannelCounts(ctx context.Context, sessionID string) (total, live int, err error) {
+	r, err := svc.s.R().CountChannelsForSession(ctx, sessionID)
+	if err != nil {
+		return 0, 0, err
+	}
+	return int(r.Total), int(r.Live), nil
+}
+
+// Clock returns the service clock.
+func (svc *Service) Clock() clock.Clock { return svc.opts.Clock }

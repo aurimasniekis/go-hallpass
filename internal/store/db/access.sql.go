@@ -334,6 +334,23 @@ func (q *Queries) CountChannelsForConnectionInSession(ctx context.Context, arg C
 	return count, err
 }
 
+const countChannelsForSession = `-- name: CountChannelsForSession :one
+SELECT count(*) AS total, count(*) FILTER (WHERE state IN ('opening', 'active')) AS live
+FROM ssh_channels WHERE access_session_id = ?
+`
+
+type CountChannelsForSessionRow struct {
+	Total int64
+	Live  int64
+}
+
+func (q *Queries) CountChannelsForSession(ctx context.Context, accessSessionID string) (CountChannelsForSessionRow, error) {
+	row := q.db.QueryRowContext(ctx, countChannelsForSession, accessSessionID)
+	var i CountChannelsForSessionRow
+	err := row.Scan(&i.Total, &i.Live)
+	return i, err
+}
+
 const countLiveChannelsForAgentRole = `-- name: CountLiveChannelsForAgentRole :one
 SELECT count(*) FROM ssh_channels WHERE agent_id = ? AND role_id = ? AND state IN ('opening', 'active')
 `
@@ -1367,6 +1384,55 @@ func (q *Queries) PendingRequestsForServer(ctx context.Context, serverID string)
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const recentGrantsForAgent = `-- name: RecentGrantsForAgent :many
+SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at FROM grants WHERE agent_id = ? AND (state = 'active' OR ended_at > ?) ORDER BY starts_at DESC LIMIT 100
+`
+
+type RecentGrantsForAgentParams struct {
+	AgentID string
+	EndedAt sql.NullInt64
+}
+
+func (q *Queries) RecentGrantsForAgent(ctx context.Context, arg RecentGrantsForAgentParams) ([]Grant, error) {
+	rows, err := q.db.QueryContext(ctx, recentGrantsForAgent, arg.AgentID, arg.EndedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Grant{}
+	for rows.Next() {
+		var i Grant
+		if err := rows.Scan(
+			&i.ID,
+			&i.RequestID,
+			&i.DecisionID,
+			&i.AgentID,
+			&i.ServerID,
+			&i.RoleID,
+			&i.RemoteUser,
+			&i.CapabilitiesJson,
+			&i.PolicyVersion,
+			&i.StartsAt,
+			&i.ExpiresAt,
+			&i.State,
+			&i.EndedAt,
+			&i.EndReason,
+			&i.RevokedBy,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

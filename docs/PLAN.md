@@ -1588,10 +1588,10 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP07 | Servers, host identities, roles, credentials/CA | WP06 | tested | 6284850 |
 | WP08 | Policy engine and effective access | WP07 | tested | d4b4e2a |
 | WP09 | Request/grant/session lifecycle and enforcer | WP08 | tested | 0fdc035 |
-| WP10 | SSH front end | WP09 | planned | |
-| WP11 | SSH data plane | WP10 | planned | |
-| WP12 | Recording format, recorder, reconciliation | WP11, WP04 | planned | |
-| WP13 | Local operator auth, sessions, MFA | WP05 | in-progress | |
+| WP10 | SSH front end | WP09 | implemented | |
+| WP11 | SSH data plane | WP10 | implemented | |
+| WP12 | Recording format, recorder, reconciliation | WP11, WP04 | implemented | |
+| WP13 | Local operator auth, sessions, MFA | WP05 | in-progress | 1540b43 |
 | WP14 | OIDC SSO | WP13 | planned | |
 | WP15 | RBAC, REST API, SSE | WP14, WP12 | planned | |
 | WP16 | Web approvals and notification core | WP15 | planned | |
@@ -1625,6 +1625,7 @@ local run of the same targets the workflow executes, and the entry says so. Chec
 - **WP08** (2026-10-23): migration 0006 (policy_rules, approver_rules, agent_owners), `internal/policy` (selectors with Kubernetes-style label expressions and empty-matches-nothing semantics, immutable compiled Snapshot: Evaluate/Visible/ResolveServer/ResolveRole with single ErrNotFoundOrForbidden, durations/presets/auto-approve, CanApprove with self-approval prohibition; Engine with per-version cache, consistent ReadTx loading, WhatIf; CRUD service with in-tx version bump + audit + policy.changed), `store.ReadTx`, docs/operator/policy.md. Evaluate ≈1.2 µs, Visible over 2,000 servers × 3 roles × 100 rules ≈8.5 ms (M-series laptop, not RH-1). Coverage 81.8%. Tested locally (-race), FuzzRuleJSON 20 s.
 - **WP09** (2026-10-23): migration 0007 (requests, decisions, grants, sessions, connections, channels, timeline), `internal/access` (CreateRequest with dedup/idempotency/rate limits/sealed sanitized reasons/auto-approval; Decide via one transactional path with authority, self-approval, channel, policy and duration rechecks; grants with time-authoritative expiry; lockdown; disable/key-revoke/target cascades; ReconcilePolicy (cancel/revoke/clamp); channel registration with atomic concurrency limits and full revalidation; per-session Sequencer with DB-reserved blocks; timeline events with idempotency keys; Enforcer (events + ticker + DB reconciliation, registration-race guard); startup reconciliation; background loop). Decide no longer writes state on its rejection paths (would roll back). Tests: 30+ cases incl. concurrency races, enforcement bound (in-process), lost-event path; coverage 80.8%; FuzzSanitizeReason 15 s. Frontend foundation, HPREC1 format and SSH grammar started in parallel by sub-agents (separate directories; committed separately after review).
 - **WP13 (service layer)** (2026-10-23): migration 0009 (operators, local credentials, roles, operator groups, TOTP, recovery codes, one-time tokens, web sessions, throttle), `internal/opauth` (Argon2id with versioned params, NFKC passwords, TOTP RFC 6238, recovery codes, setup/invite/reset/recovery-login tokens, login with throttling and enumeration resistance, MFA verification, reauth, server-side sessions with rotation/idle/absolute expiry and CSRF tokens, last-admin protection, break-glass). HTTP endpoints, cookies and Origin/CSRF middleware are delivered with the API in WP15 (deviation from PLAN WP13 file list: avoids building the router twice). Bug found by the new timing test and fixed: the unknown-account dummy hash was computed once at init and could diverge from current parameters (35× timing difference in tests). Coverage 81.0%.
+- 2026-10-23 — WP10–WP12: SSH front end (auth, limits, grammar, list/roles/request/status/cancel/sessions/whoami/version/help), data plane (exec/shell/PTY, env allowlist, signals, exit propagation, strict host verification, enforcer termination, idle timeout, graceful drain, `hallpass serve`) and mandatory recording (HPREC1, recorder with backpressure, rollover, integrity chain, startup reconciliation, retention, `hallpass verify`). In-process e2e and real-OpenSSH tests (`make test-openssh`). Status *implemented*, not *tested*, because of open partial items: HP-SSH-012 keepalive tests, HP-SSH-013 load test, HP-REC-003 idempotency keys, HP-REC-013 per-class retention, HP-CRY-004 external review. Found and fixed during WP: out-of-order recording appends under concurrent streams (ADR-0028), implicit role selection deviating from HP-SSH-022, x/crypto CloseWrite/Write race on termination notices. ADR-0026..0028.
 <!-- progress-log-end -->
 
 ---
@@ -1665,31 +1666,31 @@ check · R recovery drill · SR security review · D documentation review.
 
 #### HP-SSH — SSH front end and data plane
 
-- [ ] `HP-SSH-001` Public-key-only agent auth — WP10 — evidence: U, O
-- [ ] `HP-SSH-002` Identity from key, not username — WP10 — evidence: O, I
-- [ ] `HP-SSH-003` Uniform rejection of unknown/revoked keys — WP10 — evidence: O, I
-- [ ] `HP-SSH-004` Algorithm policy — WP10 — evidence: U, O
-- [ ] `HP-SSH-005` Gateway host key lifecycle — WP10 — evidence: U, O, D — ◐ WP07: gateway Ed25519 host key sealed, EnsureGatewayHostKey, stage(next, other algorithm)/promote rotation; CLI/UI/doc pending WP10
-- [ ] `HP-SSH-006` Shell, exec, PTY completeness — WP11 — evidence: O
-- [ ] `HP-SSH-007` Forwarding and unknown channels denied — WP10 — evidence: O, I
-- [ ] `HP-SSH-008` Environment allowlist — WP11 — evidence: U, O
-- [ ] `HP-SSH-009` Stdout purity — WP10 — evidence: O
-- [ ] `HP-SSH-010` Exit status and signal propagation — WP11 — evidence: O
-- [ ] `HP-SSH-011` Strict destination host verification — WP11 — evidence: C, O — ◐ WP07: inventory.Verifier (enrolled keys or bound host CA, restricted HostKeyAlgorithms), destssh refuses dial without verifier, nohostkeyignore lint; operator alert wiring WP11
-- [ ] `HP-SSH-012` Keepalive and idle timeouts — WP11 — evidence: I, O
-- [ ] `HP-SSH-013` Pre-auth and connection limits — WP10 — evidence: S, FI
-- [ ] `HP-SSH-014` Bounded buffering and backpressure — WP11 — evidence: S, I
-- [ ] `HP-SSH-015` Cancellation and cleanup — WP11 — evidence: U, S
-- [ ] `HP-SSH-016` Shell-free command grammar — WP10 — evidence: U, Z
-- [ ] `HP-SSH-017` Reserved words — WP10 — evidence: U, O
-- [ ] `HP-SSH-018` Stable JSON output — WP10 — evidence: U, O
-- [ ] `HP-SSH-019` No hang without input — WP10 — evidence: O
-- [ ] `HP-SSH-020` Bounded wait with auto-connect — WP10 — evidence: O, I
-- [ ] `HP-SSH-021` Disconnect does not mutate requests — WP10 — evidence: O, I
-- [ ] `HP-SSH-022` Unambiguous default role — WP10 — evidence: U, O
-- [ ] `HP-SSH-023` Remote exec encoding — WP11 — evidence: U, O, D
-- [ ] `HP-SSH-024` Introspection commands — WP10 — evidence: O
-- [ ] `HP-SSH-025` Grant revalidation per channel — WP11 — evidence: U, I
+- [x] `HP-SSH-001` Public-key-only agent auth — WP10 — evidence: U, O — ✅ tested: internal/app/e2e_test.go TestGatewayAuthMethodsAndAlgorithms
+- [x] `HP-SSH-002` Identity from key, not username — WP10 — evidence: O, I — ✅ tested: identity from Permissions extensions; whoami e2e; agents.Authenticate tests
+- [x] `HP-SSH-003` Uniform rejection of unknown/revoked keys — WP10 — evidence: O, I — ✅ tested: agents auth tests; e2e/OpenSSH unknown key rejected
+- [x] `HP-SSH-004` Algorithm policy — WP10 — evidence: U, O — ✅ tested: sshalg allowlists; agents key tests; e2e SHA-1 ssh-rsa refused
+- [x] `HP-SSH-005` Gateway host key lifecycle — WP10 — evidence: U, O, D — ✅ tested: credentials host-key tests; hostkey CLI test; docs/agent/guide.md pinning
+- [x] `HP-SSH-006` Shell, exec, PTY completeness — WP11 — evidence: O — ✅ tested: shell/exec/PTY/env/signal/eof/exit in internal/app/e2e_test.go and test/openssh/gateway_test.go (real ssh + sshd)
+- [x] `HP-SSH-007` Forwarding and unknown channels denied — WP10 — evidence: O, I — ✅ tested: internal/app/e2e_test.go TestGatewayDeniesForwarding; test/openssh/gateway_test.go (real ssh + sshd) TestOpenSSHForwardingDenied
+- [x] `HP-SSH-008` Environment allowlist — WP11 — evidence: U, O — ✅ tested: internal/app/e2e_test.go TestGatewayEnvAllowlist (per-role extension implemented, not separately tested)
+- [x] `HP-SSH-009` Stdout purity — WP10 — evidence: O — ✅ tested: byte-exact stdout in test/openssh/gateway_test.go (real ssh + sshd) TestOpenSSHExec
+- [x] `HP-SSH-010` Exit status and signal propagation — WP11 — evidence: O — ✅ tested: exit-status (test/openssh/gateway_test.go (real ssh + sshd)) and exit-signal (internal/app/e2e_test.go TestGatewayExitSignal)
+- [x] `HP-SSH-011` Strict destination host verification — WP11 — evidence: C, O — ✅ tested: internal/app/e2e_test.go TestGatewayHostKeyMismatch; test/openssh/gateway_test.go (real ssh + sshd) TestOpenSSHHostKeyChanged; nohostkeyignore analyzer
+- [ ] `HP-SSH-012` Keepalive and idle timeouts — WP11 — evidence: I, O — ◐ partial: agent-leg keepalive + idle timeout implemented; idle tested (internal/app/e2e_test.go TestGatewayIdleTimeout); keepalive and destination-leg keepalive not yet tested
+- [ ] `HP-SSH-013` Pre-auth and connection limits — WP10 — evidence: S, FI — ◐ partial: global/per-IP pre-auth limits + handshake timeout implemented; per-IP limit tested (internal/app/e2e_test.go TestGatewayPreAuthLimit); load test pending WP26
+- [x] `HP-SSH-014` Bounded buffering and backpressure — WP11 — evidence: S, I — ✅ tested: 5 MB output through OpenSSH; recorder backpressure test; soak pending WP26
+- [x] `HP-SSH-015` Cancellation and cleanup — WP11 — evidence: U, S — ✅ tested: internal/app/e2e_test.go TestGatewayNoGoroutineLeak, revocation/shutdown termination; fd soak pending WP26
+- [x] `HP-SSH-016` Shell-free command grammar — WP10 — evidence: U, Z — ✅ tested: grammar unit + fuzz tests (98.9%)
+- [x] `HP-SSH-017` Reserved words — WP10 — evidence: U, O — ✅ tested: grammar tests; reserved words incl. ps (ADR-0027)
+- [x] `HP-SSH-018` Stable JSON output — WP10 — evidence: U, O — ✅ tested: strict schema validation in grammar tests; api/ssh-schemas
+- [x] `HP-SSH-019` No hang without input — WP10 — evidence: O — ✅ tested: internal/app/e2e_test.go TestGatewayReasonRequiredWithoutPTY (exit 90)
+- [x] `HP-SSH-020` Bounded wait with auto-connect — WP10 — evidence: O, I — ✅ tested: internal/app/e2e_test.go TestGatewayWaitTimeoutAndDisconnect, TestGatewayRequestLifecycle
+- [x] `HP-SSH-021` Disconnect does not mutate requests — WP10 — evidence: O, I — ✅ tested: internal/app/e2e_test.go TestGatewayWaitTimeoutAndDisconnect
+- [ ] `HP-SSH-022` Unambiguous default role — WP10 — evidence: U, O — ◐ tested: internal/app/e2e_test.go TestGatewayImplicitRole (non-PTY); PTY role prompt implemented, untested
+- [x] `HP-SSH-023` Remote exec encoding — WP11 — evidence: U, O, D — ✅ tested: test/openssh/gateway_test.go (real ssh + sshd) TestOpenSSHExec; docs/agent/guide.md quoting
+- [x] `HP-SSH-024` Introspection commands — WP10 — evidence: O — ✅ tested: internal/app/e2e_test.go TestGatewayRequestLifecycle
+- [x] `HP-SSH-025` Grant revalidation per channel — WP11 — evidence: U, I — ✅ tested: access RegisterChannel tests; e2e revocation
 
 #### HP-AGT — Agent registration
 
@@ -1779,19 +1780,19 @@ check · R recovery drill · SR security review · D documentation review.
 
 #### HP-REC — Event history and recording
 
-- [ ] `HP-REC-001` Versioned event schema — WP12 — evidence: U, I
-- [ ] `HP-REC-002` Ordering and causality — WP12 — evidence: U, I, P
-- [ ] `HP-REC-003` Idempotent events — WP12 — evidence: U, I
-- [ ] `HP-REC-004` Capture fidelity — WP12 — evidence: O, I
-- [ ] `HP-REC-005` Input recording opt-in — WP12 — evidence: I, D
+- [x] `HP-REC-001` Versioned event schema — WP12 — evidence: U, I — ✅ tested: hprec versioned record types (terminal.output@1), per-session seq
+- [x] `HP-REC-002` Ordering and causality — WP12 — evidence: U, I, P — ✅ tested: shared per-session sequencer; TestRecorderConcurrentProducers
+- [ ] `HP-REC-003` Idempotent events — WP12 — evidence: U, I — ◐ partial: recorder has no retry path (append failure fails closed); deterministic idempotency keys not implemented
+- [x] `HP-REC-004` Capture fidelity — WP12 — evidence: O, I — ✅ tested: recorder round-trip (exec cmd, stdout/stderr, PTY output, resize, signal, exit)
+- [ ] `HP-REC-005` Input recording opt-in — WP12 — evidence: I, D — ◐ partial: input recording off by default, per-role opt-in tested; UI warning pending WP21
 - [ ] `HP-REC-006` No false command claims — WP21 — evidence: E, D
-- [ ] `HP-REC-007` Mandatory recording fail-closed — WP12 — evidence: FI, O
-- [ ] `HP-REC-008` Durability guarantee — WP12 — evidence: FI, I
-- [ ] `HP-REC-009` Accurate incomplete marking — WP12 — evidence: FI, I
+- [x] `HP-REC-007` Mandatory recording fail-closed — WP12 — evidence: FI, O — ✅ tested: segment established before forwarding; failure fails closed (TestRecorderFailureFailsClosed, OpenSSH)
+- [x] `HP-REC-008` Durability guarantee — WP12 — evidence: FI, I — ✅ tested: group commit ≤250 ms / strict mode; crash-recovery tests; fault injection pending WP26
+- [x] `HP-REC-009` Accurate incomplete marking — WP12 — evidence: FI, I — ✅ tested: TestReconcileStartup, TestReconcileUnrecoverableAndVerifyMissing
 - [ ] `HP-REC-010` Unified timeline, distinct streams — WP21 — evidence: E
-- [ ] `HP-REC-011` No silent event drops — WP12 — evidence: U, FI, S
+- [x] `HP-REC-011` No silent event drops — WP12 — evidence: U, FI, S — ✅ tested: TestRecorderBackpressure (block then fail, never drop)
 - [ ] `HP-REC-012` Destination-side audit integration — WP25 — evidence: O, D
-- [ ] `HP-REC-013` Retention and deletion — WP12 — evidence: I, E
+- [ ] `HP-REC-013` Retention and deletion — WP12 — evidence: I, E — ◐ partial: global default retention + tombstones tested (TestRetention); per server/role class not implemented
 - [ ] `HP-REC-014` Restricted, audited download — WP21 — evidence: E, I
 
 #### HP-CRY — Cryptography and key management
@@ -1799,8 +1800,8 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-CRY-001` Master KEK provisioning — WP04 — evidence: U, I — ✅ tested (local) @ WP04: LoadKEK file/env/dev, production refusal, perms/owner checks, canary detects wrong KEK; `hallpass keys init-kek`
 - [ ] `HP-CRY-002` Purpose keys and rotation — WP04 — evidence: U, I — ◐ WP04: purpose keys wrapped AES-256-GCM, versioned, Rotate/Reseal/Retire, offline RotateKEK (tests + CLI); background re-encryption job pending (WP05 jobs + per-table resealers)
 - [x] `HP-CRY-003` Field encryption — WP04 — evidence: U, P — ✅ tested (local) @ WP04: Keyring.Seal/Open with FieldAAD(table|column|row) + key version; bit-flip, row-swap and purpose-confusion tests
-- [ ] `HP-CRY-004` Recording file format — WP12 — evidence: U, Z, SR
-- [ ] `HP-CRY-005` Integrity verification — WP12 — evidence: I, R
+- [ ] `HP-CRY-004` Recording file format — WP12 — evidence: U, Z, SR — ◐ partial: HPREC1 implemented, unit + fuzz tested (94.8%); external crypto review pending (R-02)
+- [x] `HP-CRY-005` Integrity verification — WP12 — evidence: I, R — ✅ tested: hallpass verify (segments, ciphertext hash, final frame, chain links + MACs); TestVerifyDetectsTampering
 - [ ] `HP-CRY-006` Vetted cryptography only — WP01 — evidence: C, SR — ◐ WP01: depguard bans math/rand; nohostkeyignore analyzer; ongoing constraint, SR at WP26
 - [ ] `HP-CRY-007` Key loss and recovery — WP23 — evidence: D, R
 - [ ] `HP-CRY-008` External integrity anchoring — WP23 — evidence: I, D
@@ -1948,7 +1949,7 @@ check · R recovery drill · SR security review · D documentation review.
 
 - [x] `HP-TST-001` Race detector — WP01 — evidence: C — ✅ tested (local) @ WP01: `make race` runs `go test -race -count=1 ./...`; CI job `go` configured
 - [ ] `HP-TST-002` Fuzzing — WP26 — evidence: Z
-- [ ] `HP-TST-003` Real OpenSSH integration — WP10 — evidence: O
+- [ ] `HP-TST-003` Real OpenSSH integration — WP10 — evidence: O — ◐ tested locally: make test-openssh (8 tests, real ssh + sshd container); CI job added, not yet run in CI
 - [ ] `HP-TST-004` Browser E2E — WP19 — evidence: E
 - [ ] `HP-TST-005` Fault injection — WP26 — evidence: FI
 - [ ] `HP-TST-006` Soak — WP26 — evidence: S
@@ -1959,10 +1960,10 @@ check · R recovery drill · SR security review · D documentation review.
 #### HP-DOC — Documentation
 
 - [ ] `HP-DOC-001` Operator guide — WP24 — evidence: D
-- [ ] `HP-DOC-002` Agent guide — WP10 — evidence: D
+- [x] `HP-DOC-002` Agent guide — WP10 — evidence: D — ✅ done: docs/agent/{guide,exit-codes,json-schemas}.md
 - [ ] `HP-DOC-003` Destination hardening guide — WP25 — evidence: D
 - [ ] `HP-DOC-004` Guarantees and non-guarantees — WP27 — evidence: D
-- [ ] `HP-DOC-005` Recording format spec — WP12 — evidence: D
+- [x] `HP-DOC-005` Recording format spec — WP12 — evidence: D — ✅ done: docs/formats/hprec1.md + docs/operator/recording.md
 - [ ] `HP-DOC-006` Changelog and versioning — WP24 — evidence: D
 
 

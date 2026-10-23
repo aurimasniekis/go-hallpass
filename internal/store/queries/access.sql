@@ -187,3 +187,10 @@ SELECT count(*) FROM ssh_channels WHERE connection_id = ? AND access_session_id 
 
 -- name: SessionsForConnection :many
 SELECT DISTINCT access_session_id FROM ssh_channels WHERE connection_id = ?;
+
+-- name: RecentGrantsForAgent :many
+SELECT * FROM grants WHERE agent_id = ? AND (state = 'active' OR ended_at > ?) ORDER BY starts_at DESC LIMIT 100;
+
+-- name: CountChannelsForSession :one
+SELECT count(*) AS total, count(*) FILTER (WHERE state IN ('opening', 'active')) AS live
+FROM ssh_channels WHERE access_session_id = ?;
