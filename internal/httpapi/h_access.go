@@ -437,14 +437,31 @@ func (s *Server) GetRecordingRecords(c *gen.Call) (*gen.Result, error) {
 
 // ---- activities
 
+// ListActivities lists live channels; with ended_since (seconds, at most 7 days) it also lists up to 200 channels that
+// ended in that window, so failures and terminations stay visible.
 func (s *Server) ListActivities(c *gen.Call) (*gen.Result, error) {
-	rows, err := s.d.Access.LiveChannels(c.R.Context())
+	ctx := c.R.Context()
+	rows, err := s.d.Access.LiveChannels(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]channelDTO, len(rows))
-	for i, ch := range rows {
-		out[i] = channel(ch)
+	out := make([]channelDTO, 0, len(rows))
+	for _, ch := range rows {
+		out = append(out, channel(ch))
+	}
+	if v := c.R.URL.Query().Get("ended_since"); v != "" {
+		sec, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || sec < 1 || sec > 7*24*3600 {
+			return nil, apperr.New(apperr.CodeInvalid, "ended_since must be 1..604800 seconds")
+		}
+		since := s.o.Clock.Now().Add(-time.Duration(sec) * time.Second).UnixMicro()
+		ended, err := s.d.Store.R().RecentlyEndedChannels(ctx, db.RecentlyEndedChannelsParams{Since: sql.NullInt64{Int64: since, Valid: true}, Lim: 200})
+		if err != nil {
+			return nil, err
+		}
+		for _, ch := range ended {
+			out = append(out, channel(ch))
+		}
 	}
 	return ok(list(out))
 }

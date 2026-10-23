@@ -1700,6 +1700,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-SSH-023` Remote exec encoding — WP11 — evidence: U, O, D — ✅ tested: test/openssh/gateway_test.go (real ssh + sshd) TestOpenSSHExec; docs/agent/guide.md quoting
 - [x] `HP-SSH-024` Introspection commands — WP10 — evidence: O — ✅ tested: internal/app/e2e_test.go TestGatewayRequestLifecycle
 - [x] `HP-SSH-025` Grant revalidation per channel — WP11 — evidence: U, I — ✅ tested: access RegisterChannel tests; e2e revocation
+- [x] `HP-SSH-026` Source bans after failed authentication — WP26 — evidence: U, I — ✅ tested: internal/sshban tests (threshold, window, IPv6 /64, allowlist, escalation, persistence, lift, bounded table); e2e TestGatewaySSHBan (cut before banner, lift restores); API list/lift (TestAdministrationFlow); ADR-0041
 
 #### HP-AGT — Agent registration
 

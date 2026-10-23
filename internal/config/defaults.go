@@ -30,6 +30,8 @@ func Default() *Config {
 			IdleTimeout:             Duration(30 * time.Minute),
 			DialTimeout:             Duration(10 * time.Second),
 			EnvAllow:                []string{"TERM", "LANG", "LC_*"},
+			Ban: SSHBanConfig{Enabled: true, MaxFailures: 10, Window: Duration(10 * time.Minute), Duration: Duration(15 * time.Minute),
+				MaxDuration: Duration(24 * time.Hour)},
 		},
 		HTTP: HTTPConfig{Listen: ":8080"},
 		Log:  LogConfig{Level: "info", Format: "json"},

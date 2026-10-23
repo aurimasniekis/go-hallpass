@@ -224,11 +224,15 @@ func (svc *Service) ActivateChannel(ctx context.Context, reg *ChannelReg, creden
 
 // CloseInfo describes how a channel ended.
 type CloseInfo struct {
-	Failed     bool // never became active
-	Reason     string
-	ExitStatus *int
-	ExitSignal string
-	Data       map[string]any
+	Failed bool // never became active
+	Reason string
+	// Detail is a classified, address-free explanation of a failure or gateway termination (never raw error text).
+	Detail string
+	// GatewayCode is the 80-90 exit code the gateway sent to the agent (0: the destination's own status).
+	GatewayCode int
+	ExitStatus  *int
+	ExitSignal  string
+	Data        map[string]any
 }
 
 // CloseChannel records the end of a channel and frees its concurrency slot.
@@ -248,11 +252,19 @@ func (svc *Service) CloseChannel(ctx context.Context, reg *ChannelReg, ci CloseI
 			st = sql.NullInt64{Int64: int64(*ci.ExitStatus), Valid: true}
 		}
 		n, err := tx.Q.EndChannel(ctx, db.EndChannelParams{State: state, ExitStatus: st, ExitSignal: sql.NullString{String: ci.ExitSignal, Valid: ci.ExitSignal != ""},
-			Now: sql.NullInt64{Int64: tx.NowMicros(), Valid: true}, CloseReason: sql.NullString{String: ci.Reason, Valid: true}, ID: reg.ChannelID})
+			Now: sql.NullInt64{Int64: tx.NowMicros(), Valid: true}, CloseReason: sql.NullString{String: ci.Reason, Valid: true},
+			CloseDetail: sql.NullString{String: ci.Detail, Valid: ci.Detail != ""}, GatewayExitCode: sql.NullInt64{Int64: int64(ci.GatewayCode), Valid: ci.GatewayCode != 0},
+			ID: reg.ChannelID})
 		if err != nil || n == 0 {
 			return err
 		}
 		data := map[string]any{"reason": ci.Reason}
+		if ci.Detail != "" {
+			data["detail"] = ci.Detail
+		}
+		if ci.GatewayCode != 0 {
+			data["gateway_exit_code"] = ci.GatewayCode
+		}
 		for k, v := range ci.Data {
 			data[k] = v
 		}

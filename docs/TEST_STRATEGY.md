@@ -85,6 +85,7 @@ Layer codes per §2. "Location" names the primary package or suite where those t
 | HP-SSH-023 | Remote exec encoding | U (unit), O (OpenSSH interop), D (documentation review) | WP11 |
 | HP-SSH-024 | Introspection commands | O (OpenSSH interop) | WP10 |
 | HP-SSH-025 | Grant revalidation per channel | U (unit), I (integration) | WP11 |
+| HP-SSH-026 | Source bans after failed authentication | U (unit), I (integration) | WP26 |
 
 #### HP-AGT — Agent registration (`internal/agents`, `test/openssh`)
 

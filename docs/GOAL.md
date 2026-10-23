@@ -157,6 +157,7 @@ Test layers are abbreviated in `docs/PLAN.md` §21 and in `docs/TEST_STRATEGY.md
 | HP-SSH-023 | **Remote exec encoding.** For `exec`, the raw exec-string substring after the first standalone `--` token is forwarded unchanged as the destination exec command, and the destination login shell interprets it. The docs state that `--` does not prevent remote shell interpretation and describe double-quoting rules. |
 | HP-SSH-024 | **Introspection commands.** `help`, `version` and `whoami` (agent ID, name, key fingerprint) are available to every authenticated agent and never reveal hidden targets or addresses. |
 | HP-SSH-025 | **Grant revalidation per channel.** Every new destination channel or activity revalidates the grant, agent, key, server, role, credential, host identity, policy and concurrency limits before the outbound channel opens. |
+| HP-SSH-026 | **Source bans after failed authentication.** Sources (IPv4 address or IPv6 /64) with repeated failed agent authentication are banned for a configurable, escalating duration (fail2ban style): refused before the SSH banner, persisted across restarts, audited, listable and liftable by administrators, with an allowlist. Plain TCP connects never count. Added by ADR-0041. |
 
 ### HP-AGT — Agent registration
 

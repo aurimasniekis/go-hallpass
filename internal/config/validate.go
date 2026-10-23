@@ -56,6 +56,17 @@ func (c *Config) Validate() error {
 	v.durationRange("ssh.keepalive_interval", c.SSH.KeepaliveInterval, time.Second, 10*time.Minute)
 	v.durationRange("ssh.idle_timeout", c.SSH.IdleTimeout, time.Minute, 24*time.Hour)
 	v.durationRange("ssh.dial_timeout", c.SSH.DialTimeout, time.Second, 2*time.Minute)
+	if b := c.SSH.Ban; b.Enabled {
+		if b.MaxFailures < 3 || b.MaxFailures > 10000 {
+			v.add("ssh.ban.max_failures must be between 3 and 10000")
+		}
+		v.durationRange("ssh.ban.window", b.Window, time.Minute, 24*time.Hour)
+		v.durationRange("ssh.ban.duration", b.Duration, time.Minute, 30*24*time.Hour)
+		v.durationRange("ssh.ban.max_duration", b.MaxDuration, b.Duration.D(), 30*24*time.Hour)
+	}
+	for _, p := range c.SSH.Ban.AllowCIDRs {
+		v.prefix("ssh.ban.allow_cidrs", p)
+	}
 	for _, e := range c.SSH.EnvAllow {
 		if e == "" || strings.ContainsAny(e, "= ") || (strings.Contains(e, "*") && !strings.HasSuffix(e, "*")) {
 			v.add("ssh.env_allow entry %q must be a variable name or a trailing-* prefix", e)

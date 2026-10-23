@@ -674,6 +674,18 @@ type Setting struct {
 	UpdatedBy sql.NullString
 }
 
+type SshBan struct {
+	ID        string
+	Address   string
+	Failures  int64
+	Reason    string
+	Offense   int64
+	BannedAt  int64
+	ExpiresAt int64
+	LiftedAt  sql.NullInt64
+	LiftedBy  sql.NullString
+}
+
 type SshChannel struct {
 	ID              string
 	ConnectionID    string
@@ -691,6 +703,8 @@ type SshChannel struct {
 	ClosedAt        sql.NullInt64
 	CloseReason     sql.NullString
 	BootID          string
+	CloseDetail     sql.NullString
+	GatewayExitCode sql.NullInt64
 }
 
 type SshConnection struct {

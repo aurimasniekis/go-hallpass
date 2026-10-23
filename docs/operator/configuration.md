@@ -31,6 +31,10 @@ Example: [`deploy/examples/hallpass.example.yaml`](../../deploy/examples/hallpas
 | `ssh.max_unauthenticated_per_ip` | `16` | Concurrent unauthenticated connections per source IP. |
 | `ssh.handshake_timeout` | `10s` | Deadline for handshake plus authentication. |
 | `ssh.max_auth_tries` | `6` | Authentication attempts per connection. |
+| `ssh.ban.enabled` | `true` | Ban sources after repeated failed authentication (HP-SSH-026). Banned sources are disconnected before the SSH banner. |
+| `ssh.ban.max_failures` / `ssh.ban.window` | `10` / `10m` | Failed authentications from one source (IPv4 address or IPv6 /64) within the window that trigger a ban. Plain TCP connects (health checks) never count. |
+| `ssh.ban.duration` / `ssh.ban.max_duration` | `15m` / `24h` | First ban length; it doubles for each further ban of the source within 7 days, up to the maximum. |
+| `ssh.ban.allow_cidrs` | `[]` | Sources never banned, for example agent subnets behind a shared NAT (one misconfigured agent would otherwise lock out the others). |
 | `ssh.max_connections_per_agent` | `32` | Concurrent authenticated connections per agent. |
 | `ssh.max_channels_per_connection` | `16` | Concurrent channels per connection. |
 | `ssh.keepalive_interval` / `ssh.keepalive_max_missed` | `30s` / `3` | Keepalive probes on both SSH legs (HP-SSH-012). |

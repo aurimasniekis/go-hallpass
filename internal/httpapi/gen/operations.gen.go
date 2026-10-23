@@ -131,6 +131,8 @@ var Operations = []Operation{
 	{ID: "createRole", Method: "POST", Path: "/api/v1/servers/{id}/roles", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: true, Stream: false, Redirect: false, Tags: []string{"inventory"}},
 	{ID: "getAuthSettings", Method: "GET", Path: "/api/v1/settings/auth", Permission: "auth.settings", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"sso"}},
 	{ID: "putAuthSettings", Method: "PUT", Path: "/api/v1/settings/auth", Permission: "auth.settings", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"sso"}},
+	{ID: "listSSHBans", Method: "GET", Path: "/api/v1/ssh-bans", Permission: "system.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"system"}},
+	{ID: "liftSSHBan", Method: "DELETE", Path: "/api/v1/ssh-bans/{id}", Permission: "system.settings", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"system"}},
 	{ID: "getStatsOverview", Method: "GET", Path: "/api/v1/stats/overview", Permission: "dashboard.view", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"system"}},
 	{ID: "acknowledgeBreakGlass", Method: "POST", Path: "/api/v1/system/breakglass-ack", Permission: "system.settings", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"system"}},
 	{ID: "listGatewayHostKeys", Method: "GET", Path: "/api/v1/system/gateway-host-keys", Permission: "dashboard.view", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"system"}},
@@ -399,6 +401,10 @@ type Server interface {
 	GetAuthSettings(c *Call) (*Result, error)
 	// PutAuthSettings PUT /api/v1/settings/auth (permission auth.settings)
 	PutAuthSettings(c *Call) (*Result, error)
+	// ListSSHBans GET /api/v1/ssh-bans (permission system.read)
+	ListSSHBans(c *Call) (*Result, error)
+	// LiftSSHBan DELETE /api/v1/ssh-bans/{id} (permission system.settings)
+	LiftSSHBan(c *Call) (*Result, error)
 	// GetStatsOverview GET /api/v1/stats/overview (permission dashboard.view)
 	GetStatsOverview(c *Call) (*Result, error)
 	// AcknowledgeBreakGlass POST /api/v1/system/breakglass-ack (permission system.settings)
@@ -551,6 +557,8 @@ func Handlers(s Server) map[string]Handler {
 		"createRole":                    s.CreateRole,
 		"getAuthSettings":               s.GetAuthSettings,
 		"putAuthSettings":               s.PutAuthSettings,
+		"listSSHBans":                   s.ListSSHBans,
+		"liftSSHBan":                    s.LiftSSHBan,
 		"getStatsOverview":              s.GetStatsOverview,
 		"acknowledgeBreakGlass":         s.AcknowledgeBreakGlass,
 		"listGatewayHostKeys":           s.ListGatewayHostKeys,

@@ -46,6 +46,7 @@ const (
 	OIDCMapping    = "ogm"
 	Integration    = "int"
 	Route          = "rte"
+	SSHBan         = "ban"
 	Boot           = "boot"
 )
 

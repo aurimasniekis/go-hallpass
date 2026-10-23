@@ -243,6 +243,8 @@ type channelDTO struct {
 	OpenedAt     time.Time  `json:"opened_at"`
 	ClosedAt     *time.Time `json:"closed_at"`
 	CloseReason  string     `json:"close_reason,omitempty"`
+	CloseDetail  string     `json:"close_detail,omitempty"`
+	GatewayCode  *int64     `json:"gateway_exit_code"`
 	ExitStatus   *int64     `json:"exit_status"`
 	ExitSignal   string     `json:"exit_signal,omitempty"`
 }
@@ -250,7 +252,8 @@ type channelDTO struct {
 func channel(ch db.SshChannel) channelDTO {
 	return channelDTO{ID: ch.ID, SessionID: ch.AccessSessionID, ConnectionID: ch.ConnectionID, GrantID: ch.GrantID, AgentID: ch.AgentID,
 		RoleID: ch.RoleID, Kind: ch.Kind, PTY: ch.Pty == 1, State: ch.State, OpenedAt: micros(ch.OpenedAt), ClosedAt: nullTime(ch.ClosedAt),
-		CloseReason: ch.CloseReason.String, ExitStatus: nullInt(ch.ExitStatus), ExitSignal: ch.ExitSignal.String}
+		CloseReason: ch.CloseReason.String, CloseDetail: ch.CloseDetail.String, GatewayCode: nullInt(ch.GatewayExitCode),
+		ExitStatus: nullInt(ch.ExitStatus), ExitSignal: ch.ExitSignal.String}
 }
 
 type timelineDTO struct {

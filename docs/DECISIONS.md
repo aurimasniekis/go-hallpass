@@ -619,6 +619,27 @@
   first and the decrypted export as a separate, warned action.
 - **Consequences:** HP-REC-014 matches GOAL. ADR-0036 item 2 is superseded where it describes the export format.
 
+### ADR-0041 — fail2ban-style SSH source bans (HP-SSH-026)
+- **Status:** accepted (operator request, 2026-10-24). Adds a requirement and a protection; nothing is relaxed.
+- **Context:** the agent SSH port is internet-facing in many deployments. Per-IP pre-auth limits (HP-SSH-013) bound
+  concurrency, but a source can keep guessing keys indefinitely. The operator asked for fail2ban-style protection.
+- **Decision:**
+  1. A source is an IPv4 address or an IPv6 /64.
+  2. Only connections whose authentication was attempted and failed count. Plain TCP connects and handshake errors
+     don't, so load-balancer health checks can't be banned.
+  3. `max_failures` within `window` bans the source for `duration`, doubled per prior ban in 7 days, capped at
+     `max_duration`.
+  4. Banned sources are closed right after accept, before the SSH banner (metric result `banned`).
+  5. Bans are stored in `ssh_bans`, loaded at startup, audited as `ssh.source.banned` / `ssh.source.unbanned`, and
+     listed and lifted through the API (`system.read` / `system.settings` + recent auth).
+  6. `allow_cidrs` exempts sources. The failure table is bounded (65,536 sources), and rows are purged 30 days after
+     expiry.
+- **Consequences:**
+  - Agents behind one NAT share a source, so a misconfigured agent can ban the others until the ban expires or an
+    administrator lifts it. Operators should list such networks in `allow_cidrs`.
+  - An attacker spoofing a victim's address cannot trigger a ban, because a TCP handshake is required.
+  - Web login keeps its own per-account and per-IP progressive throttling (HP-AUTH-004).
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

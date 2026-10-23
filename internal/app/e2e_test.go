@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -320,6 +321,13 @@ func TestGatewayHostKeyMismatch(t *testing.T) {
 	_, errOut, code := g.run("exec web1 --role inspect -- id")
 	if code != 88 || ran || len(impostor.Logins()) != 0 {
 		t.Fatalf("code %d ran=%v stderr %q", code, ran, errOut)
+	}
+	// The channel row says why, without the address.
+	var detail string
+	var gw int
+	must(t, g.a.Store.ReadDB().QueryRowContext(context.Background(), `SELECT close_detail, gateway_exit_code FROM ssh_channels WHERE state = 'failed'`).Scan(&detail, &gw))
+	if !strings.Contains(detail, "host key") || gw != 88 || strings.Contains(detail, host) {
+		t.Fatalf("close_detail %q gateway_exit_code %d", detail, gw)
 	}
 }
 
@@ -890,5 +898,44 @@ func TestGatewayShellWithoutPTYHint(t *testing.T) {
 	must(t, s.Run("connect web1 --role inspect"))
 	if !strings.Contains(out.String(), "echo piped") || !strings.Contains(errb.String(), "ssh -t") {
 		t.Fatalf("stdout %q stderr %q", out.String(), errb.String())
+	}
+}
+
+// HP-SSH-026: repeated failed authentication bans the source; banned sources are cut before the SSH banner; lifting
+// the ban restores access, and valid agents from other sources are unaffected.
+func TestGatewaySSHBan(t *testing.T) {
+	g := startGateway(t, func(c *config.Config) {
+		c.SSH.Ban = config.SSHBanConfig{Enabled: true, MaxFailures: 3, Window: config.Duration(time.Minute), Duration: config.Duration(time.Hour),
+			MaxDuration: config.Duration(time.Hour)}
+	})
+	stranger := sshkeys.Ed25519(t)
+	for i := range 3 {
+		if _, err := g.client(stranger); err == nil {
+			t.Fatalf("attempt %d: unknown key authenticated", i)
+		}
+	}
+	// The server records the failure after the client gave up: wait for the ban to land.
+	deadline := time.Now().Add(5 * time.Second)
+	for !g.a.Bans.Banned(netip.MustParseAddr("127.0.0.1")) && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	nc, err := net.Dial("tcp", g.addr)
+	must(t, err)
+	defer nc.Close()
+	_ = nc.SetReadDeadline(time.Now().Add(2 * time.Second))
+	buf := make([]byte, 64)
+	if n, _ := nc.Read(buf); n != 0 {
+		t.Fatalf("banned source got a banner: %q", buf[:n])
+	}
+	if _, err := g.client(g.key); err == nil {
+		t.Fatal("banned source authenticated with a valid key")
+	}
+	bans, err := g.a.Bans.List(context.Background())
+	if err != nil || len(bans) != 1 || bans[0].Address != "127.0.0.1" {
+		t.Fatalf("bans %+v %v", bans, err)
+	}
+	must(t, g.a.Bans.Lift(context.Background(), admin, bans[0].ID))
+	if _, _, code := g.run("list"); code != 0 {
+		t.Fatalf("after lift: exit %d", code)
 	}
 }

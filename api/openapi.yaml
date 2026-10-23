@@ -1120,6 +1120,8 @@ paths:
       tags: [sessions]
       x-permission: sessions.read
       summary: Live channels.
+      parameters:
+        - {name: ended_since, in: query, description: Also list channels that ended within this many seconds (max 7 days, at most 200)., schema: {type: integer, minimum: 1, maximum: 604800}}
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Channel"}}}}}}}
   /api/v1/activities/{id}/terminate:
@@ -1466,6 +1468,26 @@ paths:
       summary: Acknowledge recorded break-glass recoveries (clears the alert raised at start and in system status).
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/SystemStatus"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/ssh-bans:
+    get:
+      operationId: listSSHBans
+      tags: [system]
+      x-permission: system.read
+      summary: Active SSH source bans (fail2ban-style protection of the agent SSH port, HP-SSH-026).
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/SSHBan"}}}}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/ssh-bans/{id}:
+    delete:
+      operationId: liftSSHBan
+      tags: [system]
+      x-permission: system.settings
+      x-reauth: true
+      summary: Lift a ban early (audited). The source's offense count is kept.
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "204": {description: lifted}
         default: {$ref: "#/components/responses/Problem"}
   /api/v1/system/gateway-host-keys:
     get:
@@ -2101,8 +2123,25 @@ components:
         opened_at: {$ref: "#/components/schemas/Timestamp"}
         closed_at: {$ref: "#/components/schemas/NullableTimestamp"}
         close_reason: {type: string}
+        close_detail:
+          type: string
+          description: >-
+            Classified failure detail for failed or gateway-ended channels (for example "destination host key changed",
+            "destination refused the login credential", "destination unreachable (timeout)"). Never contains addresses.
+        gateway_exit_code: {type: [integer, "null"], description: Gateway exit code (80-90) when the gateway ended the channel.}
         exit_status: {type: [integer, "null"]}
         exit_signal: {type: string}
+    SSHBan:
+      type: object
+      required: [id, address, failures, reason, banned_at, expires_at]
+      properties:
+        id: {type: string}
+        address: {type: string, description: Banned source (IPv4 address or IPv6 /64 prefix).}
+        failures: {type: integer, description: Failed SSH connections in the window that triggered the ban.}
+        reason: {type: string}
+        offense: {type: integer, description: How many times this source has been banned (the duration doubles each time).}
+        banned_at: {$ref: "#/components/schemas/Timestamp"}
+        expires_at: {$ref: "#/components/schemas/Timestamp"}
     Segment:
       type: object
       required: [id, session_id, channel_id, ordinal, state, opened_at]

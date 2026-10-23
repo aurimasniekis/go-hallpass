@@ -48,7 +48,7 @@ func (a *App) Serve(ctx context.Context, sshLn net.Listener) error {
 	h := &sshfront.Handler{Access: a.Access, Engine: a.Engine, Proxy: a.Proxy, Bus: a.Bus, Log: a.Log,
 		WaitDefault: a.Cfg.Access.WaitTimeoutDefault.D(), WaitMax: a.Cfg.Access.WaitTimeoutMax.D(), Metrics: a.Metrics}
 	srv := sshfront.New(sshfront.Options{Config: a.Cfg.SSH, Agents: a.Agents, Access: a.Access, Audit: a.Audit, Store: a.Store,
-		Hosts: a.Credentials, Handler: h, Logger: a.Log, Metrics: a.Metrics})
+		Hosts: a.Credentials, Handler: h, Bans: a.Bans, Logger: a.Log, Metrics: a.Metrics})
 	var sshUp atomic.Bool
 	_ = a.Health.Register(health.Flag("ssh.listener", "listener_down", sshUp.Load))
 	h.Deny = srv.AuditDenied
@@ -146,7 +146,7 @@ func (a *App) NewAPI() *httpapi.Server {
 		Matrix: rbac.New(rbac.Options{AuditorAddressRead: rc.AuditorAddressRead, ApproverRecordingPlay: rc.ApproverRecordingPlay,
 			AuditorRecordingExport: rc.AuditorRecordingExport, ApproversCanLockdown: rc.ApproversCanLockdown}),
 		Metrics: a.Metrics,
-		Notify:  a.Notify, Destaudit: a.Destaudit, BootID: a.BootID, Version: buildinfo.Get().Version},
+		Notify:  a.Notify, Destaudit: a.Destaudit, Bans: a.Bans, BootID: a.BootID, Version: buildinfo.Get().Version},
 		httpapi.Options{PublicURL: a.Cfg.PublicURL, Secure: strings.HasPrefix(a.Cfg.PublicURL, "https://"), TrustedProxies: proxies, UI: a.UI,
 			Clock: a.Clock, Logger: a.Log})
 }

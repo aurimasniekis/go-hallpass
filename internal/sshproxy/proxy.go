@@ -137,7 +137,9 @@ type Result struct {
 	ExitSignal  string
 	GatewayCode int
 	Reason      string
-	Err         error
+	// Detail is a classified, address-free description of why the channel failed or was ended (failureDetail).
+	Detail string
+	Err    error
 	// Delivered is true when the proxy already sent the exit status to the agent and closed its channel.
 	Delivered bool
 }
@@ -163,10 +165,8 @@ func (p *Proxy) Run(ctx context.Context, s *Session) Result {
 		}
 		p.o.Metrics.SSHChannel(kind, r)
 	}
-	ci := access.CloseInfo{Failed: res.Reason == "failed_before_start", Reason: res.Reason, ExitStatus: res.ExitStatus, ExitSignal: res.ExitSignal}
-	if res.GatewayCode != 0 {
-		ci.Data = map[string]any{"gateway_exit_code": res.GatewayCode}
-	}
+	ci := access.CloseInfo{Failed: res.Reason == "failed_before_start", Reason: res.Reason, Detail: res.Detail, GatewayCode: res.GatewayCode,
+		ExitStatus: res.ExitStatus, ExitSignal: res.ExitSignal}
 	if err := p.o.Access.CloseChannel(context.WithoutCancel(ctx), reg, ci); err != nil {
 		p.o.Logger.Error("recording channel close failed", slog.String(obs.FieldChannelID, reg.ChannelID), obs.Err(err))
 	}
@@ -223,8 +223,8 @@ func registerFailure(err error) Result {
 }
 
 func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Result {
-	fail := func(code int, reason string, err error) Result {
-		return Result{GatewayCode: code, Reason: "failed_before_start", Err: fmt.Errorf("%s: %w", reason, err)}
+	fail := func(code int, stage string, err error) Result {
+		return Result{GatewayCode: code, Reason: "failed_before_start", Detail: failureDetail(stage, err), Err: fmt.Errorf("%s: %w", stage, err)}
 	}
 	// 1. Recording must be established before anything is forwarded (mandatory mode).
 	var rec Recorder
@@ -427,7 +427,7 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 
 	res := Result{Reason: "exit"}
 	if reason := t.reason(); reason != "" {
-		res = Result{GatewayCode: CodeAccessEnded, Reason: reason}
+		res = Result{GatewayCode: CodeAccessEnded, Reason: reason, Detail: terminationDetail(reason)}
 		switch {
 		case reason == "recording_failed":
 			res.GatewayCode = CodeInternal
@@ -454,7 +454,7 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 	case *ssh.ExitMissingError:
 		res.Reason = "destination_no_exit_status"
 	default:
-		res.Reason, res.Err = "destination_error", waitErr
+		res.Reason, res.Err, res.Detail = "destination_error", waitErr, "destination connection lost"
 	}
 	_ = rec.Exit(res.ExitStatus, res.ExitSignal)
 	_ = s.Agent.CloseWrite()

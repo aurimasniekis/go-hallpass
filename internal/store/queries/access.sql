@@ -144,8 +144,12 @@ WHERE id = sqlc.arg(id) AND state = 'opening';
 
 -- name: EndChannel :execrows
 UPDATE ssh_channels SET state = sqlc.arg(state), exit_status = sqlc.narg(exit_status), exit_signal = sqlc.narg(exit_signal),
-  closed_at = sqlc.arg(now), close_reason = sqlc.arg(close_reason)
+  closed_at = sqlc.arg(now), close_reason = sqlc.arg(close_reason), close_detail = sqlc.narg(close_detail),
+  gateway_exit_code = sqlc.narg(gateway_exit_code)
 WHERE id = sqlc.arg(id) AND state IN ('opening', 'active');
+
+-- name: RecentlyEndedChannels :many
+SELECT * FROM ssh_channels WHERE closed_at >= sqlc.arg(since) ORDER BY closed_at DESC LIMIT sqlc.arg(lim);
 
 -- name: CountLiveChannelsForRole :one
 SELECT count(*) FROM ssh_channels WHERE role_id = ? AND state IN ('opening', 'active');

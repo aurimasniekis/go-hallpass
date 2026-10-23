@@ -78,18 +78,33 @@ type KEKConfig struct {
 
 // SSHConfig configures the agent-facing SSH listener and both SSH legs (HP-SSH-012, HP-SSH-013).
 type SSHConfig struct {
-	Listen                  string   `yaml:"listen"`
-	MaxUnauthenticated      int      `yaml:"max_unauthenticated"`
-	MaxUnauthenticatedPerIP int      `yaml:"max_unauthenticated_per_ip"`
-	HandshakeTimeout        Duration `yaml:"handshake_timeout"`
-	MaxAuthTries            int      `yaml:"max_auth_tries"`
-	MaxConnectionsPerAgent  int      `yaml:"max_connections_per_agent"`
-	MaxChannelsPerConn      int      `yaml:"max_channels_per_connection"`
-	KeepaliveInterval       Duration `yaml:"keepalive_interval"`
-	KeepaliveMaxMissed      int      `yaml:"keepalive_max_missed"`
-	IdleTimeout             Duration `yaml:"idle_timeout"`
-	DialTimeout             Duration `yaml:"dial_timeout"`
-	EnvAllow                []string `yaml:"env_allow"`
+	Listen                  string       `yaml:"listen"`
+	MaxUnauthenticated      int          `yaml:"max_unauthenticated"`
+	MaxUnauthenticatedPerIP int          `yaml:"max_unauthenticated_per_ip"`
+	HandshakeTimeout        Duration     `yaml:"handshake_timeout"`
+	MaxAuthTries            int          `yaml:"max_auth_tries"`
+	MaxConnectionsPerAgent  int          `yaml:"max_connections_per_agent"`
+	MaxChannelsPerConn      int          `yaml:"max_channels_per_connection"`
+	KeepaliveInterval       Duration     `yaml:"keepalive_interval"`
+	KeepaliveMaxMissed      int          `yaml:"keepalive_max_missed"`
+	IdleTimeout             Duration     `yaml:"idle_timeout"`
+	DialTimeout             Duration     `yaml:"dial_timeout"`
+	EnvAllow                []string     `yaml:"env_allow"`
+	Ban                     SSHBanConfig `yaml:"ban"`
+}
+
+// SSHBanConfig configures fail2ban-style bans of SSH sources after repeated failed authentication (HP-SSH-026).
+type SSHBanConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// MaxFailures failed authentications from one source (IPv4 address or IPv6 /64) within Window trigger a ban.
+	MaxFailures int      `yaml:"max_failures"`
+	Window      Duration `yaml:"window"`
+	// Duration is the first ban's length; it doubles for each further ban of the source within 7 days, up to
+	// MaxDuration.
+	Duration    Duration `yaml:"duration"`
+	MaxDuration Duration `yaml:"max_duration"`
+	// AllowCIDRs are never banned (for example agent subnets behind shared NAT).
+	AllowCIDRs []string `yaml:"allow_cidrs"`
 }
 
 // HTTPConfig configures the web/API listener.

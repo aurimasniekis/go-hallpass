@@ -25,6 +25,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/obs/tracing"
 	"github.com/aurimasniekis/go-hallpass/internal/sshalg"
+	"github.com/aurimasniekis/go-hallpass/internal/sshban"
 	"github.com/aurimasniekis/go-hallpass/internal/sshkeepalive"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 )
@@ -94,6 +95,7 @@ type Server struct {
 	store   *store.Store
 	hosts   HostKeySource
 	handler SessionHandler
+	bans    *sshban.Service
 	log     *slog.Logger
 	m       *metrics.Metrics
 
@@ -117,7 +119,9 @@ type Options struct {
 	Store   *store.Store
 	Hosts   HostKeySource
 	Handler SessionHandler
-	Logger  *slog.Logger
+	// Bans refuses sources banned after repeated failed authentication (HP-SSH-026). Nil disables.
+	Bans   *sshban.Service
+	Logger *slog.Logger
 	// Metrics records connection results, authentication failures, active connections and refused requests
 	// (HP-OBS-004). Nil disables.
 	Metrics *metrics.Metrics
@@ -129,7 +133,7 @@ func New(o Options) *Server {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
 	return &Server{
-		cfg: o.Config, agents: o.Agents, access: o.Access, audit: o.Audit, store: o.Store, hosts: o.Hosts, handler: o.Handler, m: o.Metrics,
+		cfg: o.Config, agents: o.Agents, access: o.Access, audit: o.Audit, store: o.Store, hosts: o.Hosts, handler: o.Handler, bans: o.Bans, m: o.Metrics,
 		log: obs.Component(o.Logger, "sshfront"), unauth: make(chan struct{}, max(o.Config.MaxUnauthenticated, 1)),
 		perIP: map[netip.Addr]int{}, perAgent: map[string]int{}, conns: map[*Conn]struct{}{},
 		authFails: newRateLimiter(20, time.Minute),
@@ -290,6 +294,10 @@ func (s *Server) recordAuthFailure(ctx context.Context, ip netip.Addr, meta ssh.
 func (s *Server) serveConn(ctx context.Context, nc net.Conn, signers []ssh.Signer) {
 	defer nc.Close()
 	ip := addrOf(nc)
+	if s.bans.Banned(ip) { // before any SSH processing (HP-SSH-026)
+		s.m.SSHConnection(metrics.ConnBanned)
+		return
+	}
 	if !s.acquirePreAuth(ip) {
 		s.m.SSHConnection(s.refusal(metrics.ConnPreAuthLimit))
 		return
@@ -308,6 +316,7 @@ func (s *Server) serveConn(ctx context.Context, nc net.Conn, signers []ssh.Signe
 		res := metrics.ConnHandshakeFailed
 		if authFailed.Load() {
 			res = metrics.ConnAuthFailed
+			s.bans.Failed(ctx, ip, "failed public-key authentication")
 		}
 		tracing.SetAttributes(span, tracing.Outcome("failure"))
 		tracing.End(span, errors.New(string(res)))

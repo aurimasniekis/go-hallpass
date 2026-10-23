@@ -35,6 +35,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/outbox"
 	"github.com/aurimasniekis/go-hallpass/internal/policy"
 	"github.com/aurimasniekis/go-hallpass/internal/recording"
+	"github.com/aurimasniekis/go-hallpass/internal/sshban"
 	"github.com/aurimasniekis/go-hallpass/internal/sshproxy"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 	webui "github.com/aurimasniekis/go-hallpass/web"
@@ -68,6 +69,7 @@ type App struct {
 	OIDC        *oidc.Service
 	Notify      *notify.Service
 	Destaudit   *destaudit.Service
+	Bans        *sshban.Service
 	Proxy       *sshproxy.Proxy
 
 	// Recorders opens channel recordings; nil means recording is unavailable and mandatory-recording roles fail
@@ -178,6 +180,9 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	a.Notify = notify.New(notify.Deps{Store: a.Store, Keyring: a.Keyring, Audit: a.Audit, Access: a.Access, Engine: a.Engine, Agents: a.Agents,
 		Inventory: a.Inventory, Auth: a.Auth, Outbox: a.Outbox}, nopts)
 	a.Destaudit = destaudit.New(a.Store, a.Keyring, a.Audit, a.Access.Sequencer(), destaudit.Options{Clock: a.Clock, Logger: log, Bus: a.Bus})
+	if a.Bans, err = sshban.New(ctx, a.Store, a.Audit, a.Clock, cfg.SSH.Ban, log); err != nil {
+		return nil, fmt.Errorf("ssh bans: %w", err)
+	}
 	a.Health = health.New(health.Options{ExposeDetails: !cfg.IsProduction()})
 	a.Health.MustRegister(
 		health.StoreHealth("store", a.Store.Health()),
@@ -248,6 +253,9 @@ func (a *App) RunBackground(ctx context.Context) (wait func()) {
 	wg.Go(func() {
 		jobs.Periodic(ctx, log, "auth.purge_expired", 15*time.Minute, false, func(ctx context.Context) error {
 			if err := a.Notify.Purge(ctx); err != nil {
+				return err
+			}
+			if err := a.Bans.Purge(ctx); err != nil {
 				return err
 			}
 			if _, err := a.OIDC.PurgeStates(ctx); err != nil {

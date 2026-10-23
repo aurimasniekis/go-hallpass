@@ -22,6 +22,7 @@ const (
 	ConnPreAuthLimit    ConnResult = "preauth_limit"    // global or per-IP pre-auth limit reached (HP-SSH-013)
 	ConnAgentLimit      ConnResult = "agent_limit"      // per-agent connection limit reached
 	ConnShuttingDown    ConnResult = "shutting_down"    // refused during graceful shutdown
+	ConnBanned          ConnResult = "banned"           // source banned after repeated failed authentication (HP-SSH-026)
 )
 
 // AuthFailReason is why agent public-key authentication failed. Values mirror internal/agents Fail* constants.
@@ -250,7 +251,7 @@ func (e enum) norm(v string) string {
 }
 
 var (
-	enumConnResult = newEnum(ConnAccepted, ConnAuthFailed, ConnHandshakeFailed, ConnPreAuthLimit, ConnAgentLimit, ConnShuttingDown)
+	enumConnResult = newEnum(ConnAccepted, ConnAuthFailed, ConnHandshakeFailed, ConnPreAuthLimit, ConnAgentLimit, ConnShuttingDown, ConnBanned)
 	enumAuthFail   = newEnum(AuthUnknownKey, AuthRevokedKey, AuthAgentDisabled, AuthSourceDenied, AuthKeyPolicy, AuthMethodRejected)
 	enumChanKind   = newEnum(ChannelShell, ChannelExec)
 	enumChanResult = newEnum(ChannelOpened, ChannelDenied, ChannelLimited, ChannelFailed, ChannelLockdown, ChannelNoStorage)

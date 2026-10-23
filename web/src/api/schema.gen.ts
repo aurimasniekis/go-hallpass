@@ -1622,6 +1622,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ssh-bans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Active SSH source bans (fail2ban-style protection of the agent SSH port, HP-SSH-026). */
+        get: operations["listSSHBans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ssh-bans/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Lift a ban early (audited). The source's offense count is kept. */
+        delete: operations["liftSSHBan"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/system/gateway-host-keys": {
         parameters: {
             query?: never;
@@ -2232,8 +2266,24 @@ export interface components {
             opened_at: components["schemas"]["Timestamp"];
             closed_at?: components["schemas"]["NullableTimestamp"];
             close_reason?: string;
+            /** @description Classified failure detail for failed or gateway-ended channels (for example "destination host key changed", "destination refused the login credential", "destination unreachable (timeout)"). Never contains addresses. */
+            close_detail?: string;
+            /** @description Gateway exit code (80-90) when the gateway ended the channel. */
+            gateway_exit_code?: number | null;
             exit_status?: number | null;
             exit_signal?: string;
+        };
+        SSHBan: {
+            id: string;
+            /** @description Banned source (IPv4 address or IPv6 /64 prefix). */
+            address: string;
+            /** @description Failed SSH connections in the window that triggered the ban. */
+            failures: number;
+            reason: string;
+            /** @description How many times this source has been banned (the duration doubles each time). */
+            offense?: number;
+            banned_at: components["schemas"]["Timestamp"];
+            expires_at: components["schemas"]["Timestamp"];
         };
         Segment: {
             id: string;
@@ -4940,7 +4990,10 @@ export interface operations {
     };
     listActivities: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Also list channels that ended within this many seconds (max 7 days */
+                ended_since?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5746,6 +5799,50 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SystemStatus"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listSSHBans: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["SSHBan"][];
+                    };
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    liftSSHBan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description lifted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };

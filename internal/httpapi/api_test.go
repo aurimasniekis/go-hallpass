@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
@@ -86,7 +87,7 @@ func newHarness(t *testing.T) *harness {
 	must(t, err)
 	h := &harness{t: t, ctx: ctx, clk: clk, a: a, base: cfg.PublicURL, matrix: rbac.New(rbac.Options{}), spec: loadSpec(t)}
 	h.api = httpapi.New(httpapi.Deps{Store: a.Store, Audit: a.Audit, Bus: a.Bus, Agents: a.Agents, Inventory: a.Inventory, Credentials: a.Credentials,
-		Engine: a.Engine, Policy: a.Policy, Access: a.Access, Enforcer: a.Enforcer, Recording: a.Recording, Auth: a.Auth, OIDC: a.OIDC, Notify: a.Notify, Destaudit: a.Destaudit,
+		Engine: a.Engine, Policy: a.Policy, Access: a.Access, Enforcer: a.Enforcer, Recording: a.Recording, Auth: a.Auth, OIDC: a.OIDC, Notify: a.Notify, Destaudit: a.Destaudit, Bans: a.Bans,
 		Matrix: h.matrix, BootID: a.BootID, Version: buildinfo.Get().Version},
 		httpapi.Options{PublicURL: cfg.PublicURL, Clock: clk, SessionRate: 100000, IPRate: 100000, AuthRate: 100000})
 	rctx, cancel := context.WithCancel(ctx)
@@ -687,6 +688,25 @@ func TestAdministrationFlow(t *testing.T) {
 	r = c.ok("revokeDestinationCollector", 200, "POST", "/api/v1/destination-collectors/"+col.ID+"/revoke", map[string]string{"reason": "decommissioned"})
 	if !strings.Contains(string(r.body), `"state":"revoked"`) {
 		t.Fatalf("revoke %s", r.body)
+	}
+	// HP-SSH-026: SSH source bans can be listed and lifted (audited); viewers cannot see them.
+	for range 10 {
+		h.a.Bans.Failed(h.ctx, netip.MustParseAddr("198.51.100.9"), "test")
+	}
+	r = c.ok("listSSHBans", 200, "GET", "/api/v1/ssh-bans", nil)
+	var bl struct {
+		Items []struct{ ID, Address string }
+	}
+	r.json(t, &bl)
+	if len(bl.Items) != 1 || bl.Items[0].Address != "198.51.100.9" {
+		t.Fatalf("bans %s", r.body)
+	}
+	if r := viewer.do("GET", "/api/v1/ssh-bans", nil); r.status != 403 {
+		t.Fatalf("viewer listed bans: %d", r.status)
+	}
+	c.ok("liftSSHBan", 204, "DELETE", "/api/v1/ssh-bans/"+bl.Items[0].ID, nil)
+	if r := c.do("DELETE", "/api/v1/ssh-bans/"+bl.Items[0].ID, nil); r.status != 404 {
+		t.Fatalf("lift twice: %d", r.status)
 	}
 	c.ok("acknowledgeBreakGlass", 200, "POST", "/api/v1/system/breakglass-ack", nil)
 	if r := viewer.do("GET", "/api/v1/access-sessions/"+dec.Grant.SessionID+"/export", nil); r.status != 403 {
