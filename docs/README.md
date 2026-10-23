@@ -26,4 +26,7 @@ as the corresponding work packages land:
 | [operator/backup.md](operator/backup.md) | Backup, restore drill, integrity anchors, break-glass recovery. |
 | [operator/observability.md](operator/observability.md) | Logs, metrics, health/readiness, tracing, alerts. |
 | [VERSIONING.md](VERSIONING.md) | Versioning policy for the binary, API, schemas, recording format and database. |
+| [operator/approvals.md](operator/approvals.md) | Web and chat approvals, routes, account linking, delivery. |
+| [operator/slack.md](operator/slack.md) | Slack approval app setup. |
+| [operator/telegram.md](operator/telegram.md) | Telegram approval bot setup. |
 | [operator/sso.md](operator/sso.md) | OIDC single sign-on: providers, linking, group mapping, step-up, SSO-only mode. |

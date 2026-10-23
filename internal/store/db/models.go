@@ -38,6 +38,20 @@ type AccessSession struct {
 	DeleteAfter    sql.NullInt64
 }
 
+type ActionToken struct {
+	Hash           []byte
+	RequestID      string
+	Action         string
+	DurationS      sql.NullInt64
+	Provider       string
+	IntegrationID  string
+	ExpiresAt      int64
+	UsedAt         sql.NullInt64
+	UsedByOperator sql.NullString
+	Outcome        sql.NullString
+	CreatedAt      int64
+}
+
 type Agent struct {
 	ID              string
 	Name            string
@@ -149,6 +163,62 @@ type DeliveryAttempt struct {
 	DurationMs int64
 }
 
+type DestauditBatch struct {
+	CollectorID   string
+	Seq           int64
+	PayloadSha256 []byte
+	Signature     []byte
+	SentAt        int64
+	ReceivedAt    int64
+	Records       int64
+	Accepted      int64
+	Duplicates    int64
+	Rejected      int64
+}
+
+type DestauditCollector struct {
+	ID              string
+	ServerID        string
+	Name            string
+	PublicKey       []byte
+	Fingerprint     string
+	State           string
+	LastSeq         int64
+	LastBatchSha256 []byte
+	LastSeenAt      sql.NullInt64
+	CreatedAt       int64
+	CreatedBy       string
+	RevokedAt       sql.NullInt64
+	RevokedBy       sql.NullString
+	RevokeReason    sql.NullString
+}
+
+type DestauditLogin struct {
+	CollectorID     string
+	LoginRef        string
+	AccessSessionID string
+	ConnectionID    sql.NullString
+	Correlation     string
+	BoundAt         int64
+}
+
+type DestauditRecord struct {
+	ID              string
+	CollectorID     string
+	RecordRef       string
+	BatchSeq        int64
+	AccessSessionID string
+	ConnectionID    sql.NullString
+	TimelineEventID string
+	Correlation     string
+	Confidence      string
+	AfterSessionEnd int64
+	ReportedAt      int64
+	ReceivedAt      int64
+	DetailsEnc      []byte
+	PurgedAt        sql.NullInt64
+}
+
 type GatewayHostKey struct {
 	ID                string
 	Algorithm         string
@@ -231,6 +301,18 @@ type HostIdentity struct {
 	RetiredBy         sql.NullString
 }
 
+type Integration struct {
+	ID         string
+	Provider   string
+	Name       string
+	ConfigJson string
+	SecretsEnc []byte
+	Enabled    int64
+	Version    int64
+	CreatedAt  int64
+	UpdatedAt  int64
+}
+
 type IntegrityChain struct {
 	Seq            int64
 	SegmentID      string
@@ -307,6 +389,15 @@ type MfaTotp struct {
 	ConfirmedAt sql.NullInt64
 	LastStep    int64
 	CreatedAt   int64
+}
+
+type NotificationRoute struct {
+	ID            string
+	IntegrationID string
+	Destination   string
+	TargetsJson   string
+	Enabled       int64
+	CreatedAt     int64
 }
 
 type OidcAuthState struct {
@@ -459,6 +550,25 @@ type PolicyState struct {
 	LockdownBy sql.NullString
 	LockdownAt sql.NullInt64
 	UpdatedAt  int64
+}
+
+type ProviderLink struct {
+	Provider       string
+	Workspace      string
+	ProviderUserID string
+	OperatorID     string
+	Display        string
+	LinkedAt       int64
+	LinkedVia      string
+}
+
+type ProviderLinkCode struct {
+	Hash       []byte
+	OperatorID string
+	Provider   string
+	ExpiresAt  int64
+	UsedAt     sql.NullInt64
+	CreatedAt  int64
 }
 
 type QuarantineFile struct {
@@ -641,4 +751,10 @@ type WebSession struct {
 	RevokedAt         sql.NullInt64
 	RevokeReason      sql.NullString
 	DisplayID         string
+}
+
+type WebhookReplay struct {
+	Provider    string
+	Fingerprint string
+	ExpiresAt   int64
 }

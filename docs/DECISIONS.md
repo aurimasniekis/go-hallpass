@@ -482,6 +482,45 @@
   6. **Not implemented:** OTLP *metrics* export (Prometheus only), and copying the trace ID into audit-event
      correlation for SSH-originated events beyond the audit hook.
 
+### ADR-0035 — Approval notifications: core design and chat-adapter details
+- **Status:** accepted (WP16–WP18). Item 1 is a **security-relevant correction** of the threat model and is flagged
+  for operator review.
+- **Decision:**
+  1. **Threat-model correction** (*security-relevant*). THREAT_MODEL T-05 claimed that forged callbacks still need
+     "an authorized operator identity". That does not hold. With the Slack signing secret or the Telegram webhook
+     secret, an attacker can claim any provider user ID, including a linked approver's. The remaining barriers are:
+     - a valid, unused action token (Telegram shows button data to every chat member);
+     - the decision checks for the claimed operator.
+     The real mitigations are per-role `approval_channels` (web-only for sensitive roles) and the chat MFA requirement
+     (R-10). T-05 has been updated to say this.
+  2. **Single decision path:** web, Slack and Telegram decisions all call `access.Decide`, which checks role, approver
+     scope, self-approval, request state, lockdown and duration bounds in the decision transaction (HP-NTF-008).
+     Chat callbacks additionally require:
+     - a linked operator (`provider_links`);
+     - the chat MFA condition, which defaults on: local TOTP enrolled or a linked SSO identity;
+     - a per-operator rate limit of 30 decisions/min.
+  3. **Message rendering:** the request hook issues one hashed, single-use token per button (up to 5 approve
+     durations + deny) and enqueues an outbox row that carries only token IDs and request IDs. The text is rendered
+     at delivery time from the current request, so a request decided before delivery is not announced and reasons are
+     not copied into extra storage. Updates edit delivered messages; an update waits for its original message and gives
+     up if the original is dead.
+  4. **Webhook paths and verification:**
+     - webhooks are per integration: `/hooks/{slack|telegram}/{integration_id}` (PLAN named `/hooks/slack/interactions`);
+     - no cookies; 20 requests/s per integration;
+     - provider verification happens inside the adapters before parsing;
+     - replay caches are durable (`webhook_replay`).
+  5. **Adapter details:**
+     - Button payload is `hp1:<a|d>:<token>`.
+     - Telegram:
+       - private chats are accepted for `/link`;
+       - group chats must be route destinations or configured;
+       - link codes posted in groups are burned;
+       - rendering uses explicit entities and defangs `@` and `/` instead of a parse mode.
+     - Chat text collapses newlines.
+     - Status updates do not re-render the original message context.
+  6. **Not externally verified:** the adapters are tested against fake Slack and Telegram API servers only. Verification
+     against a real workspace and bot is pending and will be recorded as *externally verified* evidence when done.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

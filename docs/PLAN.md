@@ -1594,9 +1594,9 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP13 | Local operator auth, sessions, MFA | WP05 | in-progress | 1540b43 |
 | WP14 | OIDC SSO | WP13 | implemented | |
 | WP15 | RBAC, REST API, SSE | WP14, WP12 | implemented | |
-| WP16 | Web approvals and notification core | WP15 | planned | |
-| WP17 | Slack | WP16 | planned | |
-| WP18 | Telegram | WP16 | planned | |
+| WP16 | Web approvals and notification core | WP15 | implemented | |
+| WP17 | Slack | WP16 | implemented | |
+| WP18 | Telegram | WP16 | implemented | |
 | WP19 | Frontend foundation and design system | WP15 | in-progress | |
 | WP20 | Operational pages | WP19, WP16 | planned | |
 | WP21 | Timeline and replay UI | WP20 | planned | |
@@ -1631,6 +1631,7 @@ local run of the same targets the workflow executes, and the entry says so. Chec
 - 2026-10-23 — WP23: backup/restore/anchors/break-glass CLI (internal/backup, cmd backup|restore|anchors|admin): read-only online snapshot, ciphertext-only segment copy, manifest with hashes and KEK ID, verify, restore with staging and KEK check, anchor export/verify, offline bootstrap/recover. Partial items: restore drill, RTO, upgrade fixture, break-glass alert. ADR-0032 (restore --force security-relevant, R-13).
 - 2026-10-23 — WP24: packaging (root Dockerfile, distroless nonroot, compose, systemd unit), scripted reproducible release builds, release workflow (SBOM, provenance, Trivy, draft release), install/container/upgrade docs, CHANGELOG, VERSIONING, SECURITY.md. Not run on GitHub yet; ADR-0033 (Trivy waiver gap security-relevant, R-14).
 - 2026-10-23 — WP15 + WP22: REST API v1 (spec-first OpenAPI 3.1, in-repo generator, RBAC matrix, problem details, pagination, idempotency, SSE hub, OIDC browser endpoints, embedded UI) and observability (metrics registry, readiness checks, tracing, correlation, call-site instrumentation, serve wiring). Remaining API resources (integrations, retention, recording export) arrive with WP16-18/WP23 follow-ups. ADR-0031, ADR-0034.
+- 2026-10-23 — WP16-WP18: notification core (internal/notify, migration 0012): integrations and routes with sealed write-only secrets, action tokens, provider identity links and link codes, durable replay cache, outbox delivery through the Slack/Telegram adapters with delivery-time rendering, message updates, webhook routing under /hooks, chat MFA requirement and rate limits; API endpoints for integrations, routes, deliveries and links. THREAT_MODEL T-05 corrected (ADR-0035, security-relevant). Real Slack/Telegram verification pending (WP17/WP18 status implemented, not externally verified).
 <!-- progress-log-end -->
 
 ---
@@ -1888,7 +1889,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-API-006` Idempotent mutations — WP15 — evidence: I — ✅ tested: Idempotency-Key replay and conflict (internal/httpapi/api_test.go)
 - [x] `HP-API-007` Security headers — WP15 — evidence: I — ✅ tested: CSP, frame-ancestors, nosniff, referrer policy, no CORS (internal/httpapi/api_test.go TestAuthFlowAndProtections); HSTS when https
 - [x] `HP-API-008` API rate limiting — WP15 — evidence: I — ✅ tested: per-IP/session/auth rate limits (internal/httpapi/api_test.go TestRateLimit)
-- [ ] `HP-API-009` Webhook isolation — WP16 — evidence: I
+- [x] `HP-API-009` Webhook isolation — WP16 — evidence: I — ✅ tested: /hooks/* without cookies, verified before parsing, rate limited (internal/notify/notify_test.go)
 
 #### HP-UI — Web UI
 
@@ -1911,19 +1912,19 @@ check · R recovery drill · SR security review · D documentation review.
 
 #### HP-NTF — Approvals and notifications
 
-- [ ] `HP-NTF-001` Durable outbox — WP16 — evidence: I, FI
-- [ ] `HP-NTF-002` Notification content — WP16 — evidence: U, E
-- [ ] `HP-NTF-003` Escaping and mention suppression — WP16 — evidence: U, Z
-- [ ] `HP-NTF-004` No infrastructure disclosure — WP16 — evidence: U
-- [ ] `HP-NTF-005` Slack verification — WP17 — evidence: U, I
-- [ ] `HP-NTF-006` Telegram verification — WP18 — evidence: U, I
-- [ ] `HP-NTF-007` Action tokens — WP16 — evidence: U, I
-- [ ] `HP-NTF-008` Unified transactional decision — WP16 — evidence: I, FI
-- [ ] `HP-NTF-009` Idempotent callbacks — WP16 — evidence: I
-- [ ] `HP-NTF-010` No approval on failure — WP16 — evidence: FI, I
-- [ ] `HP-NTF-011` Explicit provider identity mapping — WP16 — evidence: I, E
-- [ ] `HP-NTF-012` Callback rate limits — WP16 — evidence: I
-- [ ] `HP-NTF-013` Web approvals — WP16 — evidence: I, E
+- [x] `HP-NTF-001` Durable outbox — WP16 — evidence: I, FI — ✅ tested: durable outbox with retries/dead letters, delivery history API (internal/notify/notify_test.go TestDeliveryFailureNeverApproves)
+- [x] `HP-NTF-002` Notification content — WP16 — evidence: U, E — ✅ tested: content (verified agent, server/role context, untrusted reason, expiry, durations, deny, link) (internal/notify/notify_test.go TestSlackApprovalFlow)
+- [x] `HP-NTF-003` Escaping and mention suppression — WP16 — evidence: U, Z — ✅ tested: escaping/mention suppression (adapter fuzz + internal/notify/notify_test.go)
+- [x] `HP-NTF-004` No infrastructure disclosure — WP16 — evidence: U — ✅ tested: no addresses in messages (internal/notify/notify_test.go TestSlackApprovalFlow)
+- [ ] `HP-NTF-005` Slack verification — WP17 — evidence: U, I — ◐ tested against fake Slack API (signature, timestamp, replay); real workspace verification pending
+- [ ] `HP-NTF-006` Telegram verification — WP18 — evidence: U, I — ◐ tested against fake Bot API (secret token, allowlist, callback_data, replay); real bot verification pending
+- [x] `HP-NTF-007` Action tokens — WP16 — evidence: U, I — ✅ tested: hashed single-use bound tokens, kind binding, never sufficient alone (internal/notify/notify_test.go)
+- [x] `HP-NTF-008` Unified transactional decision — WP16 — evidence: I, FI — ✅ tested: chat decisions via access.Decide with linked operator (internal/notify/notify_test.go)
+- [x] `HP-NTF-009` Idempotent callbacks — WP16 — evidence: I — ✅ tested: redelivery returns recorded outcome (internal/notify/notify_test.go)
+- [x] `HP-NTF-010` No approval on failure — WP16 — evidence: FI, I — ✅ tested: delivery failure leaves request pending (internal/notify/notify_test.go TestDeliveryFailureNeverApproves)
+- [x] `HP-NTF-011` Explicit provider identity mapping — WP16 — evidence: I, E — ✅ tested: link codes (single use, private chat), admin links, unlinking (internal/notify/notify_test.go)
+- [x] `HP-NTF-012` Callback rate limits — WP16 — evidence: I — ✅ tested: per-integration webhook rate limit, per-operator decision limit, per-session API limits
+- [x] `HP-NTF-013` Web approvals — WP16 — evidence: I, E — ✅ tested: web approval via API with duration choice and same decision service (internal/httpapi tests)
 
 #### HP-OPS — Operations and distribution
 

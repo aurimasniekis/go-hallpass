@@ -24,6 +24,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/inventory"
 	"github.com/aurimasniekis/go-hallpass/internal/jobs"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
+	"github.com/aurimasniekis/go-hallpass/internal/notify"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
 	"github.com/aurimasniekis/go-hallpass/internal/obs/fsstat"
 	"github.com/aurimasniekis/go-hallpass/internal/obs/health"
@@ -64,6 +65,7 @@ type App struct {
 	Health      *health.Checker
 	Auth        *opauth.Service
 	OIDC        *oidc.Service
+	Notify      *notify.Service
 	Proxy       *sshproxy.Proxy
 
 	// Recorders opens channel recordings; nil means recording is unavailable and mandatory-recording roles fail
@@ -74,10 +76,15 @@ type App struct {
 	HTTPListener net.Listener
 	// UI serves the embedded web application (nil: API only).
 	UI http.Handler
+
+	notifyOpts func(*notify.Options)
 }
 
 // Option customizes New.
 type Option func(*App)
+
+// WithNotifyOptions adjusts the notification core's options (tests: fake provider API endpoints).
+func WithNotifyOptions(f func(*notify.Options)) Option { return func(a *App) { a.notifyOpts = f } }
 
 // WithClock overrides the clock (tests).
 func WithClock(c clock.Clock) Option { return func(a *App) { a.Clock = c } }
@@ -153,6 +160,12 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 		Clock: a.Clock, Metrics: a.Metrics})
 	a.OIDC = oidc.New(a.Store, a.Keyring, a.Audit, a.Bus, a.Auth, oidc.Options{PublicURL: cfg.PublicURL, DevMode: !cfg.IsProduction(),
 		Clock: a.Clock, Logger: log, Metrics: a.Metrics})
+	nopts := notify.Options{PublicURL: cfg.PublicURL, Clock: a.Clock, Logger: log}
+	if a.notifyOpts != nil {
+		a.notifyOpts(&nopts)
+	}
+	a.Notify = notify.New(notify.Deps{Store: a.Store, Keyring: a.Keyring, Audit: a.Audit, Access: a.Access, Engine: a.Engine, Agents: a.Agents,
+		Inventory: a.Inventory, Auth: a.Auth, Outbox: a.Outbox}, nopts)
 	a.Health = health.New(health.Options{ExposeDetails: !cfg.IsProduction()})
 	a.Health.MustRegister(
 		health.StoreHealth("store", a.Store.Health()),
@@ -217,6 +230,9 @@ func (a *App) RunBackground(ctx context.Context) (wait func()) {
 	})
 	wg.Go(func() {
 		jobs.Periodic(ctx, log, "auth.purge_expired", 15*time.Minute, false, func(ctx context.Context) error {
+			if err := a.Notify.Purge(ctx); err != nil {
+				return err
+			}
 			if _, err := a.OIDC.PurgeStates(ctx); err != nil {
 				return err
 			}

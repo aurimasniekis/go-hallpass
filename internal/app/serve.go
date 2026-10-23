@@ -144,7 +144,7 @@ func (a *App) NewAPI() *httpapi.Server {
 		Matrix: rbac.New(rbac.Options{AuditorAddressRead: rc.AuditorAddressRead, ApproverRecordingPlay: rc.ApproverRecordingPlay,
 			AuditorRecordingExport: rc.AuditorRecordingExport, ApproversCanLockdown: rc.ApproversCanLockdown}),
 		Metrics: a.Metrics,
-		BootID: a.BootID, Version: buildinfo.Get().Version},
+		Notify:  a.Notify, BootID: a.BootID, Version: buildinfo.Get().Version},
 		httpapi.Options{PublicURL: a.Cfg.PublicURL, Secure: strings.HasPrefix(a.Cfg.PublicURL, "https://"), TrustedProxies: proxies, UI: a.UI,
 			Clock: a.Clock, Logger: a.Log})
 }
@@ -158,6 +158,7 @@ func (a *App) rootHandler(api http.Handler) http.Handler {
 	if a.Cfg.Telemetry.Prometheus && a.Cfg.HTTP.MetricsListen == "" {
 		mux.Handle("GET /metrics", a.Metrics.Handler())
 	}
+	mux.Handle("/hooks/", a.Notify.WebhookHandler())
 	mux.Handle("/", api)
 	return tracing.HTTPMiddleware(a.Metrics.HTTPMiddleware(mux))
 }

@@ -31,6 +31,7 @@ tags:
   - {name: sessions}
   - {name: audit}
   - {name: sso}
+  - {name: integrations}
   - {name: system}
   - {name: live}
 
@@ -1182,6 +1183,163 @@ paths:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AuthSettings"}}}}
         default: {$ref: "#/components/responses/Problem"}
 
+  # ---------------------------------------------------------------- approvals: integrations, routes, chat identities (WP16)
+  /api/v1/integrations:
+    get:
+      operationId: listIntegrations
+      tags: [integrations]
+      x-permission: integrations.manage
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Integration"}}}}}}}
+    post:
+      operationId: createIntegration
+      tags: [integrations]
+      x-permission: integrations.manage
+      x-reauth: true
+      x-mfa: true
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/IntegrationInput"}}}
+      responses:
+        "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/Integration"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/integrations/{id}:
+    get:
+      operationId: getIntegration
+      tags: [integrations]
+      x-permission: integrations.manage
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Integration"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    patch:
+      operationId: updateIntegration
+      tags: [integrations]
+      x-permission: integrations.manage
+      x-reauth: true
+      x-mfa: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/IntegrationInput"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Integration"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: deleteIntegration
+      tags: [integrations]
+      x-permission: integrations.manage
+      x-reauth: true
+      x-mfa: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "204": {description: deleted}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/notification-routes:
+    get:
+      operationId: listNotificationRoutes
+      tags: [integrations]
+      x-permission: integrations.manage
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/NotificationRoute"}}}}}}}
+    post:
+      operationId: createNotificationRoute
+      tags: [integrations]
+      x-permission: integrations.manage
+      x-reauth: true
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [integration_id, destination, targets], properties: {integration_id: {type: string}, destination: {type: string}, targets: {$ref: "#/components/schemas/Selector"}, enabled: {type: boolean}}}}}
+      responses:
+        "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/NotificationRoute"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/notification-routes/{id}:
+    delete:
+      operationId: deleteNotificationRoute
+      tags: [integrations]
+      x-permission: integrations.manage
+      x-reauth: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "204": {description: deleted}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/notification-deliveries:
+    get:
+      operationId: listNotificationDeliveries
+      tags: [integrations]
+      x-permission: integrations.manage
+      summary: Outbox delivery history including dead letters (HP-NTF-001).
+      parameters:
+        - {$ref: "#/components/parameters/Limit"}
+        - {name: state, in: query, schema: {type: string, enum: [queued, sending, delivered, dead]}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Delivery"}}}}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/me/provider-link-codes:
+    post:
+      operationId: createProviderLinkCode
+      tags: [me]
+      x-permission: session
+      summary: A single-use code (10 minutes) to send to the Slack/Telegram bot to link your chat identity (HP-NTF-011).
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [provider], properties: {provider: {type: string, enum: [slack, telegram]}}}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [code, expires_at], properties: {code: {type: string}, expires_at: {$ref: "#/components/schemas/Timestamp"}}}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/me/provider-links:
+    get:
+      operationId: listMyProviderLinks
+      tags: [me]
+      x-permission: session
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/ProviderLink"}}}}}}}
+    delete:
+      operationId: unlinkMyProviderLink
+      tags: [me]
+      x-permission: session
+      parameters:
+        - {name: provider, in: query, required: true, schema: {type: string}}
+        - {name: workspace, in: query, required: true, schema: {type: string}}
+        - {name: user_id, in: query, required: true, schema: {type: string}}
+      responses:
+        "204": {description: unlinked}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/operators/{id}/provider-links:
+    get:
+      operationId: listOperatorProviderLinks
+      tags: [operators]
+      x-permission: operators.manage
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/ProviderLink"}}}}}}}
+    post:
+      operationId: linkOperatorProvider
+      tags: [operators]
+      x-permission: operators.manage
+      x-reauth: true
+      x-mfa: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [provider, workspace, provider_user_id], properties: {provider: {type: string}, workspace: {type: string}, provider_user_id: {type: string}, display: {type: string}}}}}
+      responses:
+        "204": {description: linked}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: unlinkOperatorProvider
+      tags: [operators]
+      x-permission: operators.manage
+      x-reauth: true
+      parameters:
+        - {$ref: "#/components/parameters/ID"}
+        - {name: provider, in: query, required: true, schema: {type: string}}
+        - {name: workspace, in: query, required: true, schema: {type: string}}
+        - {name: user_id, in: query, required: true, schema: {type: string}}
+      responses:
+        "204": {description: unlinked}
+        default: {$ref: "#/components/responses/Problem"}
+
   # ---------------------------------------------------------------- system
   /api/v1/system/status:
     get:
@@ -1929,6 +2087,68 @@ components:
         mapped_roles: {type: array, items: {type: string}}
         mapped_groups: {type: array, items: {type: string}}
         effective_roles: {type: array, items: {type: string}}
+    Integration:
+      type: object
+      required: [id, provider, name, config, secrets_set, enabled, version, webhook_path]
+      properties:
+        id: {type: string}
+        provider: {type: string, enum: [slack, telegram]}
+        name: {type: string}
+        config: {type: object}
+        secrets_set: {type: array, items: {type: string}, description: names of stored secrets (values are write-only)}
+        enabled: {type: boolean}
+        version: {type: integer}
+        webhook_path: {type: string, description: "callback path to register at the provider, under the public URL"}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+        updated_at: {$ref: "#/components/schemas/Timestamp"}
+    IntegrationInput:
+      type: object
+      properties:
+        version: {type: integer}
+        provider: {type: string, enum: [slack, telegram]}
+        name: {type: string}
+        config: {type: object, description: "slack: {team_id, command}; telegram: {bot_username, allowed_chat_ids}"}
+        secrets: {type: object, additionalProperties: {type: string}, writeOnly: true, description: "slack: bot_token, signing_secret; telegram: bot_token, webhook_secret (generated when omitted)"}
+        enabled: {type: boolean}
+    NotificationRoute:
+      type: object
+      required: [id, integration_id, provider, destination, targets, enabled]
+      properties:
+        id: {type: string}
+        integration_id: {type: string}
+        provider: {type: string}
+        destination: {type: string}
+        targets: {$ref: "#/components/schemas/Selector"}
+        enabled: {type: boolean}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+    Delivery:
+      type: object
+      required: [id, provider, kind, state, attempts, max_attempts, created_at]
+      properties:
+        id: {type: string}
+        provider: {type: string}
+        destination: {type: string}
+        kind: {type: string}
+        subject_type: {type: string}
+        subject_id: {type: string}
+        state: {type: string}
+        attempts: {type: integer}
+        max_attempts: {type: integer}
+        next_at: {$ref: "#/components/schemas/Timestamp"}
+        last_error: {type: string}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+        updated_at: {$ref: "#/components/schemas/Timestamp"}
+    ProviderLink:
+      type: object
+      required: [provider, workspace, provider_user_id, operator_id, linked_at, linked_via]
+      properties:
+        provider: {type: string}
+        workspace: {type: string}
+        provider_user_id: {type: string}
+        operator_id: {type: string}
+        display: {type: string}
+        linked_at: {$ref: "#/components/schemas/Timestamp"}
+        linked_via: {type: string}
     AuthSettings:
       type: object
       required: [local_login_disabled]

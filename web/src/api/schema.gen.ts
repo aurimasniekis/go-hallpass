@@ -1342,6 +1342,136 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listIntegrations"];
+        put?: never;
+        post: operations["createIntegration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getIntegration"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteIntegration"];
+        options?: never;
+        head?: never;
+        patch: operations["updateIntegration"];
+        trace?: never;
+    };
+    "/api/v1/notification-routes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listNotificationRoutes"];
+        put?: never;
+        post: operations["createNotificationRoute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-routes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteNotificationRoute"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Outbox delivery history including dead letters (HP-NTF-001). */
+        get: operations["listNotificationDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/provider-link-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A single-use code (10 minutes) to send to the Slack/Telegram bot to link your chat identity (HP-NTF-011). */
+        post: operations["createProviderLinkCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/provider-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listMyProviderLinks"];
+        put?: never;
+        post?: never;
+        delete: operations["unlinkMyProviderLink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operators/{id}/provider-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listOperatorProviderLinks"];
+        put?: never;
+        post: operations["linkOperatorProvider"];
+        delete: operations["unlinkOperatorProvider"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/system/status": {
         parameters: {
             query?: never;
@@ -2061,6 +2191,67 @@ export interface components {
             mapped_roles: string[];
             mapped_groups: string[];
             effective_roles: string[];
+        };
+        Integration: {
+            id: string;
+            /** @enum {string} */
+            provider: "slack" | "telegram";
+            name: string;
+            config: Record<string, never>;
+            /** @description names of stored secrets (values are write-only) */
+            secrets_set: string[];
+            enabled: boolean;
+            version: number;
+            /** @description callback path to register at the provider, under the public URL */
+            webhook_path: string;
+            created_at?: components["schemas"]["Timestamp"];
+            updated_at?: components["schemas"]["Timestamp"];
+        };
+        IntegrationInput: {
+            version?: number;
+            /** @enum {string} */
+            provider?: "slack" | "telegram";
+            name?: string;
+            /** @description slack: {team_id, command}; telegram: {bot_username, allowed_chat_ids} */
+            config?: Record<string, never>;
+            /** @description slack: bot_token, signing_secret; telegram: bot_token, webhook_secret (generated when omitted) */
+            secrets?: {
+                [key: string]: string;
+            };
+            enabled?: boolean;
+        };
+        NotificationRoute: {
+            id: string;
+            integration_id: string;
+            provider: string;
+            destination: string;
+            targets: components["schemas"]["Selector"];
+            enabled: boolean;
+            created_at?: components["schemas"]["Timestamp"];
+        };
+        Delivery: {
+            id: string;
+            provider: string;
+            destination?: string;
+            kind: string;
+            subject_type?: string;
+            subject_id?: string;
+            state: string;
+            attempts: number;
+            max_attempts: number;
+            next_at?: components["schemas"]["Timestamp"];
+            last_error?: string;
+            created_at: components["schemas"]["Timestamp"];
+            updated_at?: components["schemas"]["Timestamp"];
+        };
+        ProviderLink: {
+            provider: string;
+            workspace: string;
+            provider_user_id: string;
+            operator_id: string;
+            display?: string;
+            linked_at: components["schemas"]["Timestamp"];
+            linked_via: string;
         };
         AuthSettings: {
             local_login_disabled: boolean;
@@ -4747,6 +4938,378 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AuthSettings"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listIntegrations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Integration"][];
+                    };
+                };
+            };
+        };
+    };
+    createIntegration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntegrationInput"];
+            };
+        };
+        responses: {
+            /** @description created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Integration"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getIntegration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Integration"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteIntegration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateIntegration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntegrationInput"];
+            };
+        };
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Integration"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listNotificationRoutes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["NotificationRoute"][];
+                    };
+                };
+            };
+        };
+    };
+    createNotificationRoute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    integration_id: string;
+                    destination: string;
+                    targets: components["schemas"]["Selector"];
+                    enabled?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRoute"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteNotificationRoute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listNotificationDeliveries: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                state?: "queued" | "sending" | "delivered" | "dead";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Delivery"][];
+                    };
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createProviderLinkCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    provider: "slack" | "telegram";
+                };
+            };
+        };
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        expires_at: components["schemas"]["Timestamp"];
+                    };
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listMyProviderLinks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ProviderLink"][];
+                    };
+                };
+            };
+        };
+    };
+    unlinkMyProviderLink: {
+        parameters: {
+            query: {
+                provider: string;
+                workspace: string;
+                user_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description unlinked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listOperatorProviderLinks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ProviderLink"][];
+                    };
+                };
+            };
+        };
+    };
+    linkOperatorProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    provider: string;
+                    workspace: string;
+                    provider_user_id: string;
+                    display?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description linked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    unlinkOperatorProvider: {
+        parameters: {
+            query: {
+                provider: string;
+                workspace: string;
+                user_id: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description unlinked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };
