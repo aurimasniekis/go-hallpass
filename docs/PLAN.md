@@ -1603,7 +1603,7 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP22 | Observability | WP15 | implemented | |
 | WP23 | Backup/restore/upgrade/break-glass | WP12, WP13 | implemented | |
 | WP24 | Packaging and release pipeline | WP22, WP23 | implemented | |
-| WP25 | Destination-side audit integration | WP12, WP21 | planned | |
+| WP25 | Destination-side audit integration | WP12, WP21 | implemented | |
 | WP26 | Hardening | WP01–WP25 | planned | |
 | WP27 | Release-gate validation and RC | WP26 | planned | |
 
@@ -1632,6 +1632,7 @@ local run of the same targets the workflow executes, and the entry says so. Chec
 - 2026-10-23 — WP24: packaging (root Dockerfile, distroless nonroot, compose, systemd unit), scripted reproducible release builds, release workflow (SBOM, provenance, Trivy, draft release), install/container/upgrade docs, CHANGELOG, VERSIONING, SECURITY.md. Not run on GitHub yet; ADR-0033 (Trivy waiver gap security-relevant, R-14).
 - 2026-10-23 — WP15 + WP22: REST API v1 (spec-first OpenAPI 3.1, in-repo generator, RBAC matrix, problem details, pagination, idempotency, SSE hub, OIDC browser endpoints, embedded UI) and observability (metrics registry, readiness checks, tracing, correlation, call-site instrumentation, serve wiring). Remaining API resources (integrations, retention, recording export) arrive with WP16-18/WP23 follow-ups. ADR-0031, ADR-0034.
 - 2026-10-23 — WP16-WP18: notification core (internal/notify, migration 0012): integrations and routes with sealed write-only secrets, action tokens, provider identity links and link codes, durable replay cache, outbox delivery through the Slack/Telegram adapters with delivery-time rendering, message updates, webhook routing under /hooks, chat MFA requirement and rate limits; API endpoints for integrations, routes, deliveries and links. THREAT_MODEL T-05 corrected (ADR-0035, security-relevant). Real Slack/Telegram verification pending (WP17/WP18 status implemented, not externally verified).
+WP25 (2026-10-23): destination-side audit integration (internal/destaudit, cmd/hallpass-collector, migration 0014, /hooks/destaudit/{collector_id}, collector and record API). Deviations in ADR-0037 (route, separate binary, no HALLPASS_SESSION marker). Fixed unbounded webhook rate-limiter key table. OpenSSH+auditd container test pending.
 <!-- progress-log-end -->
 
 ---
@@ -1748,7 +1749,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-POL-011` Approver authority rules — WP08 — evidence: U, I — ✅ tested (local) @ WP08: approver rules + internal role required; admins need rules too
 - [x] `HP-POL-012` Self-approval prohibition — WP08 — evidence: U, I — ✅ tested (local) @ WP08: agent owners + policy.prohibit_self_approval (default prohibited)
 - [x] `HP-POL-013` Auto-approval within limits — WP08 — evidence: U, I — ✅ tested (local) @ WP08: AutoApproves only ≤ auto max; longer requests need a human; decision recording in WP09
-- [ ] `HP-POL-014` Command allowlists are not a sandbox — WP08 — evidence: D — ◐ WP08: docs/operator/policy.md states capabilities are channel types, not a sandbox; destination hardening guide WP25
+- [x] `HP-POL-014` Command allowlists are not a sandbox — WP08 — evidence: D — ✅ done: docs/operator/policy.md (capabilities are channel types) + docs/destination/hardening.md (allowlists are not a sandbox; ForceCommand/sudoers)
 
 #### HP-REQ — Access requests
 
@@ -1781,7 +1782,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-SES-001` Session per grant — WP09 — evidence: I — ✅ tested (local) @ WP09: 1:1 session created in approval tx
 - [x] `HP-SES-002` Connections and channels — WP09 — evidence: I, O — ✅ tested: connections/channels recorded with states and close reasons over SSH (e2e)
 - [x] `HP-SES-003` Session closure — WP09 — evidence: I — ✅ tested (local) @ WP09: closing while channels live, closed with reason when grant ended and channels closed
-- [ ] `HP-SES-004` Detached processes — WP25 — evidence: D
+- [x] `HP-SES-004` Detached processes — WP25 — evidence: D — ✅ done: docs/destination/hardening.md (logind KillUserProcesses, cgroups, PAM limits, ClientAlive*); destination audit flags after_session_end records
 - [ ] `HP-SES-005` Live activity view — WP20 — evidence: E
 
 #### HP-REC — Event history and recording
@@ -1797,7 +1798,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-REC-009` Accurate incomplete marking — WP12 — evidence: FI, I — ✅ tested: TestReconcileStartup, TestReconcileUnrecoverableAndVerifyMissing
 - [ ] `HP-REC-010` Unified timeline, distinct streams — WP21 — evidence: E
 - [x] `HP-REC-011` No silent event drops — WP12 — evidence: U, FI, S — ✅ tested: TestRecorderBackpressure (block then fail, never drop)
-- [ ] `HP-REC-012` Destination-side audit integration — WP25 — evidence: O, D
+- [ ] `HP-REC-012` Destination-side audit integration — WP25 — evidence: O, D — ◐ implemented + tested (unit/integration): signed collector batches, certificate/managed-key correlation, sealed details, provenance labels (internal/destaudit, cmd/hallpass-collector, httpapi TestAdministrationFlow); OpenSSH+auditd container test pending; ADR-0037
 - [ ] `HP-REC-013` Retention and deletion — WP12 — evidence: I, E — ◐ tested: per-role-class retention (recording.retention_classes) + tombstones (config + recording tests); UI display pending WP20
 - [ ] `HP-REC-014` Restricted, audited download — WP21 — evidence: E, I — ◐ tested: playback and export separate permissions, recent auth + MFA for export, both audited (internal/httpapi tests); UI pending WP21
 
@@ -1967,7 +1968,7 @@ check · R recovery drill · SR security review · D documentation review.
 
 - [ ] `HP-DOC-001` Operator guide — WP24 — evidence: D — ◐ partial: install/container/upgrade/backup/observability/sso/recording guides; incident runbooks pending
 - [x] `HP-DOC-002` Agent guide — WP10 — evidence: D — ✅ done: docs/agent/{guide,exit-codes,json-schemas}.md
-- [ ] `HP-DOC-003` Destination hardening guide — WP25 — evidence: D
+- [x] `HP-DOC-003` Destination hardening guide — WP25 — evidence: D — ✅ done: docs/destination/hardening.md + docs/destination/audit-collector.md
 - [ ] `HP-DOC-004` Guarantees and non-guarantees — WP27 — evidence: D — ◐ written: docs/security-guarantees.md (G-1..G-10 with status, non-guarantees, assumptions) consistent with THREAT_MODEL; release-time consistency review is part of RG-10 (WP27)
 - [x] `HP-DOC-005` Recording format spec — WP12 — evidence: D — ✅ done: docs/formats/hprec1.md + docs/operator/recording.md
 - [ ] `HP-DOC-006` Changelog and versioning — WP24 — evidence: D — ◐ done: CHANGELOG.md + docs/VERSIONING.md (policy commitments await operator review, R-15)

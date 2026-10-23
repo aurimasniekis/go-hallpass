@@ -82,7 +82,7 @@ func newHarness(t *testing.T) *harness {
 	must(t, err)
 	h := &harness{t: t, ctx: ctx, clk: clk, a: a, base: cfg.PublicURL, matrix: rbac.New(rbac.Options{}), spec: loadSpec(t)}
 	h.api = httpapi.New(httpapi.Deps{Store: a.Store, Audit: a.Audit, Bus: a.Bus, Agents: a.Agents, Inventory: a.Inventory, Credentials: a.Credentials,
-		Engine: a.Engine, Policy: a.Policy, Access: a.Access, Enforcer: a.Enforcer, Recording: a.Recording, Auth: a.Auth, OIDC: a.OIDC, Notify: a.Notify,
+		Engine: a.Engine, Policy: a.Policy, Access: a.Access, Enforcer: a.Enforcer, Recording: a.Recording, Auth: a.Auth, OIDC: a.OIDC, Notify: a.Notify, Destaudit: a.Destaudit,
 		Matrix: h.matrix, BootID: a.BootID, Version: buildinfo.Get().Version},
 		httpapi.Options{PublicURL: cfg.PublicURL, Clock: clk, SessionRate: 100000, IPRate: 100000, AuthRate: 100000})
 	rctx, cancel := context.WithCancel(ctx)
@@ -649,6 +649,31 @@ func TestAdministrationFlow(t *testing.T) {
 	r = c.ok("exportSessionRecordings", 200, "GET", "/api/v1/access-sessions/"+dec.Grant.SessionID+"/export", nil)
 	if !strings.Contains(string(r.body), `"complete":true`) {
 		t.Fatalf("export %s", r.body)
+	}
+	// HP-REC-012: destination audit collectors and records.
+	ck := sshkeys.Ed25519(t)
+	r = c.ok("registerDestinationCollector", 201, "POST", "/api/v1/destination-collectors", map[string]any{"server_id": srv.ID, "name": "web1-auditd",
+		"public_key": ck.AuthorizedLine("")})
+	var col struct{ ID, State string }
+	r.json(t, &col)
+	if col.State != "active" {
+		t.Fatalf("collector %s", r.body)
+	}
+	c.ok("listDestinationCollectors", 200, "GET", "/api/v1/destination-collectors?server_id="+srv.ID, nil)
+	c.ok("getDestinationCollector", 200, "GET", "/api/v1/destination-collectors/"+col.ID, nil)
+	c.ok("listSessionDestinationRecords", 200, "GET", "/api/v1/access-sessions/"+dec.Grant.SessionID+"/destination-records", nil)
+	if r := c.do("GET", "/api/v1/destination-records/dar_missing", nil); r.status != 404 {
+		t.Fatalf("missing record: %d %s", r.status, r.body)
+	}
+	if r := viewer.do("POST", "/api/v1/destination-collectors", map[string]any{"server_id": srv.ID, "name": "x", "public_key": ck.AuthorizedLine("")}); r.status != 403 {
+		t.Fatalf("viewer registered a collector: %d", r.status)
+	}
+	if r := viewer.do("GET", "/api/v1/destination-records/dar_missing", nil); r.status != 403 {
+		t.Fatalf("viewer read record details: %d", r.status)
+	}
+	r = c.ok("revokeDestinationCollector", 200, "POST", "/api/v1/destination-collectors/"+col.ID+"/revoke", map[string]string{"reason": "decommissioned"})
+	if !strings.Contains(string(r.body), `"state":"revoked"`) {
+		t.Fatalf("revoke %s", r.body)
 	}
 	c.ok("acknowledgeBreakGlass", 200, "POST", "/api/v1/system/breakglass-ack", nil)
 	if r := viewer.do("GET", "/api/v1/access-sessions/"+dec.Grant.SessionID+"/export", nil); r.status != 403 {

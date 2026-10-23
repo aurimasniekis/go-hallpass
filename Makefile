@@ -11,6 +11,7 @@ all: check build
 
 build:
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN)/hallpass ./cmd/hallpass
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN)/hallpass-collector ./cmd/hallpass-collector
 
 test:
 	$(GO) test ./...

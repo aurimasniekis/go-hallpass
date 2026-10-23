@@ -77,15 +77,30 @@ Hallpass records what crosses the gateway: exec command strings, terminal output
 reconstruct every command typed into an interactive shell, and it never labels inferred commands as verified. For
 command-level accountability, enable destination auditing:
 
-- `auditd` rules for `execve` by role accounts (`-a always,exit -F arch=b64 -S execve -F auid>=1000 -F auid!=-1 -k hallpass`).
+- `auditd` rules for `execve` by role accounts (`-a always,exit -F arch=b64 -S execve -S execveat -F auid>=1000 -F auid!=-1 -k hallpass`).
   Kernel exec auditing sees executed binaries and arguments, but not shell built-ins (`cd`, `echo`, `export`, …) or the
   intent behind them.
 - Shell history (`HISTFILE`, `PROMPT_COMMAND` logging) is user-writable and can be disabled or forged by the session itself.
   Treat it as a hint, never as evidence.
 - A root user on the destination can alter destination logs. Ship them off the host promptly.
 
-Hallpass's optional destination audit integration (WP25) correlates such records with access sessions and labels them with
-their provenance.
+### Shipping exec records to Hallpass (optional)
+
+The reference collector `hallpass-collector` reads the audit log and sshd's log on the destination. It signs batches
+with its own Ed25519 key, enrolled in Hallpass per server, and posts them to Hallpass. Hallpass attaches records it can
+attribute to an access session as `destination.exec` timeline events, labeled `provenance: destination-audit` and
+`verified: false`, with a correlation method and confidence. Setup, the correlation rules, the wire format and the
+limits are in [audit-collector.md](audit-collector.md). Key points:
+
+- **Use certificates** for roles whose sessions overlap. The certificate key ID names the grant and connection, so
+  correlation is exact (`confidence: high`). A managed login key is shared by all sessions of a role, so records are
+  attached only when exactly one session used it at the login time; otherwise they are refused as `ambiguous`.
+- Records of processes that kept running after the session ended are still attached, up to 24 hours, flagged
+  `after_session_end`. Use them to check the process-lifecycle controls in §5.
+- Keep `pam_loginuid` in sshd's PAM stack and sshd at `LogLevel INFO` or higher. Correlation needs both the audit
+  session (`ses`) and the `Accepted publickey … ID …` log line.
+- The collector key is only as safe as root on the destination. A compromised destination can forge or suppress
+  records, so revoke its collector in Hallpass during incident response.
 
 ## Checklist
 
@@ -96,3 +111,4 @@ their provenance.
 - [ ] `KillUserProcesses=yes`, lingering disabled, cron/at denied
 - [ ] Destination egress restricted where exfiltration matters
 - [ ] auditd (or equivalent) shipping to an external store
+- [ ] Optional: `hallpass-collector` enrolled for the server and shipping exec records (certificate-based roles preferred)

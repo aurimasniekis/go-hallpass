@@ -184,10 +184,14 @@ const (
 	EvExecRequested   = "exec.requested"
 	EvRecordingFailed = "recording.failed"
 	EvSessionClosed   = "access_session.closed"
+	// EvDestinationExec is a destination-reported exec record ingested from a signed collector (WP25, HP-REC-012).
+	// It is never verified by Hallpass; its data carries provenance "destination-audit" and verified=false.
+	EvDestinationExec = "destination.exec"
 )
 
 // TimelineEvent is one lifecycle event (payloads here are non-sensitive; terminal data lives in recordings).
 type TimelineEvent struct {
+	ID           string // optional; generated when empty
 	SessionID    string
 	RequestID    string
 	Seq          int64 // 0 = unsequenced (request events before a session exists)
@@ -198,6 +202,12 @@ type TimelineEvent struct {
 	Data         map[string]any
 	// IdempotencyKey defaults to type + subject IDs; retries with the same key do not duplicate (HP-REC-003).
 	IdempotencyKey string
+}
+
+// AppendTimeline writes ev inside tx (for packages that attach their own events to a session timeline, such as
+// internal/destaudit). Sequence numbers must come from the session's Sequencer, reserved before the transaction.
+func AppendTimeline(ctx context.Context, tx *store.Tx, ev TimelineEvent) error {
+	return appendTimeline(ctx, tx, ev)
 }
 
 func appendTimeline(ctx context.Context, tx *store.Tx, ev TimelineEvent) error {
@@ -213,8 +223,12 @@ func appendTimeline(ctx context.Context, tx *store.Tx, ev TimelineEvent) error {
 	if key == "" {
 		key = fmt.Sprintf("%s|%s|%s|%s|%s|%d", ev.Type, ev.RequestID, ev.SessionID, ev.ConnectionID, ev.ChannelID, ev.Seq)
 	}
+	id := ev.ID
+	if id == "" {
+		id = ids.New(ids.Event)
+	}
 	return tx.Q.InsertTimelineEvent(ctx, db.InsertTimelineEventParams{
-		ID:              ids.New(ids.Event),
+		ID:              id,
 		AccessSessionID: sql.NullString{String: ev.SessionID, Valid: ev.SessionID != ""},
 		RequestID:       sql.NullString{String: ev.RequestID, Valid: ev.RequestID != ""},
 		Seq:             sql.NullInt64{Int64: ev.Seq, Valid: ev.Seq > 0},

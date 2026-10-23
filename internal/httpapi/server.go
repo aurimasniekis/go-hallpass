@@ -23,6 +23,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/audit"
 	"github.com/aurimasniekis/go-hallpass/internal/clock"
 	"github.com/aurimasniekis/go-hallpass/internal/credentials"
+	"github.com/aurimasniekis/go-hallpass/internal/destaudit"
 	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
 	"github.com/aurimasniekis/go-hallpass/internal/httpapi/gen"
 	"github.com/aurimasniekis/go-hallpass/internal/inventory"
@@ -53,6 +54,7 @@ type Deps struct {
 	Auth        *opauth.Service
 	OIDC        *oidc.Service
 	Notify      *notify.Service
+	Destaudit   *destaudit.Service
 	Matrix      *rbac.Matrix
 	Metrics     *metrics.Metrics
 	BootID      string

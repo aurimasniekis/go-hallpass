@@ -1197,6 +1197,89 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/access-sessions/{id}/destination-records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Destination-reported exec records correlated to the session (metadata only, unverified; HP-REC-012). */
+        get: operations["listSessionDestinationRecords"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/destination-records/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One destination record with its decrypted, untrusted exec details. Every access is audited. */
+        get: operations["getDestinationRecord"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/destination-collectors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listDestinationCollectors"];
+        put?: never;
+        /** Enroll a destination audit collector's Ed25519 public key for one server. Its batches can attach records to every session on that server. */
+        post: operations["registerDestinationCollector"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/destination-collectors/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getDestinationCollector"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/destination-collectors/{id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revokeDestinationCollector"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/activities": {
         parameters: {
             query?: never;
@@ -1935,6 +2018,50 @@ export interface components {
             created_at: components["schemas"]["Timestamp"];
             created_by?: string;
             authorized_keys_line: string;
+        };
+        DestinationCollector: {
+            id: string;
+            server_id: string;
+            name: string;
+            public_key: string;
+            fingerprint: string;
+            /** @enum {string} */
+            state: "active" | "revoked";
+            last_seq: number;
+            last_seen_at?: components["schemas"]["Timestamp"];
+            created_at: components["schemas"]["Timestamp"];
+            created_by: string;
+            revoked_at?: components["schemas"]["Timestamp"];
+            revoked_by?: string;
+            revoke_reason?: string;
+        };
+        DestinationCollectorInput: {
+            server_id: string;
+            name: string;
+            /** @description ssh-ed25519 key in authorized_keys format (hallpass-collector pubkey) */
+            public_key: string;
+        };
+        /** @description Destination-reported, never verified by Hallpass. exe, argv and cwd are present only on the single-record endpoint and are untrusted text. */
+        DestinationRecord: {
+            id: string;
+            session_id: string;
+            connection_id?: string;
+            collector_id: string;
+            record_ref: string;
+            batch_seq: number;
+            timeline_event_id: string;
+            provenance: string;
+            verified: boolean;
+            correlation: string;
+            confidence: string;
+            after_session_end: boolean;
+            reported_at: components["schemas"]["Timestamp"];
+            received_at: components["schemas"]["Timestamp"];
+            purged?: boolean;
+            exe?: string;
+            argv?: string[];
+            cwd?: string;
+            truncated?: boolean;
         };
         UserCA: {
             id: string;
@@ -4653,6 +4780,156 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecordPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listSessionDestinationRecords: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["DestinationRecord"][];
+                    };
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getDestinationRecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DestinationRecord"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listDestinationCollectors: {
+        parameters: {
+            query?: {
+                server_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["DestinationCollector"][];
+                    };
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    registerDestinationCollector: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DestinationCollectorInput"];
+            };
+        };
+        responses: {
+            /** @description created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DestinationCollector"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getDestinationCollector: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DestinationCollector"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    revokeDestinationCollector: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DestinationCollector"];
                 };
             };
             default: components["responses"]["Problem"];

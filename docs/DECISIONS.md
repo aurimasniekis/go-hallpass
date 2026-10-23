@@ -539,6 +539,47 @@
   4. **Audit sink:** `log.audit_file` appends every committed audit record as one JSON line (0600) for SIEM
      ingestion. The database hash chain stays authoritative (HP-OBS-005).
 
+### ADR-0037 — Destination-side audit integration details (WP25)
+- **Status:** accepted. **Security-relevant change** (operator review): it adds an ingest route that operator sessions
+  do not protect, and narrows PLAN's correlation design.
+- **Context:** PLAN WP25 proposed a `hallpass collector` subcommand that posts to `/api/v1/destaudit/ingest` and
+  correlates through a `HALLPASS_SESSION` environment marker.
+- **Decision:**
+  1. **Ingest route.** Collectors post to `POST /hooks/destaudit/{collector_id}`, not under `/api/v1`. The route needs
+     no operator session, CSRF token or idempotency key; the batch signature authenticates it.
+     - Signature: Ed25519 over `"hallpass-destaudit-batch-v1\x00" || payload`, with the collector's enrolled key,
+       verified before the payload is parsed.
+     - Unknown collector, revoked collector and bad signature all return the same 401. Signature failures are logged
+       but not audited, so unauthenticated traffic cannot grow the audit log.
+     - Limits: 1 MiB bodies, strictly increasing per-collector sequence numbers (exact resends return the stored
+       result; anything else gets 409), ±2 minute clock skew, records at most 24 h old, 500 records per batch.
+     - Rate limit: 10 requests/s per collector ID, with a bounded key table.
+  2. **Separate binary.** The collector ships as `cmd/hallpass-collector` (`keygen`, `pubkey`, `run`), not as a
+     `hallpass` subcommand, so the gateway binary and its credentials never need to be installed on destinations.
+  3. **No `HALLPASS_SESSION` marker.** The agent controls the environment it sends, so the marker would be forgeable.
+     Correlation never uses collector-supplied session IDs:
+     - *certificate logins (high confidence):* the certificate key ID `hallpass:<role>:<grant>:<conn>` is checked
+       against the grant's server, role and remote user, the connection, and the session time window;
+     - *managed-key logins (medium confidence):* fingerprint plus server and user, and exactly one session must have
+       a channel using that credential at login time;
+     - ambiguous matches are refused, and a destination login is bound to one session.
+  4. **Sealed details.** Exec details (exe, argv, cwd) are sealed with the field key and kept out of timeline data.
+     The timeline holds only metadata labeled `provenance: destination-audit`, `verified: false`, with correlation
+     and confidence. Retention purges the sealed details through a trigger and leaves a tombstone.
+  5. **Late records.** Records up to 24 h after the session ended are attached with `after_session_end` set: the
+     signal for detached processes (HP-SES-004).
+  6. **API.**
+     - Registering a collector needs `credentials.manage` with recent authentication and MFA, because a collector
+       can attach records to every session on its server. Revoking it needs recent authentication.
+     - Listing collectors needs `inventory.read`, and record metadata needs `sessions.read`.
+     - Decrypted record details need `recording.play` and are audited as `destaudit.record.read`, like playback
+       (HP-REC-014).
+- **Bug fixed alongside:** the Slack/Telegram webhook rate limiter kept one entry per path ID without bound, and
+  unauthenticated requests choose that ID. Both webhook routes now use `internal/ratelimit.Window`, which prunes expired
+  windows and sends unseen keys to a shared overflow window once its table is full.
+- **Consequences:** HP-REC-012 is implemented and covered by unit and integration tests. The OpenSSH + auditd
+  container test from PLAN WP25 does not exist yet, so the requirement stays partial.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

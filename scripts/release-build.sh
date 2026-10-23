@@ -108,11 +108,14 @@ for platform in "${platforms[@]}"; do
   echo "build $platform -> $name.tar.gz" >&2
   CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch GOFLAGS=-mod=readonly \
     "$go_cmd" build -tags "$tags" -trimpath -buildvcs="$buildvcs" -ldflags "$ldflags" -o "$stage/hallpass" ./cmd/hallpass
+  # Destination-side audit collector (optional, installed on destinations; HP-REC-012).
+  CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch GOFLAGS=-mod=readonly \
+    "$go_cmd" build -trimpath -buildvcs="$buildvcs" -ldflags "$ldflags" -o "$stage/hallpass-collector" ./cmd/hallpass-collector
   cp deploy/examples/hallpass.example.yaml "$stage/"
   [[ -f deploy/systemd/hallpass.service ]] && cp deploy/systemd/hallpass.service "$stage/"
   [[ -f CHANGELOG.md ]] && cp CHANGELOG.md "$stage/"
-  chmod 0755 "$stage/hallpass"
-  find "$stage" -type f ! -name hallpass -exec chmod 0644 {} +
+  chmod 0755 "$stage/hallpass" "$stage/hallpass-collector"
+  find "$stage" -type f ! -name hallpass ! -name hallpass-collector -exec chmod 0644 {} +
   find "$stage" -exec env TZ=UTC touch -h -t "$touch_stamp" {} +
 
   archive="$out/$name.tar.gz"

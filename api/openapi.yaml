@@ -1038,6 +1038,73 @@ paths:
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/RecordPage"}}}}
         default: {$ref: "#/components/responses/Problem"}
+  /api/v1/access-sessions/{id}/destination-records:
+    get:
+      operationId: listSessionDestinationRecords
+      tags: [sessions]
+      x-permission: sessions.read
+      summary: Destination-reported exec records correlated to the session (metadata only, unverified; HP-REC-012).
+      parameters:
+        - {$ref: "#/components/parameters/ID"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/DestinationRecord"}}}}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/destination-records/{id}:
+    get:
+      operationId: getDestinationRecord
+      tags: [sessions]
+      x-permission: recording.play
+      summary: One destination record with its decrypted, untrusted exec details. Every access is audited.
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/DestinationRecord"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/destination-collectors:
+    get:
+      operationId: listDestinationCollectors
+      tags: [credentials]
+      x-permission: inventory.read
+      parameters:
+        - {name: server_id, in: query, schema: {type: string}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/DestinationCollector"}}}}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      operationId: registerDestinationCollector
+      tags: [credentials]
+      x-permission: credentials.manage
+      x-reauth: true
+      x-mfa: true
+      summary: Enroll a destination audit collector's Ed25519 public key for one server. Its batches can attach records to every session on that server.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/DestinationCollectorInput"}}}
+      responses:
+        "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/DestinationCollector"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/destination-collectors/{id}:
+    get:
+      operationId: getDestinationCollector
+      tags: [credentials]
+      x-permission: inventory.read
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/DestinationCollector"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/destination-collectors/{id}/revoke:
+    post:
+      operationId: revokeDestinationCollector
+      tags: [credentials]
+      x-permission: credentials.manage
+      x-reauth: true
+      x-idempotency-key: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        content: {application/json: {schema: {$ref: "#/components/schemas/ReasonRequest"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/DestinationCollector"}}}}
+        default: {$ref: "#/components/responses/Problem"}
   /api/v1/activities:
     get:
       operationId: listActivities
@@ -1784,6 +1851,55 @@ components:
         created_at: {$ref: "#/components/schemas/Timestamp"}
         created_by: {type: string}
         authorized_keys_line: {type: string}
+    DestinationCollector:
+      type: object
+      required: [id, server_id, name, public_key, fingerprint, state, last_seq, created_at, created_by]
+      properties:
+        id: {type: string}
+        server_id: {type: string}
+        name: {type: string}
+        public_key: {type: string}
+        fingerprint: {type: string}
+        state: {type: string, enum: [active, revoked]}
+        last_seq: {type: integer}
+        last_seen_at: {$ref: "#/components/schemas/Timestamp"}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+        created_by: {type: string}
+        revoked_at: {$ref: "#/components/schemas/Timestamp"}
+        revoked_by: {type: string}
+        revoke_reason: {type: string}
+    DestinationCollectorInput:
+      type: object
+      additionalProperties: false
+      required: [server_id, name, public_key]
+      properties:
+        server_id: {type: string}
+        name: {type: string, maxLength: 64}
+        public_key: {type: string, maxLength: 512, description: "ssh-ed25519 key in authorized_keys format (hallpass-collector pubkey)"}
+    DestinationRecord:
+      type: object
+      description: Destination-reported, never verified by Hallpass. exe, argv and cwd are present only on the single-record endpoint and are untrusted text.
+      required: [id, session_id, collector_id, record_ref, batch_seq, timeline_event_id, provenance, verified, correlation, confidence, after_session_end, reported_at, received_at]
+      properties:
+        id: {type: string}
+        session_id: {type: string}
+        connection_id: {type: string}
+        collector_id: {type: string}
+        record_ref: {type: string}
+        batch_seq: {type: integer}
+        timeline_event_id: {type: string}
+        provenance: {type: string}
+        verified: {type: boolean}
+        correlation: {type: string}
+        confidence: {type: string}
+        after_session_end: {type: boolean}
+        reported_at: {$ref: "#/components/schemas/Timestamp"}
+        received_at: {$ref: "#/components/schemas/Timestamp"}
+        purged: {type: boolean}
+        exe: {type: string}
+        argv: {type: array, items: {type: string}}
+        cwd: {type: string}
+        truncated: {type: boolean}
     UserCA:
       type: object
       required: [id, name, algorithm, public_key, fingerprint, external, state]

@@ -18,6 +18,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/clock"
 	"github.com/aurimasniekis/go-hallpass/internal/config"
 	"github.com/aurimasniekis/go-hallpass/internal/credentials"
+	"github.com/aurimasniekis/go-hallpass/internal/destaudit"
 	"github.com/aurimasniekis/go-hallpass/internal/egress"
 	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
 	"github.com/aurimasniekis/go-hallpass/internal/ids"
@@ -66,6 +67,7 @@ type App struct {
 	Auth        *opauth.Service
 	OIDC        *oidc.Service
 	Notify      *notify.Service
+	Destaudit   *destaudit.Service
 	Proxy       *sshproxy.Proxy
 
 	// Recorders opens channel recordings; nil means recording is unavailable and mandatory-recording roles fail
@@ -175,6 +177,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	}
 	a.Notify = notify.New(notify.Deps{Store: a.Store, Keyring: a.Keyring, Audit: a.Audit, Access: a.Access, Engine: a.Engine, Agents: a.Agents,
 		Inventory: a.Inventory, Auth: a.Auth, Outbox: a.Outbox}, nopts)
+	a.Destaudit = destaudit.New(a.Store, a.Keyring, a.Audit, a.Access.Sequencer(), destaudit.Options{Clock: a.Clock, Logger: log, Bus: a.Bus})
 	a.Health = health.New(health.Options{ExposeDetails: !cfg.IsProduction()})
 	a.Health.MustRegister(
 		health.StoreHealth("store", a.Store.Health()),

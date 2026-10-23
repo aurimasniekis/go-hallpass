@@ -12,10 +12,12 @@ import (
 	"time"
 
 	"github.com/aurimasniekis/go-hallpass/internal/buildinfo"
+	"github.com/aurimasniekis/go-hallpass/internal/clock"
 	"github.com/aurimasniekis/go-hallpass/internal/httpapi"
 	"github.com/aurimasniekis/go-hallpass/internal/jobs"
 	"github.com/aurimasniekis/go-hallpass/internal/obs/health"
 	"github.com/aurimasniekis/go-hallpass/internal/obs/tracing"
+	"github.com/aurimasniekis/go-hallpass/internal/ratelimit"
 	"github.com/aurimasniekis/go-hallpass/internal/rbac"
 
 	"github.com/aurimasniekis/go-hallpass/internal/sshfront"
@@ -144,7 +146,7 @@ func (a *App) NewAPI() *httpapi.Server {
 		Matrix: rbac.New(rbac.Options{AuditorAddressRead: rc.AuditorAddressRead, ApproverRecordingPlay: rc.ApproverRecordingPlay,
 			AuditorRecordingExport: rc.AuditorRecordingExport, ApproversCanLockdown: rc.ApproversCanLockdown}),
 		Metrics: a.Metrics,
-		Notify:  a.Notify, BootID: a.BootID, Version: buildinfo.Get().Version},
+		Notify:  a.Notify, Destaudit: a.Destaudit, BootID: a.BootID, Version: buildinfo.Get().Version},
 		httpapi.Options{PublicURL: a.Cfg.PublicURL, Secure: strings.HasPrefix(a.Cfg.PublicURL, "https://"), TrustedProxies: proxies, UI: a.UI,
 			Clock: a.Clock, Logger: a.Log})
 }
@@ -159,6 +161,8 @@ func (a *App) rootHandler(api http.Handler) http.Handler {
 		mux.Handle("GET /metrics", a.Metrics.Handler())
 	}
 	mux.Handle("/hooks/", a.Notify.WebhookHandler())
+	// Signature-authenticated collector batches: no operator session or CSRF token (HP-REC-012, ADR-0037).
+	mux.Handle("POST /hooks/destaudit/{collector_id}", destauditLimit(a.Clock, a.Destaudit.Handler()))
 	mux.Handle("/", api)
 	return tracing.HTTPMiddleware(a.Metrics.HTTPMiddleware(mux))
 }
@@ -184,3 +188,16 @@ func (a *App) serveMetrics(ctx context.Context) *http.Server {
 
 // RootHandlerForTest exposes the infrastructure endpoints without the API (tests).
 func (a *App) RootHandlerForTest() http.Handler { return a.rootHandler(http.NotFoundHandler()) }
+
+// destauditLimit rate-limits collector batches per collector ID (bounded memory; unauthenticated IDs included).
+func destauditLimit(clk clock.Clock, next http.Handler) http.Handler {
+	limiter := &ratelimit.Window{Limit: 10, Period: time.Second}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !limiter.Allow(r.PathValue("collector_id"), clk.Now()) {
+			w.Header().Set("Retry-After", "1")
+			http.Error(w, "rate limited", http.StatusTooManyRequests)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
