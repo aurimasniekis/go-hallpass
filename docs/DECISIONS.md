@@ -304,6 +304,22 @@
 - **Consequences:** `hallpass verify` checks segment headers and ciphertext hashes against the database, final
   frames, and the integrity chain's hash links and MACs. External anchoring (HP-CRY-008) remains WP23 work.
 
+### ADR-0029 — Frontend toolchain versions (WP19 foundation)
+- **Status:** accepted (WP19, partial). Not security-relevant.
+- **Context:** ADR-0013 and PLAN §14.1 name Ant Design v5. The latest stable majors were chosen at implementation time.
+- **Decision:**
+  - Ant Design **6** (6.6.7) instead of v5.
+  - React 19.3, Vite 8, TanStack Router/Query/Store, ECharts 6, xterm.js 6.
+  - TypeScript **6.0** rather than 7, because typescript-eslint 8.72 supports TypeScript below 6.1.
+  - ESLint 10, with a `peerDependencyRules` override for `eslint-plugin-jsx-a11y@6.10.2`, which declares ESLint ≤ 9. Its
+    rules were verified to load and fire under ESLint 10.
+  - Exact versions are pinned (`save-exact`) through pnpm with a frozen lockfile.
+- **R-11 remains open:** antd's CSS-in-JS still needs `style-src 'unsafe-inline'`. `script-src 'self'` stays strict, and
+  the build check (`scripts/check-dist.mjs`) fails on inline scripts, dev-only modules or non-image `data:` URIs.
+- **Consequences:** The xterm.js wrapper disables link handling and swallows OSC 0/1/2/8/52, with a test against a
+  real terminal instance. ESLint forbids `dangerouslySetInnerHTML` and other HTML sinks, as well as static devtools
+  imports.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

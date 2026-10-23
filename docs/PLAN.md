@@ -1588,16 +1588,16 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP07 | Servers, host identities, roles, credentials/CA | WP06 | tested | 6284850 |
 | WP08 | Policy engine and effective access | WP07 | tested | d4b4e2a |
 | WP09 | Request/grant/session lifecycle and enforcer | WP08 | tested | 0fdc035 |
-| WP10 | SSH front end | WP09 | implemented | |
-| WP11 | SSH data plane | WP10 | implemented | |
-| WP12 | Recording format, recorder, reconciliation | WP11, WP04 | implemented | |
+| WP10 | SSH front end | WP09 | implemented | 42ada72, d948bf8 |
+| WP11 | SSH data plane | WP10 | implemented | d948bf8 |
+| WP12 | Recording format, recorder, reconciliation | WP11, WP04 | implemented | 88bbd7f, d948bf8 |
 | WP13 | Local operator auth, sessions, MFA | WP05 | in-progress | 1540b43 |
 | WP14 | OIDC SSO | WP13 | planned | |
 | WP15 | RBAC, REST API, SSE | WP14, WP12 | planned | |
 | WP16 | Web approvals and notification core | WP15 | planned | |
 | WP17 | Slack | WP16 | planned | |
 | WP18 | Telegram | WP16 | planned | |
-| WP19 | Frontend foundation and design system | WP15 | planned | |
+| WP19 | Frontend foundation and design system | WP15 | in-progress | |
 | WP20 | Operational pages | WP19, WP16 | planned | |
 | WP21 | Timeline and replay UI | WP20 | planned | |
 | WP22 | Observability | WP15 | planned | |
@@ -1626,6 +1626,7 @@ local run of the same targets the workflow executes, and the entry says so. Chec
 - **WP09** (2026-10-23): migration 0007 (requests, decisions, grants, sessions, connections, channels, timeline), `internal/access` (CreateRequest with dedup/idempotency/rate limits/sealed sanitized reasons/auto-approval; Decide via one transactional path with authority, self-approval, channel, policy and duration rechecks; grants with time-authoritative expiry; lockdown; disable/key-revoke/target cascades; ReconcilePolicy (cancel/revoke/clamp); channel registration with atomic concurrency limits and full revalidation; per-session Sequencer with DB-reserved blocks; timeline events with idempotency keys; Enforcer (events + ticker + DB reconciliation, registration-race guard); startup reconciliation; background loop). Decide no longer writes state on its rejection paths (would roll back). Tests: 30+ cases incl. concurrency races, enforcement bound (in-process), lost-event path; coverage 80.8%; FuzzSanitizeReason 15 s. Frontend foundation, HPREC1 format and SSH grammar started in parallel by sub-agents (separate directories; committed separately after review).
 - **WP13 (service layer)** (2026-10-23): migration 0009 (operators, local credentials, roles, operator groups, TOTP, recovery codes, one-time tokens, web sessions, throttle), `internal/opauth` (Argon2id with versioned params, NFKC passwords, TOTP RFC 6238, recovery codes, setup/invite/reset/recovery-login tokens, login with throttling and enumeration resistance, MFA verification, reauth, server-side sessions with rotation/idle/absolute expiry and CSRF tokens, last-admin protection, break-glass). HTTP endpoints, cookies and Origin/CSRF middleware are delivered with the API in WP15 (deviation from PLAN WP13 file list: avoids building the router twice). Bug found by the new timing test and fixed: the unknown-account dummy hash was computed once at init and could diverge from current parameters (35× timing difference in tests). Coverage 81.0%.
 - 2026-10-23 — WP10–WP12: SSH front end (auth, limits, grammar, list/roles/request/status/cancel/sessions/whoami/version/help), data plane (exec/shell/PTY, env allowlist, signals, exit propagation, strict host verification, enforcer termination, idle timeout, graceful drain, `hallpass serve`) and mandatory recording (HPREC1, recorder with backpressure, rollover, integrity chain, startup reconciliation, retention, `hallpass verify`). In-process e2e and real-OpenSSH tests (`make test-openssh`). Status *implemented*, not *tested*, because of open partial items: HP-SSH-012 keepalive tests, HP-SSH-013 load test, HP-REC-003 idempotency keys, HP-REC-013 per-class retention, HP-CRY-004 external review. Found and fixed during WP: out-of-order recording appends under concurrent streams (ADR-0028), implicit role selection deviating from HP-SSH-022, x/crypto CloseWrite/Write race on termination notices. ADR-0026..0028.
+- 2026-10-23 — WP19 (partial): web foundation: design system with light/dark tokens and a contrast test, API client (CSRF, problem+json, reauth), SSE client, login/setup/shell routes, security lint rules, CSP-safe build check. Unit tests: 232. Still open: Go embedding (HP-UI-016), WP20/21 pages, Playwright flows against a live backend (HP-TST-004), API shapes to reconcile with OpenAPI (WP15). ADR-0029.
 <!-- progress-log-end -->
 
 ---

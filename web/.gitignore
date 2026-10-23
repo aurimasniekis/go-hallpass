@@ -1,0 +1,4 @@
+# TanStack Router generator scratch space
+.tanstack/
+# Vitest/Playwright output (also covered by the root .gitignore)
+coverage/
