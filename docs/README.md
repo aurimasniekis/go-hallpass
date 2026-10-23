@@ -32,3 +32,4 @@ as the corresponding work packages land:
 | [operator/telegram.md](operator/telegram.md) | Telegram approval bot setup. |
 | [operator/sso.md](operator/sso.md) | OIDC single sign-on: providers, linking, group mapping, step-up, SSO-only mode. |
 | [operator/incidents.md](operator/incidents.md) | Incident runbooks: lockdown, compromise, host-key change, disk full, corruption, lost KEK, break-glass. |
+| [operator/remote-networks.md](operator/remote-networks.md) | Reaching servers behind NAT: Tailscale, WireGuard, reverse SSH tunnels. |
