@@ -1578,8 +1578,8 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 |---|---|---|---|---|
 | WP00 | Planning documents | — | implemented | e15801b |
 | WP01 | Scaffolding, CI, lint | WP00 | tested | 89620d3 |
-| WP02 | Config, runtime modes, logging | WP01 | tested | |
-| WP03 | SQLite storage, migrations, lock, backup primitive | WP02 | planned | |
+| WP02 | Config, runtime modes, logging | WP01 | tested | 860e1a7 |
+| WP03 | SQLite storage, migrations, lock, backup primitive | WP02 | tested | |
 | WP04 | Keyring and field crypto | WP03 | planned | |
 | WP05 | Audit, jobs, outbox | WP04 | planned | |
 | WP06 | Agents and keys | WP05 | planned | |
@@ -1615,6 +1615,7 @@ local run of the same targets the workflow executes, and the entry says so. Chec
 - **WP00** (2026-10-23): planning documents committed (`e15801b`).
 - **WP01** (2026-10-23): Go module (`go 1.27.3`, latest stable per user instruction; A-2 updated), `hallpass version`, golangci-lint v2 config (depguard: no math/rand, no log; forbidigo), custom analyzers `nohostkeyignore` and `txscope` with analysistest suites (tools module), Makefile, coverage-floor script, CI workflow (actions pinned by SHA, actionlint-clean), gitleaks config, CONTRIBUTING.md, docs index. Tested locally: `make vet custom-vet lint race tools-test coverage` green, gitleaks clean. Not yet run on GitHub (not pushed).
 - **WP02** (2026-10-23): `internal/config` (YAML via go.yaml.in/yaml/v3 with KnownFields, reflective HALLPASS_* overrides, aggregated validation, production vs development rules incl. KEK location and dev-feature rejection), `internal/obs` (ECS-aligned slog JSON, LevelVar) and `internal/obs/redact` (Secret[T], sensitive-key redaction), `hallpass config check|env`, example config, docs/operator/{configuration,logging}.md. Config loader is hand-rolled (no koanf), recorded as ADR-0025. Tested locally (race, lint, vet).
+- **WP03** (2026-10-23): `internal/store` (modernc SQLite, writer/reader pools with per-connection pragma verification, BEGIN IMMEDIATE Tx with jittered busy retry and after-commit hooks, error classification and Health tracking, flock process lock, Linux/macOS network-FS refusal, data-dir permission checks, goose migrations with pre-migration snapshots, quick/integrity checks, VACUUM INTO snapshot), sqlc (pinned v1.31.1 binary with checksum, drift check in CI), `internal/ids` (prefixed monotonic UUIDv7), `internal/clock`, `internal/store/storetest`, `hallpass migrate`, docs/operator/storage.md. Tested locally on macOS and in a Linux container (incl. FUSE refusal via `make test-netfs`).
 <!-- progress-log-end -->
 
 ---
@@ -1798,18 +1799,18 @@ check · R recovery drill · SR security review · D documentation review.
 
 #### HP-DB — SQLite storage
 
-- [ ] `HP-DB-001` Pure-Go driver — WP03 — evidence: C
-- [ ] `HP-DB-002` Per-connection pragmas — WP03 — evidence: I
-- [ ] `HP-DB-003` Writer/reader split — WP03 — evidence: I, S
-- [ ] `HP-DB-004` Short transactions — WP03 — evidence: I, C
-- [ ] `HP-DB-005` Safe migrations — WP03 — evidence: I, FI
-- [ ] `HP-DB-006` Single active instance — WP03 — evidence: I
-- [ ] `HP-DB-007` Unsupported storage refusal — WP03 — evidence: I
-- [ ] `HP-DB-008` Corruption checks — WP03 — evidence: I, FI
-- [ ] `HP-DB-009` Disk-full and I/O failure — WP03 — evidence: FI
-- [ ] `HP-DB-010` Filesystem permissions — WP03 — evidence: I
-- [ ] `HP-DB-011` Bounded growth — WP03 — evidence: I, S
-- [ ] `HP-DB-012` Consistent backup primitive — WP03 — evidence: I, R
+- [x] `HP-DB-001` Pure-Go driver — WP03 — evidence: C — ✅ tested (local) @ WP03: modernc.org/sqlite; `CGO_ENABLED=0` linux/amd64+arm64 builds
+- [x] `HP-DB-002` Per-connection pragmas — WP03 — evidence: I — ✅ tested (local) @ WP03: DSN pragmas; VerifyPragmas over every pooled conn at startup + TestPragmasEveryConnection
+- [ ] `HP-DB-003` Writer/reader split — WP03 — evidence: I, S — ◐ WP03: single writer (BEGIN IMMEDIATE via _txlock), query_only readers, 5 jittered retries (TestConcurrentWriters, TestBusyRetryAndGiveUp); queue/wait metrics export pending WP22
+- [x] `HP-DB-004` Short transactions — WP03 — evidence: I, C — ✅ tested (local) @ WP03: txscope analyzer + storetest fails tx > 100 ms
+- [x] `HP-DB-005` Safe migrations — WP03 — evidence: I, FI — ✅ tested (local) @ WP03: goose embedded forward-only, under flock, pre-migration VACUUM INTO snapshot, failure rollback + newer-schema refusal tests
+- [x] `HP-DB-006` Single active instance — WP03 — evidence: I — ✅ tested (local) @ WP03: flock hallpass.lock (TestSecondOwnerRefused)
+- [x] `HP-DB-007` Unsupported storage refusal — WP03 — evidence: I — ✅ tested (local, Linux container) @ WP03: statfs magic check; `make test-netfs` verifies refusal on a FUSE mount
+- [ ] `HP-DB-008` Corruption checks — WP03 — evidence: I, FI — ◐ WP03: startup quick_check refuses corrupt DB (TestCorruptionRefused), IntegrityCheck method; scheduled job WP05, runtime readiness WP22
+- [ ] `HP-DB-009` Disk-full and I/O failure — WP03 — evidence: FI — ◐ WP03: error classification + Health (degraded/failed, fail-closed AcceptsWrites); fault tests FI-06 and recording termination pending WP12/WP26
+- [ ] `HP-DB-010` Filesystem permissions — WP03 — evidence: I — ◐ WP03: data dir 0700/owner check, DB files 0600; KEK file checks pending WP04
+- [ ] `HP-DB-011` Bounded growth — WP03 — evidence: I, S — ◐ WP03: incremental auto_vacuum, Checkpoint/IncrementalVacuum/Sizes; retention jobs + metrics pending WP05/WP12/WP22
+- [ ] `HP-DB-012` Consistent backup primitive — WP03 — evidence: I, R — ◐ WP03: Snapshot (VACUUM INTO, fsync, 0600) primitive tested; segment copy + manifest pending WP23
 - [ ] `HP-DB-013` Crash reconciliation — WP09 — evidence: FI, I
 - [ ] `HP-DB-014` Recovery objectives — WP23 — evidence: R, D
 

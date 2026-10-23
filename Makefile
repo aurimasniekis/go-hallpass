@@ -54,3 +54,22 @@ check: vet custom-vet lint race tools-test coverage
 
 clean:
 	rm -rf $(BIN)
+
+.PHONY: sqlc sqlc-check
+bin/sqlc:
+	./scripts/install-sqlc.sh
+
+# Regenerate typed queries from internal/store/{migrations,queries}.
+sqlc: bin/sqlc
+	bin/sqlc generate
+
+# CI drift check: generated code must match the committed SQL.
+sqlc-check: bin/sqlc
+	bin/sqlc diff
+
+.PHONY: test-netfs
+# HP-DB-007: verify network/FUSE filesystem refusal on Linux (Docker bind mounts are FUSE on Docker Desktop).
+test-netfs:
+	docker run --rm -v "$(CURDIR)":/src -w /src -e GOTOOLCHAIN=auto -e GOFLAGS=-buildvcs=false \
+	  -e HALLPASS_TEST_NETFS_DIR=/src/.netfs-test golang:1.27 \
+	  sh -c 'mkdir -p /src/.netfs-test && go test -count=1 -run "Filesystem" -v ./internal/store/; rc=$$?; rm -rf /src/.netfs-test; exit $$rc'

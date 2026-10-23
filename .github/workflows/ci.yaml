@@ -37,6 +37,8 @@ jobs:
           version: v2.15.0
       - name: vet
         run: make vet custom-vet
+      - name: sqlc drift check
+        run: make sqlc-check
       - name: analyzer tests
         run: make tools-test
       - name: race tests

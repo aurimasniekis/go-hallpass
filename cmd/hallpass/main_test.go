@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -51,5 +53,21 @@ func TestConfigCheckInvalid(t *testing.T) {
 	var out, errb bytes.Buffer
 	if code := run(context.Background(), []string{"config", "check", "--config", "/nonexistent.yaml"}, &out, &errb); code != 1 {
 		t.Fatalf("exit %d", code)
+	}
+}
+
+func TestMigrateCommand(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "hp.yaml")
+	content := "mode: development\npublic_url: http://localhost:8080\nkek:\n  file: \"\"\ndata_dir: " + filepath.Join(dir, "data") + "\n"
+	if err := os.WriteFile(cfg, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if code := run(context.Background(), []string{"migrate", "--config", cfg}, &out, &errb); code != 0 {
+		t.Fatalf("exit %d: %s", code, errb.String())
+	}
+	if !strings.Contains(out.String(), "database schema at version") {
+		t.Fatalf("unexpected output %q", out.String())
 	}
 }
