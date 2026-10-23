@@ -26,6 +26,7 @@ type command struct {
 func rootCommands() []*command {
 	return []*command{
 		{name: "version", summary: "print version information", run: runVersion},
+		configCommands(),
 	}
 }
 

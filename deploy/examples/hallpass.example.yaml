@@ -1,0 +1,36 @@
+# Hallpass example configuration. Secret-free: the KEK and all credentials live outside this file.
+# Every key can be overridden with HALLPASS_<PATH> environment variables, e.g. HALLPASS_SSH_LISTEN=":22".
+# See docs/operator/configuration.md for every option.
+
+mode: production                  # production (default) | development
+data_dir: /var/lib/hallpass       # local filesystem only; created 0700
+public_url: https://hallpass.example.com
+
+kek:
+  source: file                    # file | env (HALLPASS_KEK, base64; discouraged)
+  file: /etc/hallpass/kek         # 0400, outside data_dir; back it up separately from data backups
+
+ssh:
+  listen: ":2222"
+  env_allow: [TERM, LANG, "LC_*"]
+
+http:
+  listen: ":8080"                 # terminate TLS here (tls_cert_file/tls_key_file) or at a reverse proxy
+  trusted_proxies: []             # CIDRs whose X-Forwarded-For is trusted
+
+log:
+  level: info
+  format: json
+
+egress:
+  allow_cidrs:                    # destinations must resolve inside these ranges (HP-SRV-009)
+    - 10.0.0.0/8
+
+access:
+  wait_timeout_default: 120s
+  pending_expiry: 30m
+  max_grant_duration: 24h
+
+recording:
+  durability: group               # group (fsync <= 250ms) | strict (fsync before forwarding)
+  default_retention: 2160h        # 90 days

@@ -38,3 +38,18 @@ func TestUnknownCommand(t *testing.T) {
 		t.Fatalf("exit %d", code)
 	}
 }
+
+func TestConfigCheckExample(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := run(context.Background(), []string{"config", "check", "--config", "../../deploy/examples/hallpass.example.yaml"}, &out, &errb)
+	if code != 0 || !strings.Contains(out.String(), "configuration ok") {
+		t.Fatalf("exit %d: %s %s", code, out.String(), errb.String())
+	}
+}
+
+func TestConfigCheckInvalid(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := run(context.Background(), []string{"config", "check", "--config", "/nonexistent.yaml"}, &out, &errb); code != 1 {
+		t.Fatalf("exit %d", code)
+	}
+}

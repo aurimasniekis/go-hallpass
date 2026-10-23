@@ -39,7 +39,7 @@ linters:
             - "!**/cmd/**"
             - "!$test"
           deny:
-            - pkg: log
+            - pkg: log$
               desc: use log/slog through internal/obs
     forbidigo:
       forbid:

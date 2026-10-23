@@ -1577,8 +1577,8 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP | Title | Depends | Status | Commit |
 |---|---|---|---|---|
 | WP00 | Planning documents | — | implemented | e15801b |
-| WP01 | Scaffolding, CI, lint | WP00 | tested | |
-| WP02 | Config, runtime modes, logging | WP01 | planned | |
+| WP01 | Scaffolding, CI, lint | WP00 | tested | 89620d3 |
+| WP02 | Config, runtime modes, logging | WP01 | tested | |
 | WP03 | SQLite storage, migrations, lock, backup primitive | WP02 | planned | |
 | WP04 | Keyring and field crypto | WP03 | planned | |
 | WP05 | Audit, jobs, outbox | WP04 | planned | |
@@ -1614,6 +1614,7 @@ local run of the same targets the workflow executes, and the entry says so. Chec
 
 - **WP00** (2026-10-23): planning documents committed (`e15801b`).
 - **WP01** (2026-10-23): Go module (`go 1.27.3`, latest stable per user instruction; A-2 updated), `hallpass version`, golangci-lint v2 config (depguard: no math/rand, no log; forbidigo), custom analyzers `nohostkeyignore` and `txscope` with analysistest suites (tools module), Makefile, coverage-floor script, CI workflow (actions pinned by SHA, actionlint-clean), gitleaks config, CONTRIBUTING.md, docs index. Tested locally: `make vet custom-vet lint race tools-test coverage` green, gitleaks clean. Not yet run on GitHub (not pushed).
+- **WP02** (2026-10-23): `internal/config` (YAML via go.yaml.in/yaml/v3 with KnownFields, reflective HALLPASS_* overrides, aggregated validation, production vs development rules incl. KEK location and dev-feature rejection), `internal/obs` (ECS-aligned slog JSON, LevelVar) and `internal/obs/redact` (Secret[T], sensitive-key redaction), `hallpass config check|env`, example config, docs/operator/{configuration,logging}.md. Config loader is hand-rolled (no koanf), recorded as ADR-0025. Tested locally (race, lint, vet).
 <!-- progress-log-end -->
 
 ---
@@ -1922,13 +1923,13 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-OPS-010` Project documents — WP24 — evidence: D
 - [ ] `HP-OPS-011` License decision — WP24 — evidence: D
 - [x] `HP-OPS-012` No secrets in repo — WP01 — evidence: C — ✅ tested (local) @ WP01: gitleaks v8.30.1 clean; CI job `security`; .gitignore excludes keys/DBs/recordings
-- [ ] `HP-OPS-013` Config and runtime modes — WP02 — evidence: U, I
+- [x] `HP-OPS-013` Config and runtime modes — WP02 — evidence: U, I — ✅ tested (local) @ WP02: internal/config (strict YAML, HALLPASS_* env, unknown-key/env rejection, production restrictions), `hallpass config check`
 - [ ] `HP-OPS-014` Durable jobs — WP05 — evidence: I
 
 #### HP-OBS — Observability
 
-- [ ] `HP-OBS-001` Structured JSON logs — WP02 — evidence: U, C
-- [ ] `HP-OBS-002` Redaction layer — WP02 — evidence: U
+- [x] `HP-OBS-001` Structured JSON logs — WP02 — evidence: U, C — ✅ tested (local) @ WP02: internal/obs ECS-aligned JSON handler; schema in docs/operator/logging.md
+- [x] `HP-OBS-002` Redaction layer — WP02 — evidence: U — ✅ tested (local) @ WP02: redact.Secret + key denylist in all handlers; planted-secret tests (internal/obs)
 - [ ] `HP-OBS-003` Correlation IDs — WP22 — evidence: I
 - [ ] `HP-OBS-004` Metrics and traces — WP22 — evidence: I
 - [ ] `HP-OBS-005` Audit log — WP05 — evidence: I

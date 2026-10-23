@@ -234,6 +234,15 @@
   has no commits. With the user's explicit approval, the WP00 commit used a hand-written Conventional Commits message.
   Later commits use `/cc` as normal.
 
+### ADR-0025 — Configuration loader: YAML + reflective HALLPASS_* overrides, no framework
+- **Status:** accepted (WP02)
+- **Context:** PLAN WP02 left the choice between `knadh/koanf` and a minimal loader open.
+- **Decision:** `go.yaml.in/yaml/v3` with `KnownFields(true)` into one typed `Config` struct, plus a small reflective walker that maps
+  each YAML path to `HALLPASS_<PATH>` and rejects unknown `HALLPASS_*` variables (except `HALLPASS_KEK`, `HALLPASS_CONFIG`). Validation
+  collects all problems. Production mode is the default.
+- **Alternatives:** koanf/viper (more dependencies and looser unknown-key handling).
+- **Consequences:** One small dependency, strict typo detection, and override names derived mechanically (`hallpass config env`).
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |
