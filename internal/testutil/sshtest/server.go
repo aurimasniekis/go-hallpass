@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"golang.org/x/crypto/ssh"
@@ -48,7 +49,10 @@ type Server struct {
 	// ExitSignal, when set and returning a signal name for a command, ends that exec with exit-signal instead of
 	// exit-status.
 	ExitSignal func(cmd string) string
-	wg         sync.WaitGroup
+	// Unresponsive, when set, makes the server read global requests (keepalives) without ever replying: a hung
+	// host whose TCP connection stays open.
+	Unresponsive atomic.Bool
+	wg           sync.WaitGroup
 }
 
 // Envs returns the environment variables sessions requested, in order.
@@ -173,7 +177,13 @@ func (s *Server) handle(c net.Conn) {
 		return
 	}
 	defer sc.Close()
-	go ssh.DiscardRequests(reqs)
+	go func() {
+		for r := range reqs {
+			if r.WantReply && !s.Unresponsive.Load() {
+				_ = r.Reply(false, nil)
+			}
+		}
+	}()
 	for nc := range chans {
 		if nc.ChannelType() != "session" {
 			_ = nc.Reject(ssh.UnknownChannelType, "only sessions")

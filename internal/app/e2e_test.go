@@ -760,3 +760,59 @@ func TestResealRegistry(t *testing.T) {
 		t.Fatalf("second pass %d %v", n, err)
 	}
 }
+
+// HP-SSH-012: keepalives on the destination leg detect a hung destination and end the channel (exit 88).
+func TestGatewayDestinationKeepalive(t *testing.T) {
+	g := startGateway(t, func(c *config.Config) {
+		c.SSH.KeepaliveInterval = config.Duration(100 * time.Millisecond)
+		c.SSH.KeepaliveMaxMissed = 2
+	})
+	g.dest.Exec = func(_ string, stdin io.Reader, _, _ io.Writer) uint32 {
+		_, _ = io.Copy(io.Discard, stdin)
+		return 0
+	}
+	c, err := g.client(g.key)
+	must(t, err)
+	defer c.Close()
+	s, err := c.NewSession()
+	must(t, err)
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	s.Stdin = pr
+	must(t, s.Start("exec web1 -- cat"))
+	time.Sleep(500 * time.Millisecond) // a responsive destination survives several probes
+	g.dest.Unresponsive.Store(true)
+	start := time.Now()
+	err = s.Wait()
+	var ee *ssh.ExitError
+	if !errors.As(err, &ee) || ee.ExitStatus() != 88 || time.Since(start) > 3*time.Second {
+		t.Fatalf("hung destination: %v after %v", err, time.Since(start))
+	}
+}
+
+// HP-SSH-012: keepalives on the agent leg close connections whose client stopped answering.
+func TestGatewayAgentKeepalive(t *testing.T) {
+	g := startGateway(t, func(c *config.Config) {
+		c.SSH.KeepaliveInterval = config.Duration(100 * time.Millisecond)
+		c.SSH.KeepaliveMaxMissed = 2
+	})
+	raw, err := net.Dial("tcp", g.addr)
+	must(t, err)
+	defer raw.Close()
+	conn, _, reqs, err := ssh.NewClientConn(raw, g.addr, &ssh.ClientConfig{User: "agent", Auth: []ssh.AuthMethod{ssh.PublicKeys(g.key.Signer)},
+		HostKeyCallback: ssh.FixedHostKey(g.hostPK), Timeout: 5 * time.Second})
+	must(t, err)
+	defer conn.Close()
+	go func() {
+		for range reqs { // read keepalives but never answer: a hung agent
+		}
+	}()
+	done := make(chan error, 1)
+	go func() { done <- conn.Wait() }()
+	select {
+	case err := <-done:
+		t.Logf("connection closed: %v", err)
+	case <-time.After(3 * time.Second):
+		t.Fatal("silent agent connection not closed")
+	}
+}

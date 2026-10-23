@@ -219,7 +219,8 @@ func (a *App) NewProxy() *sshproxy.Proxy {
 	a.Proxy = sshproxy.New(sshproxy.Options{
 		Access: a.Access, Inventory: a.Inventory, Credentials: a.Credentials, Guard: a.Guard, Enforcer: a.Enforcer,
 		Recorders: a.Recorders, Audit: a.Audit, Store: a.Store, Logger: a.Log, DialTimeout: a.Cfg.SSH.DialTimeout.D(),
-		IdleTimeout: a.Cfg.SSH.IdleTimeout.D(), EnvAllow: a.Cfg.SSH.EnvAllow, Metrics: a.Metrics,
+		IdleTimeout: a.Cfg.SSH.IdleTimeout.D(), KeepaliveInterval: a.Cfg.SSH.KeepaliveInterval.D(),
+		KeepaliveMaxMissed: a.Cfg.SSH.KeepaliveMaxMissed, EnvAllow: a.Cfg.SSH.EnvAllow, Metrics: a.Metrics,
 	})
 	return a.Proxy
 }

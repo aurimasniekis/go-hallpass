@@ -25,6 +25,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/obs/tracing"
 	"github.com/aurimasniekis/go-hallpass/internal/sshalg"
+	"github.com/aurimasniekis/go-hallpass/internal/sshkeepalive"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 )
 
@@ -453,42 +454,9 @@ func (s *Server) AuditDenied(ctx context.Context, c *Conn, action string, detail
 
 // keepalive probes the client; after KeepaliveMaxMissed unanswered probes the connection is closed (HP-SSH-012).
 func (s *Server) keepalive(ctx context.Context, c *Conn) {
-	interval := s.cfg.KeepaliveInterval.D()
-	if interval <= 0 {
-		return
-	}
-	t := time.NewTicker(interval)
-	defer t.Stop()
-	missed := 0
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-		}
-		done := make(chan error, 1)
-		go func() {
-			_, _, err := c.SSH.SendRequest("keepalive@openssh.com", true, nil)
-			done <- err
-		}()
-		select {
-		case <-ctx.Done():
-			return
-		case err := <-done:
-			if err != nil {
-				c.SetCloseReason("keepalive_failed")
-				_ = c.SSH.Close()
-				return
-			}
-			missed = 0
-		case <-time.After(interval):
-			missed++
-			if missed >= s.cfg.KeepaliveMaxMissed {
-				c.SetCloseReason("keepalive_timeout")
-				_ = c.SSH.Close()
-				return
-			}
-		}
+	if reason := sshkeepalive.Run(ctx, c.SSH, s.cfg.KeepaliveInterval.D(), s.cfg.KeepaliveMaxMissed); reason != "" {
+		c.SetCloseReason(reason)
+		_ = c.SSH.Close()
 	}
 }
 

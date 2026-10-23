@@ -28,6 +28,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
 	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/obs/tracing"
+	"github.com/aurimasniekis/go-hallpass/internal/sshkeepalive"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 )
 
@@ -88,7 +89,11 @@ type Options struct {
 	Logger      *slog.Logger
 	DialTimeout time.Duration
 	IdleTimeout time.Duration
-	EnvAllow    []string // global allowlist; roles may add more
+	// KeepaliveInterval and KeepaliveMaxMissed probe the destination; an unresponsive destination ends the
+	// channel (HP-SSH-012). A zero interval disables probing.
+	KeepaliveInterval  time.Duration
+	KeepaliveMaxMissed int
+	EnvAllow           []string // global allowlist; roles may add more
 	// Metrics records channel results, active channels, dial latency and rejected environment variables
 	// (HP-OBS-004). Nil disables.
 	Metrics *metrics.Metrics
@@ -273,6 +278,22 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 		return fail(CodeDestinationUnavailable, "destination connection", err)
 	}
 	defer client.Close()
+	// Keepalives start before the session is opened, so a destination that hangs during session setup is also
+	// detected (HP-SSH-012): closing the client unblocks NewSession and the later pumps.
+	var term atomic.Pointer[terminator]
+	kctx, stopKeepalive := context.WithCancel(ctx)
+	defer stopKeepalive()
+	go func() {
+		reason := sshkeepalive.Run(kctx, client, p.o.KeepaliveInterval, p.o.KeepaliveMaxMissed)
+		if reason == "" {
+			return
+		}
+		if t := term.Load(); t != nil {
+			t.terminate("destination_" + reason)
+			return
+		}
+		_ = client.Close()
+	}()
 	sess, err := client.NewSession()
 	if err != nil {
 		return fail(CodeDestinationUnavailable, "destination session", err)
@@ -281,6 +302,7 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 
 	// 3. Register with the enforcer; access may have ended since RegisterChannel (race guard).
 	t := &terminator{agent: s.Agent, sess: sess, client: client, notify: s.Notify}
+	term.Store(t)
 	live := &access.Live{ChannelID: reg.ChannelID, ConnectionID: s.ConnectionID, AgentID: s.AgentID, KeyID: s.KeyID, GrantID: reg.Grant.ID,
 		CredentialRef: auth.CredentialRef, ExpiresAt: reg.Grant.ExpiresAt, Terminate: t.terminate}
 	if p.o.Enforcer != nil {
@@ -393,8 +415,11 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 	res := Result{Reason: "exit"}
 	if reason := t.reason(); reason != "" {
 		res = Result{GatewayCode: CodeAccessEnded, Reason: reason}
-		if reason == "recording_failed" {
+		switch {
+		case reason == "recording_failed":
 			res.GatewayCode = CodeInternal
+		case strings.HasPrefix(reason, "destination_keepalive"):
+			res.GatewayCode = CodeDestinationUnavailable
 		}
 		code := res.GatewayCode
 		_ = rec.Exit(&code, "")
