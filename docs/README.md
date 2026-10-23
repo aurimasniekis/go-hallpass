@@ -20,3 +20,4 @@ as the corresponding work packages land:
 | [destination/hardening.md](destination/hardening.md) | Destination setup: authorized_keys restrictions, certificates, sshd hardening (HP-DOC-003). |
 | [formats/hprec1.md](formats/hprec1.md) | HPREC1 encrypted recording segment format. |
 | [operator/recording.md](operator/recording.md) | Recording durability, verification, reconciliation and retention. |
+| [operator/sso.md](operator/sso.md) | OIDC single sign-on: providers, linking, group mapping, step-up, SSO-only mode. |

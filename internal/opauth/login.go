@@ -96,6 +96,11 @@ type LoginResult struct {
 // Login verifies a password. Unknown accounts, wrong passwords and disabled accounts all return
 // ErrInvalidCredentials after the same work (a dummy hash for unknown accounts, HP-AUTH-005).
 func (svc *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error) {
+	if off, err := svc.LocalLoginDisabled(ctx); err != nil {
+		return nil, err
+	} else if off {
+		return nil, ErrLocalLoginDisabled
+	}
 	acctKey, ipK := throttleKeyAccount(in.Email), ipKey(in.Meta.IP)
 	if t, err := svc.throttled(ctx, acctKey, ipK); err != nil {
 		return nil, err

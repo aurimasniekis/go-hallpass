@@ -24,6 +24,8 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/jobs"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
+	"github.com/aurimasniekis/go-hallpass/internal/oidc"
+	"github.com/aurimasniekis/go-hallpass/internal/opauth"
 	"github.com/aurimasniekis/go-hallpass/internal/outbox"
 	"github.com/aurimasniekis/go-hallpass/internal/policy"
 	"github.com/aurimasniekis/go-hallpass/internal/recording"
@@ -53,6 +55,8 @@ type App struct {
 	Access      *access.Service
 	Enforcer    *access.Enforcer
 	Recording   *recording.Service
+	Auth        *opauth.Service
+	OIDC        *oidc.Service
 	Proxy       *sshproxy.Proxy
 
 	// Recorders opens channel recordings; nil means recording is unavailable and mandatory-recording roles fail
@@ -129,6 +133,11 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 		QueueRecords: rc.QueueRecords, QueueBytes: rc.QueueBytes, BlockTimeout: rc.BlockTimeout.D(), Clock: a.Clock, Logger: log,
 	})
 	a.Recorders = a.Recording
+	a.Auth = opauth.New(a.Store, a.Keyring, a.Audit, a.Bus, opauth.Options{PasswordMinBytes: cfg.Auth.PasswordMinBytes,
+		SessionIdle: cfg.Auth.SessionIdleTimeout.D(), SessionAbsolute: cfg.Auth.SessionAbsoluteTimeout.D(), ReauthWindow: cfg.Auth.ReauthWindow.D(),
+		Clock: a.Clock})
+	a.OIDC = oidc.New(a.Store, a.Keyring, a.Audit, a.Bus, a.Auth, oidc.Options{PublicURL: cfg.PublicURL, DevMode: !cfg.IsProduction(),
+		Clock: a.Clock, Logger: log})
 
 	if err := a.Credentials.EnsureGatewayHostKey(ctx); err != nil {
 		return nil, fmt.Errorf("gateway host key: %w", err)
@@ -180,6 +189,14 @@ func (a *App) RunBackground(ctx context.Context) (wait func()) {
 		jobs.Periodic(ctx, log, "recording.retention", 10*time.Minute, false, func(ctx context.Context) error {
 			_, err := a.Recording.ApplyRetention(ctx, a.Cfg.Recording.DefaultRetention.D())
 			return err
+		})
+	})
+	wg.Go(func() {
+		jobs.Periodic(ctx, log, "auth.purge_expired", 15*time.Minute, false, func(ctx context.Context) error {
+			if _, err := a.OIDC.PurgeStates(ctx); err != nil {
+				return err
+			}
+			return a.Auth.PurgeExpired(ctx)
 		})
 	})
 	wg.Go(func() {

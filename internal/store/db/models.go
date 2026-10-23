@@ -298,6 +298,54 @@ type MfaTotp struct {
 	CreatedAt   int64
 }
 
+type OidcAuthState struct {
+	StateHash      []byte
+	ProviderID     string
+	Purpose        string
+	NonceHash      []byte
+	VerifierEnc    []byte
+	BindingHash    []byte
+	ReturnTo       string
+	OperatorID     sql.NullString
+	SessionDisplay sql.NullString
+	CreatedAt      int64
+	ExpiresAt      int64
+}
+
+type OidcGroupMapping struct {
+	ID         string
+	ProviderID string
+	GroupValue string
+	Role       sql.NullString
+	GroupID    sql.NullString
+	CreatedAt  int64
+}
+
+type OidcProvider struct {
+	ID                        string
+	Slug                      string
+	DisplayName               string
+	Issuer                    string
+	ClientID                  string
+	ClientSecretEnc           []byte
+	ScopesJson                string
+	GroupsClaim               string
+	Provisioning              string
+	JitJson                   string
+	AllowPrivateNetwork       int64
+	AllowCrossOriginEndpoints int64
+	CaBundlePem               string
+	StepupFallback            string
+	AcrValues                 string
+	EndSessionEnabled         int64
+	Enabled                   int64
+	TestLoginOkAt             sql.NullInt64
+	TestLoginBy               sql.NullString
+	Version                   int64
+	CreatedAt                 int64
+	UpdatedAt                 int64
+}
+
 type OneTimeToken struct {
 	Hash       []byte
 	Kind       string
@@ -328,6 +376,16 @@ type OperatorGroupMember struct {
 	GroupID    string
 	OperatorID string
 	Source     string
+}
+
+type OperatorIdentity struct {
+	Issuer      string
+	Subject     string
+	ProviderID  string
+	OperatorID  string
+	LinkedVia   string
+	CreatedAt   int64
+	LastLoginAt sql.NullInt64
 }
 
 type OperatorLocalCredential struct {

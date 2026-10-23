@@ -1592,7 +1592,7 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP11 | SSH data plane | WP10 | implemented | d948bf8 |
 | WP12 | Recording format, recorder, reconciliation | WP11, WP04 | implemented | 88bbd7f, d948bf8 |
 | WP13 | Local operator auth, sessions, MFA | WP05 | in-progress | 1540b43 |
-| WP14 | OIDC SSO | WP13 | planned | |
+| WP14 | OIDC SSO | WP13 | implemented | |
 | WP15 | RBAC, REST API, SSE | WP14, WP12 | planned | |
 | WP16 | Web approvals and notification core | WP15 | planned | |
 | WP17 | Slack | WP16 | planned | |
@@ -1627,6 +1627,7 @@ local run of the same targets the workflow executes, and the entry says so. Chec
 - **WP13 (service layer)** (2026-10-23): migration 0009 (operators, local credentials, roles, operator groups, TOTP, recovery codes, one-time tokens, web sessions, throttle), `internal/opauth` (Argon2id with versioned params, NFKC passwords, TOTP RFC 6238, recovery codes, setup/invite/reset/recovery-login tokens, login with throttling and enumeration resistance, MFA verification, reauth, server-side sessions with rotation/idle/absolute expiry and CSRF tokens, last-admin protection, break-glass). HTTP endpoints, cookies and Origin/CSRF middleware are delivered with the API in WP15 (deviation from PLAN WP13 file list: avoids building the router twice). Bug found by the new timing test and fixed: the unknown-account dummy hash was computed once at init and could diverge from current parameters (35× timing difference in tests). Coverage 81.0%.
 - 2026-10-23 — WP10–WP12: SSH front end (auth, limits, grammar, list/roles/request/status/cancel/sessions/whoami/version/help), data plane (exec/shell/PTY, env allowlist, signals, exit propagation, strict host verification, enforcer termination, idle timeout, graceful drain, `hallpass serve`) and mandatory recording (HPREC1, recorder with backpressure, rollover, integrity chain, startup reconciliation, retention, `hallpass verify`). In-process e2e and real-OpenSSH tests (`make test-openssh`). Status *implemented*, not *tested*, because of open partial items: HP-SSH-012 keepalive tests, HP-SSH-013 load test, HP-REC-003 idempotency keys, HP-REC-013 per-class retention, HP-CRY-004 external review. Found and fixed during WP: out-of-order recording appends under concurrent streams (ADR-0028), implicit role selection deviating from HP-SSH-022, x/crypto CloseWrite/Write race on termination notices. ADR-0026..0028.
 - 2026-10-23 — WP19 (partial): web foundation: design system with light/dark tokens and a contrast test, API client (CSRF, problem+json, reauth), SSE client, login/setup/shell routes, security lint rules, CSP-safe build check. Unit tests: 232. Still open: Go embedding (HP-UI-016), WP20/21 pages, Playwright flows against a live backend (HP-TST-004), API shapes to reconcile with OpenAPI (WP15). ADR-0029.
+- 2026-10-23 — WP14: generic OIDC SSO (internal/oidc, migration 0010): PKCE code flow, rate-limited JWKS key set, strict ID-token checks, identity by iss+sub, preprovisioned/JIT, group→role sync with last-admin guard, upstream step-up with TOTP fallback, test login gating SSO-only mode, link invitations, RP logout URL; in-process mock IdP (oidctest). Status *implemented*: HTTP endpoints/cookies come with WP15; Keycloak/Dex interop tests not yet run (ADR-0030).
 <!-- progress-log-end -->
 
 ---
@@ -1841,28 +1842,28 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-AUTH-012` Server-side sessions — WP13 — evidence: I, E — ◐ WP13: server-side sessions (256-bit token, SHA-256 at rest), idle 30 m / absolute 12 h, rotation, logout, listing/revocation (tested); __Host- cookie flags in WP15
 - [ ] `HP-AUTH-013` CSRF protection — WP13 — evidence: I, E — ◐ WP13: session-bound HMAC CSRF token + constant-time verify (tested); header/Origin/Sec-Fetch-Site middleware WP15
 - [ ] `HP-AUTH-014` Recent authentication — WP13 — evidence: I, E — ◐ WP13: RequireRecentAuth (5 m, MFA when enrolled) + Reauth with rotation (tested); per-endpoint gating WP15
-- [ ] `HP-AUTH-015` Lockout prevention — WP13 — evidence: I, E — ◐ WP13: last enabled administrator cannot be disabled/demoted (tested); SSO-only gating WP14
+- [x] `HP-AUTH-015` Lockout prevention — WP13 — evidence: I, E — ✅ tested: last admin guard (opauth) + SSO-only preconditions and protection (internal/oidc/oidc_test.go (mock IdP) TestTestLoginAndSSOOnly)
 - [ ] `HP-AUTH-016` Break-glass recovery — WP23 — evidence: I, R — ◐ WP13: IssueRecoveryLogin (existing or new admin) + RecoveryLogin, audited breakglass.used/login (tested); offline CLI command WP23
 - [ ] `HP-AUTH-017` Dev auth isolation — WP13 — evidence: C, I
 - [x] `HP-AUTH-018` Credential secrecy — WP13 — evidence: U, I — ✅ tested (local) @ WP13: no passwords/TOTP/codes in audit or plaintext storage; redaction layer from WP02
 
 #### HP-OIDC — Generic OpenID Connect SSO
 
-- [ ] `HP-OIDC-001` Provider configuration — WP14 — evidence: U, I
-- [ ] `HP-OIDC-002` Code flow with PKCE — WP14 — evidence: I
-- [ ] `HP-OIDC-003` ID token validation — WP14 — evidence: U, I
-- [ ] `HP-OIDC-004` JWKS caching and rotation — WP14 — evidence: I
-- [ ] `HP-OIDC-005` TLS and redirect safety — WP14 — evidence: U, I
-- [ ] `HP-OIDC-006` Endpoint validation — WP14 — evidence: U, I
-- [ ] `HP-OIDC-007` Secret handling — WP14 — evidence: I, E
-- [ ] `HP-OIDC-008` Token minimization — WP14 — evidence: I
-- [ ] `HP-OIDC-009` Identity by issuer+subject — WP14 — evidence: I, E
-- [ ] `HP-OIDC-010` Provisioning modes — WP14 — evidence: I
-- [ ] `HP-OIDC-011` Group mapping — WP14 — evidence: U, I
-- [ ] `HP-OIDC-012` Provider outage behavior — WP14 — evidence: I, FI
-- [ ] `HP-OIDC-013` Upstream step-up — WP14 — evidence: I
-- [ ] `HP-OIDC-014` Test-login before enforcement — WP14 — evidence: E
-- [ ] `HP-OIDC-015` Logout semantics — WP14 — evidence: I, E
+- [x] `HP-OIDC-001` Provider configuration — WP14 — evidence: U, I — ✅ tested: provider config + discovery exact issuer (internal/oidc/oidc_test.go (mock IdP) TestProviderValidation)
+- [x] `HP-OIDC-002` Code flow with PKCE — WP14 — evidence: I — ✅ tested: PKCE S256, single-use 10 min state bound by cookie (internal/oidc/oidc_test.go (mock IdP) TestStateSafety)
+- [x] `HP-OIDC-003` ID token validation — WP14 — evidence: U, I — ✅ tested: alg none/HS256, iss/aud/azp, exp/iat/nbf skew, nonce (internal/oidc/oidc_test.go (mock IdP) TestIDTokenValidation)
+- [x] `HP-OIDC-004` JWKS caching and rotation — WP14 — evidence: I — ✅ tested: JWKS cache, rotation refetch, rate limit (internal/oidc/oidc_test.go (mock IdP) TestJWKSRotation)
+- [ ] `HP-OIDC-005` TLS and redirect safety — WP14 — evidence: U, I — ◐ tested: https issuer, dev localhost http, exact redirect URI, return_to allowlist; HTTP cookie layer pending WP15
+- [x] `HP-OIDC-006` Endpoint validation — WP14 — evidence: U, I — ✅ tested: endpoint site check, private-network refusal, untrusted TLS refused
+- [ ] `HP-OIDC-007` Secret handling — WP14 — evidence: I, E — ◐ tested: secret encrypted at rest, write-only DTO (internal/oidc/oidc_test.go (mock IdP) TestClientSecretWriteOnly); API/UI pending WP15/WP20
+- [ ] `HP-OIDC-008` Token minimization — WP14 — evidence: I — ◐ implemented: access/refresh tokens dropped after exchange, ID token not stored (code review; no persistence path)
+- [x] `HP-OIDC-009` Identity by issuer+subject — WP14 — evidence: I, E — ✅ tested: identity by iss+sub, no email merge, link via session/invite/admin (internal/oidc/oidc_test.go (mock IdP) TestNoEmailMerge, TestLinking)
+- [x] `HP-OIDC-010` Provisioning modes — WP14 — evidence: I — ✅ tested: preprovisioned default, JIT restrictions, no roles without mapping (internal/oidc/oidc_test.go (mock IdP) TestJITAndGroupSync)
+- [x] `HP-OIDC-011` Group mapping — WP14 — evidence: U, I — ✅ tested: allowlisted mapping replaced per login, manual kept, last-admin guard (internal/oidc/oidc_test.go (mock IdP) TestJITAndGroupSync, TestSyncKeepsLastAdmin)
+- [x] `HP-OIDC-012` Provider outage behavior — WP14 — evidence: I, FI — ✅ tested: discovery/token outage fails closed, sessions + local login unaffected (internal/oidc/oidc_test.go (mock IdP) TestOutage)
+- [x] `HP-OIDC-013` Upstream step-up — WP14 — evidence: I — ✅ tested: prompt=login/max_age, auth_time, acr, TOTP fallback (internal/oidc/oidc_test.go (mock IdP) TestStepUp)
+- [x] `HP-OIDC-014` Test-login before enforcement — WP14 — evidence: E — ✅ tested: test login preview + required before SSO-only (internal/oidc/oidc_test.go (mock IdP) TestTestLoginAndSSOOnly)
+- [x] `HP-OIDC-015` Logout semantics — WP14 — evidence: I, E — ✅ tested: session revoke + optional end-session URL without id_token_hint (internal/oidc/oidc_test.go (mock IdP) TestLogoutURL)
 
 #### HP-RBAC — Operator RBAC
 

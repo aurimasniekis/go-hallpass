@@ -320,6 +320,30 @@
   real terminal instance. ESLint forbids `dangerouslySetInnerHTML` and other HTML sinks, as well as static devtools
   imports.
 
+### ADR-0030 — OIDC implementation details
+- **Status:** accepted (WP14). Not security-relevant: each item is stricter than, or equal to, PLAN §12.4.
+- **Decision:**
+  - **Library pieces:** `coreos/go-oidc/v3` for discovery and claim verification, `x/oauth2` for the code exchange with
+    PKCE, and a Hallpass key set built on `go-jose/v4`. go-oidc's remote key set refetches on every unknown `kid`; HP-OIDC-004
+    requires rate limiting (one refetch per 10 s, cached keys stay usable during outages). The key set accepts only RSA
+    ≥ 2048 bits, ECDSA P-256 and Ed25519 keys.
+  - **Clock skew:** go-oidc checks `exp` without leeway. Hallpass verifies with the clock shifted back 60 s, which gives
+    60 s skew on `exp`, and checks `iat` and `nbf` itself with ±60 s, tighter than go-oidc's 5-minute `nbf` leeway.
+  - **IdP requests:**
+    - no HTTP proxy and no redirect following;
+    - private, loopback, link-local and CGNAT addresses are refused at connect time unless `allow_private_network` is set;
+    - endpoint origin is checked by registrable domain (public suffix list), or by exact host for IP literals.
+  - **Fresh IdP login:** test-login and self-link flows also send `prompt=login&max_age=0`.
+  - **Link invitations:** single-use, consumed when the flow starts. An abandoned flow requires a new invitation.
+  - **Session MFA:** SSO sessions are never "MFA-limited"; MFA is delegated to the IdP and is observable through `acr`
+    and `amr`. Local TOTP is used only as the configured step-up fallback.
+  - **Last-admin guard:** SSO role sync keeps the administrator role, and audits `operator.role_sync.blocked`, when
+    removing it would leave no enabled administrator (HP-AUTH-015).
+  - **JIT email conflicts:** a JIT login whose verified email belongs to another operator is refused with a conflict,
+    never merged.
+  - **Deviation:** the Keycloak/Dex interop smoke tests (PLAN WP14 tests, nightly CI) are not implemented yet. They are
+    tracked as an open item and are not claimed as done.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |
