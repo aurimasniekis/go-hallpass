@@ -1591,7 +1591,7 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP10 | SSH front end | WP09 | implemented | 42ada72, d948bf8 |
 | WP11 | SSH data plane | WP10 | implemented | d948bf8 |
 | WP12 | Recording format, recorder, reconciliation | WP11, WP04 | implemented | 88bbd7f, d948bf8 |
-| WP13 | Local operator auth, sessions, MFA | WP05 | in-progress | 1540b43 |
+| WP13 | Local operator auth, sessions, MFA | WP05 | implemented | 1540b43 |
 | WP14 | OIDC SSO | WP13 | implemented | |
 | WP15 | RBAC, REST API, SSE | WP14, WP12 | implemented | |
 | WP16 | Web approvals and notification core | WP15 | implemented | |
@@ -1968,7 +1968,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-DOC-001` Operator guide — WP24 — evidence: D — ◐ partial: install/container/upgrade/backup/observability/sso/recording guides; incident runbooks pending
 - [x] `HP-DOC-002` Agent guide — WP10 — evidence: D — ✅ done: docs/agent/{guide,exit-codes,json-schemas}.md
 - [ ] `HP-DOC-003` Destination hardening guide — WP25 — evidence: D
-- [ ] `HP-DOC-004` Guarantees and non-guarantees — WP27 — evidence: D
+- [ ] `HP-DOC-004` Guarantees and non-guarantees — WP27 — evidence: D — ◐ written: docs/security-guarantees.md (G-1..G-10 with status, non-guarantees, assumptions) consistent with THREAT_MODEL; release-time consistency review is part of RG-10 (WP27)
 - [x] `HP-DOC-005` Recording format spec — WP12 — evidence: D — ✅ done: docs/formats/hprec1.md + docs/operator/recording.md
 - [ ] `HP-DOC-006` Changelog and versioning — WP24 — evidence: D — ◐ done: CHANGELOG.md + docs/VERSIONING.md (policy commitments await operator review, R-15)
 
