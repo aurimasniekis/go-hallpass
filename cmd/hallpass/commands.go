@@ -31,6 +31,10 @@ func rootCommands() []*command {
 		hostkeyCommands(),
 		verifyCommand(),
 		serveCommand(),
+		backupCommands(),
+		restoreCommand(),
+		anchorsCommands(),
+		adminCommands(),
 		{name: "migrate", summary: "apply pending database migrations (takes the data-directory lock)", run: runMigrate},
 	}
 }

@@ -344,6 +344,70 @@
   - **Deviation:** the Keycloak/Dex interop smoke tests (PLAN WP14 tests, nightly CI) are not implemented yet. They are
     tracked as an open item and are not claimed as done.
 
+### ADR-0032 — Backup, restore, anchors and break-glass CLI details
+- **Status:** accepted (WP23). Item 2 is a **security-relevant change** and is flagged for operator review.
+- **Decision:**
+  1. **CLI syntax:**
+     - `hallpass backup create --out DIR`, `backup verify DIR`, `restore DIR [--data D] [--force]`;
+     - `anchors export [--since N]`, `anchors verify FILE`;
+     - `admin bootstrap`, `admin recover --email E [--new-admin]`.
+     These replace PLAN's `backup --out` and `admin recover --operator`.
+  2. **`restore --force`** (*security-relevant*). ADR-0023 says restore only into an empty directory. `--force` instead
+     moves the existing data aside to `backups/pre-restore-<ts>/` and deletes nothing. It needs an explicit flag, the
+     process lock and the matching KEK. Without `--force`, a non-empty target is still refused.
+  3. **Path rewrite:** restore rewrites `recording_segments.path`, because paths are stored as absolute paths.
+     Storing them relative to the data directory is a follow-up.
+  4. **Live segments:**
+     - A segment whose file is missing or does not match during an online backup is recorded in the manifest and
+       makes the CLI exit 3; the backup is not aborted.
+     - Segments still open at snapshot time are copied as `.partial`, and after restore they reconcile as `interrupted`.
+  5. **Online snapshot:** online backups snapshot through a read-only connection (`backup.OpenReadOnly`, `VACUUM INTO`
+     on `mode=ro`). They neither hold the store writer nor take the process lock.
+  6. **Integrity checks:**
+     - `backup verify` checks file hashes, `integrity_check`, schema version, KEK ID, chain links and segment hashes
+       against the DB copy. It does not check chain MACs, which need the KEK; run `hallpass verify` after restore.
+     - `manifest.sha256` detects accidental damage only. Malicious rewrites are caught by the DB cross-checks and by
+       external anchors.
+  7. **Not backed up:** `quarantine/` and the KEK. Both exclusions are documented.
+  8. **Admin commands:** `admin bootstrap` is offline only.
+- **Open follow-ups:**
+  - the PLAN §18.16 "raise alert on next start after break-glass";
+  - the scripted clean-container restore drill (HP-OPS-004);
+  - the upgrade test from a previous-release fixture (HP-OPS-005);
+  - RTO measurement (HP-DB-014);
+  - Litestream compatibility (R-04, untested).
+
+### ADR-0033 — Packaging and release pipeline details
+- **Status:** accepted (WP24). Item 3 is a **security-relevant change** and is flagged for operator review.
+- **Decision:**
+  1. **Dockerfile location:** at the repository root, not `deploy/Dockerfile`.
+  2. **Build:** scripted release (`scripts/release-build.sh`) instead of goreleaser. Archives are reproducible (byte-identical
+     on rebuild of a frozen tree). The container image builds its own binary from source and has its own provenance
+     attestation.
+  3. **Trivy gate** (*security-relevant*): the release fails on **fixable** HIGH/CRITICAL findings. Unfixed
+     HIGH/CRITICAL findings are reported by a non-blocking step. GOAL RG-2 requires "no HIGH/CRITICAL unfixed without a
+     waiver", but the waiver mechanism (`.trivyignore` with justification and expiry) does not exist yet. Until it
+     does, RG-2 evidence must be reviewed manually from the report.
+  4. **Trivy scope:** Trivy runs in `release.yaml` only. Per-push and nightly scans in `ci.yaml` (HP-OPS-008) are a
+     follow-up.
+  5. **Publishing:** a pushed `v*` tag publishes the image to GHCR with SBOM and provenance, attests the binaries and
+     creates a **draft** GitHub release that a human publishes. A tag push counts as an explicit human publishing
+     action, consistent with ADR-0024. Agents never push tags.
+  6. **Compose:**
+     - interpolation uses `HP_*` variables, because the binary rejects unknown `HALLPASS_*` variables;
+     - the KEK is a Compose secret at `/run/secrets/hallpass_kek`;
+     - HTTP is published on loopback only.
+  7. **Kubernetes:** Secret volumes cannot meet the KEK owner and mode checks. This is documented; Kubernetes is not a
+     v1 target.
+  8. **Release targets:** a `darwin/arm64` binary ships for development use (ADR-0022).
+  9. **`docs/VERSIONING.md`** adds policy commitments that need operator sign-off:
+     - an API v1/v2 overlap of at least one minor release;
+     - a one-minor deprecation window for config keys;
+     - upgrades supported only from the previous minor release;
+     - security fixes for the latest minor release line only.
+- **Not verified:** the release workflow has only been exercised locally (actionlint, docker build, smoke tests,
+  Trivy, syft) and has not run on GitHub. `docker/login-action` v4.6.0 resolves to `dbcb8138…`.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |
@@ -360,3 +424,6 @@
 | R-10 | **Chat approvals for privileged roles.** | Allowed by default, with a per-role `approval_channels` restriction (e.g. web-only for `administrator`-class roles), and optionally require that the approver completed web MFA within N hours. | WP16 |
 | R-11 | **CSP for CSS-in-JS** (Ant Design). | Try nonce or static extraction in WP19. Otherwise accept `style-src 'unsafe-inline'` with strict `script-src`. | WP19 |
 | R-12 | **Breached-password check** (offline k-anonymity list). | Not in v1. Revisit for local-auth-heavy deployments. | — |
+| R-13 | **`restore --force`** moves existing data aside instead of refusing (ADR-0032 item 2, security-relevant). | Keep: explicit, non-destructive, lock + KEK required. | — |
+| R-14 | **Trivy unfixed-findings waiver** (ADR-0033 item 3, security-relevant). | Add `.trivyignore` with per-finding justification and expiry before 1.0; until then manual review. | RG-2 |
+| R-15 | **Versioning policy commitments** in docs/VERSIONING.md (ADR-0033 item 9). | Accept as written. | Public release |

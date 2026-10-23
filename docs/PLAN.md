@@ -1601,7 +1601,7 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP20 | Operational pages | WP19, WP16 | planned | |
 | WP21 | Timeline and replay UI | WP20 | planned | |
 | WP22 | Observability | WP15 | planned | |
-| WP23 | Backup/restore/upgrade/break-glass | WP12, WP13 | planned | |
+| WP23 | Backup/restore/upgrade/break-glass | WP12, WP13 | implemented | |
 | WP24 | Packaging and release pipeline | WP22, WP23 | planned | |
 | WP25 | Destination-side audit integration | WP12, WP21 | planned | |
 | WP26 | Hardening | WP01–WP25 | planned | |
@@ -1628,6 +1628,7 @@ local run of the same targets the workflow executes, and the entry says so. Chec
 - 2026-10-23 — WP10–WP12: SSH front end (auth, limits, grammar, list/roles/request/status/cancel/sessions/whoami/version/help), data plane (exec/shell/PTY, env allowlist, signals, exit propagation, strict host verification, enforcer termination, idle timeout, graceful drain, `hallpass serve`) and mandatory recording (HPREC1, recorder with backpressure, rollover, integrity chain, startup reconciliation, retention, `hallpass verify`). In-process e2e and real-OpenSSH tests (`make test-openssh`). Status *implemented*, not *tested*, because of open partial items: HP-SSH-012 keepalive tests, HP-SSH-013 load test, HP-REC-003 idempotency keys, HP-REC-013 per-class retention, HP-CRY-004 external review. Found and fixed during WP: out-of-order recording appends under concurrent streams (ADR-0028), implicit role selection deviating from HP-SSH-022, x/crypto CloseWrite/Write race on termination notices. ADR-0026..0028.
 - 2026-10-23 — WP19 (partial): web foundation: design system with light/dark tokens and a contrast test, API client (CSRF, problem+json, reauth), SSE client, login/setup/shell routes, security lint rules, CSP-safe build check. Unit tests: 232. Still open: Go embedding (HP-UI-016), WP20/21 pages, Playwright flows against a live backend (HP-TST-004), API shapes to reconcile with OpenAPI (WP15). ADR-0029.
 - 2026-10-23 — WP14: generic OIDC SSO (internal/oidc, migration 0010): PKCE code flow, rate-limited JWKS key set, strict ID-token checks, identity by iss+sub, preprovisioned/JIT, group→role sync with last-admin guard, upstream step-up with TOTP fallback, test login gating SSO-only mode, link invitations, RP logout URL; in-process mock IdP (oidctest). Status *implemented*: HTTP endpoints/cookies come with WP15; Keycloak/Dex interop tests not yet run (ADR-0030).
+- 2026-10-23 — WP23: backup/restore/anchors/break-glass CLI (internal/backup, cmd backup|restore|anchors|admin): read-only online snapshot, ciphertext-only segment copy, manifest with hashes and KEK ID, verify, restore with staging and KEK check, anchor export/verify, offline bootstrap/recover. Partial items: restore drill, RTO, upgrade fixture, break-glass alert. ADR-0032 (restore --force security-relevant, R-13).
 <!-- progress-log-end -->
 
 ---
@@ -1805,9 +1806,9 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-CRY-004` Recording file format — WP12 — evidence: U, Z, SR — ◐ partial: HPREC1 implemented, unit + fuzz tested (94.8%); external crypto review pending (R-02)
 - [x] `HP-CRY-005` Integrity verification — WP12 — evidence: I, R — ✅ tested: hallpass verify (segments, ciphertext hash, final frame, chain links + MACs); TestVerifyDetectsTampering
 - [ ] `HP-CRY-006` Vetted cryptography only — WP01 — evidence: C, SR — ◐ WP01: depguard bans math/rand; nohostkeyignore analyzer; ongoing constraint, SR at WP26
-- [ ] `HP-CRY-007` Key loss and recovery — WP23 — evidence: D, R
-- [ ] `HP-CRY-008` External integrity anchoring — WP23 — evidence: I, D
-- [ ] `HP-CRY-009` Ciphertext-only archival — WP23 — evidence: I, R
+- [ ] `HP-CRY-007` Key loss and recovery — WP23 — evidence: D, R — ◐ partial: documented, KEK exclusion enforced/tested; recovery drill evidence pending
+- [x] `HP-CRY-008` External integrity anchoring — WP23 — evidence: I, D — ✅ tested: anchors export/verify incl. rewritten history (internal/backup tests anchors_test)
+- [x] `HP-CRY-009` Ciphertext-only archival — WP23 — evidence: I, R — ✅ tested: ciphertext-only backups, KEK excluded (internal/backup tests)
 
 #### HP-DB — SQLite storage
 
@@ -1822,13 +1823,13 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-DB-009` Disk-full and I/O failure — WP03 — evidence: FI — ◐ WP03: error classification + Health (degraded/failed, fail-closed AcceptsWrites); fault tests FI-06 and recording termination pending WP12/WP26
 - [x] `HP-DB-010` Filesystem permissions — WP03 — evidence: I — ✅ tested (local) @ WP03/WP04: data dir 0700 + owner, DB files 0600, KEK file mode/owner refusal
 - [ ] `HP-DB-011` Bounded growth — WP03 — evidence: I, S — ◐ WP03: incremental auto_vacuum, Checkpoint/IncrementalVacuum/Sizes; retention jobs + metrics pending WP05/WP12/WP22
-- [ ] `HP-DB-012` Consistent backup primitive — WP03 — evidence: I, R — ◐ WP03: Snapshot (VACUUM INTO, fsync, 0600) primitive tested; segment copy + manifest pending WP23
+- [x] `HP-DB-012` Consistent backup primitive — WP03 — evidence: I, R — ✅ tested: snapshot + segment copy + manifest (backup package)
 - [ ] `HP-DB-013` Crash reconciliation — WP09 — evidence: FI, I — ◐ WP09: ReconcileStartup (interrupted connections/channels + timeline, expiry, policy, sessions) tested; segment reconciliation WP12; kill -9 fault tests WP26
-- [ ] `HP-DB-014` Recovery objectives — WP23 — evidence: R, D
+- [ ] `HP-DB-014` Recovery objectives — WP23 — evidence: R, D — ◐ partial: documented; RTO not measured
 
 #### HP-AUTH — Operator authentication and browser sessions
 
-- [ ] `HP-AUTH-001` Secure bootstrap — WP13 — evidence: I, E — ◐ WP13: one-time setup token (CLI path), hashed, 30 min, single use, refused once an admin exists; first admin must enroll MFA (tested). CLI command + web setup page pending WP15/WP19
+- [x] `HP-AUTH-001` Secure bootstrap — WP13 — evidence: I, E — ✅ tested: setup token bootstrap (opauth) + hallpass admin bootstrap CLI
 - [x] `HP-AUTH-002` Argon2id hashing — WP13 — evidence: U — ✅ tested (local) @ WP13: Argon2id PHC, 16-byte salts, versioned params (prod m=64MiB t=3 p=2 guarded by test), rehash-on-login, Calibrate
 - [ ] `HP-AUTH-003` Password policy — WP13 — evidence: U, E — ◐ WP13: NFKC, 12..1024 bytes, no truncation (tested incl. >72-byte difference); UI paste/password-manager E2E pending WP19
 - [x] `HP-AUTH-004` Throttling without permanent lockout — WP13 — evidence: I — ✅ tested (local) @ WP13: per-account and per-IP (/64) progressive throttle capped at 15 min, decays after 24 h, admin clear; no permanent lockout
@@ -1843,7 +1844,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-AUTH-013` CSRF protection — WP13 — evidence: I, E — ◐ WP13: session-bound HMAC CSRF token + constant-time verify (tested); header/Origin/Sec-Fetch-Site middleware WP15
 - [ ] `HP-AUTH-014` Recent authentication — WP13 — evidence: I, E — ◐ WP13: RequireRecentAuth (5 m, MFA when enrolled) + Reauth with rotation (tested); per-endpoint gating WP15
 - [x] `HP-AUTH-015` Lockout prevention — WP13 — evidence: I, E — ✅ tested: last admin guard (opauth) + SSO-only preconditions and protection (internal/oidc/oidc_test.go (mock IdP) TestTestLoginAndSSOOnly)
-- [ ] `HP-AUTH-016` Break-glass recovery — WP23 — evidence: I, R — ◐ WP13: IssueRecoveryLogin (existing or new admin) + RecoveryLogin, audited breakglass.used/login (tested); offline CLI command WP23
+- [ ] `HP-AUTH-016` Break-glass recovery — WP23 — evidence: I, R — ◐ partial: offline admin recover CLI tested; alert-on-next-start pending
 - [ ] `HP-AUTH-017` Dev auth isolation — WP13 — evidence: C, I
 - [x] `HP-AUTH-018` Credential secrecy — WP13 — evidence: U, I — ✅ tested (local) @ WP13: no passwords/TOTP/codes in audit or plaintext storage; redaction layer from WP02
 
@@ -1926,9 +1927,9 @@ check · R recovery drill · SR security review · D documentation review.
 
 - [ ] `HP-OPS-001` Health and readiness — WP22 — evidence: I
 - [ ] `HP-OPS-002` Graceful shutdown — WP11 — evidence: I, O
-- [ ] `HP-OPS-003` Backup command — WP23 — evidence: I, R
-- [ ] `HP-OPS-004` Restore onto clean machine — WP23 — evidence: R
-- [ ] `HP-OPS-005` Upgrade and rollback — WP23 — evidence: R, D
+- [x] `HP-OPS-003` Backup command — WP23 — evidence: I, R — ✅ tested: backup create/verify/restore round trip, tamper cases (internal/backup tests)
+- [ ] `HP-OPS-004` Restore onto clean machine — WP23 — evidence: R — ◐ partial: in-process restore tested; scripted clean-container drill pending
+- [ ] `HP-OPS-005` Upgrade and rollback — WP23 — evidence: R, D — ◐ partial: forward-only migrations + docs; previous-release upgrade fixture test pending
 - [ ] `HP-OPS-006` Capacity and disk alerts — WP22 — evidence: I, D
 - [ ] `HP-OPS-007` Container and standalone deploy — WP24 — evidence: I, D
 - [ ] `HP-OPS-008` CI pipeline — WP01 — evidence: C — ◐ WP01: lint, vet, custom analyzers, race, fuzz smoke, govulncheck, gitleaks in CI; OpenSSH (WP10), frontend (WP19), Trivy (WP24) pending
