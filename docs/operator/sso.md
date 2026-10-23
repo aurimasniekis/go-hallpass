@@ -99,13 +99,28 @@ from other applications.
 
 ## Interoperability status
 
-The flow is tested against an in-process mock provider covering:
+Tested against an in-process mock provider covering:
 - key rotation;
 - `none` and HS256 algorithm confusion;
 - wrong `iss`, `aud`, `azp` or `nonce`;
 - expired tokens;
 - missing `auth_time`;
 - outages;
-- private-network and cross-origin endpoint refusal.
+- private-network and cross-origin refusal.
 
-Interop smoke tests against Keycloak and Dex containers are planned (WP14 follow-up) and have **not** been run yet.
+Also tested against real **Keycloak 26.7** and **Dex 2.46** containers (`make test-oidc-interop`, nightly CI; ADR-0030):
+- unknown identities are refused;
+- a linked login works with PKCE;
+- group mapping works;
+- link invitations work;
+- the IdP session is reused;
+- step-up re-prompts and `auth_time` is checked;
+- logout works.
+
+Provider notes:
+- **Dex** sends the `groups` claim only when the `groups` scope is requested. Set `scopes: [openid, profile, email,
+  groups]` and `groups_claim: groups`.
+- **Dex** honours `post_logout_redirect_uri` only together with `id_token_hint`. Hallpass does not keep ID tokens
+  (HP-OIDC-008), so after RP-initiated logout the user stays on Dex's "logged out" page. The Dex session does end.
+- **Keycloak** asks the user to confirm RP-initiated logout, then redirects back to Hallpass.
+- Logout offers the end-session endpoint of the provider that created the session (`web_sessions.auth_provider`).

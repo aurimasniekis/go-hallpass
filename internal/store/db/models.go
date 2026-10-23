@@ -751,6 +751,7 @@ type WebSession struct {
 	RevokedAt         sql.NullInt64
 	RevokeReason      sql.NullString
 	DisplayID         string
+	AuthProvider      string
 }
 
 type WebhookReplay struct {

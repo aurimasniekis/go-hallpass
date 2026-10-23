@@ -103,8 +103,8 @@ DELETE FROM one_time_tokens WHERE expires_at < ?;
 
 -- name: InsertWebSession :exec
 INSERT INTO web_sessions (id_hash, operator_id, csrf_secret, auth_method, mfa_at, auth_at, created_at, last_seen_at,
-  absolute_expires_at, ip, user_agent, display_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+  absolute_expires_at, ip, user_agent, display_id, auth_provider)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetWebSession :one
 SELECT * FROM web_sessions WHERE id_hash = ?;

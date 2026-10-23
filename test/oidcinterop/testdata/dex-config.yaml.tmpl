@@ -1,0 +1,57 @@
+# Dex configuration for the Hallpass OIDC interop tests. Rendered at test time: passwords, the bcrypt hashes and the
+# client secret are generated per run and never committed. JSON-quoted values are valid YAML scalars.
+issuer: {{ json .Issuer }}
+
+storage:
+  type: memory
+
+web:
+  http: 0.0.0.0:5556
+
+logger:
+  level: debug
+
+oauth2:
+  responseTypes: [code]
+  skipApprovalScreen: true
+
+expiry:
+  idTokens: 1h
+
+# Experimental auth sessions (DEX_SESSIONS_ENABLED=true): IdP-side SSO, max_age handling and end_session_endpoint.
+sessions:
+  absoluteLifetime: 2h
+  validIfNotUsedFor: 1h
+  rememberMeCheckedByDefault: true
+
+enablePasswordDB: true
+
+staticClients:
+  - id: {{ json .ClientID }}
+    name: Hallpass
+    secret: {{ json .ClientSecret }}
+    redirectURIs: [{{ json .RedirectURI }}]
+    postLogoutRedirectURIs: [{{ json .PostLogoutURI }}]
+
+staticPasswords:
+  - email: "alice@interop.example"
+    username: alice
+    name: Alice Interop
+    emailVerified: true
+    userID: {{ json .Users.alice.ID }}
+    hash: {{ json .Users.alice.Hash }}
+    groups: ["hallpass-approvers"]
+  - email: "bob@interop.example"
+    username: bob
+    name: Bob Interop
+    emailVerified: true
+    userID: {{ json .Users.bob.ID }}
+    hash: {{ json .Users.bob.Hash }}
+    groups: ["other"]
+  - email: "mallory@interop.example"
+    username: mallory
+    name: Mallory Unlinked
+    emailVerified: true
+    userID: {{ json .Users.mallory.ID }}
+    hash: {{ json .Users.mallory.Hash }}
+    groups: ["hallpass-approvers"]

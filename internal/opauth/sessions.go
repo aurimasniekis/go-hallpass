@@ -28,6 +28,8 @@ type Principal struct {
 	Operator  *Operator
 	SessionID string // display ID (safe to show)
 	Method    string
+	// Provider is the OIDC provider slug for SSO sessions ("" otherwise).
+	Provider  string
 	AuthAt    time.Time
 	MFAAt     *time.Time
 	CSRFToken string
@@ -61,6 +63,8 @@ func hashSessionToken(token string) []byte {
 type SessionMeta struct {
 	IP        string
 	UserAgent string
+	// Provider is the OIDC provider slug that authenticated the session (SSO only).
+	Provider string
 }
 
 // createSession inserts a new session inside tx and returns the bearer token (cookie value).
@@ -84,6 +88,7 @@ func (svc *Service) createSession(ctx context.Context, tx *store.Tx, operatorID,
 		IDHash: hashSessionToken(token), OperatorID: operatorID, CsrfSecret: secret, AuthMethod: method, MfaAt: mfa,
 		AuthAt: tx.NowMicros(), CreatedAt: tx.NowMicros(), LastSeenAt: tx.NowMicros(),
 		AbsoluteExpiresAt: tx.Now.Add(svc.opts.SessionAbsolute).UnixMicro(), Ip: meta.IP, UserAgent: meta.UserAgent, DisplayID: ids.New(ids.WebSession),
+		AuthProvider: meta.Provider,
 	})
 	if err != nil {
 		return "", err
@@ -118,7 +123,7 @@ func (svc *Service) Authenticate(ctx context.Context, token string) (*Principal,
 	if err != nil || !op.Enabled {
 		return nil, ErrUnauthorized
 	}
-	p := &Principal{Operator: op, SessionID: row.DisplayID, Method: row.AuthMethod, AuthAt: time.UnixMicro(row.AuthAt).UTC(),
+	p := &Principal{Operator: op, SessionID: row.DisplayID, Method: row.AuthMethod, Provider: row.AuthProvider, AuthAt: time.UnixMicro(row.AuthAt).UTC(),
 		ExpiresAt: time.UnixMicro(row.AbsoluteExpiresAt).UTC(), tokenHash: h, csrfSecret: row.CsrfSecret}
 	if row.MfaAt.Valid {
 		t := time.UnixMicro(row.MfaAt.Int64).UTC()
@@ -186,6 +191,7 @@ func (svc *Service) Rotate(ctx context.Context, p *Principal, meta SessionMeta) 
 			t := time.UnixMicro(old.MfaAt.Int64)
 			mfa = &t
 		}
+		meta.Provider = old.AuthProvider
 		token, err = svc.createSession(ctx, tx, old.OperatorID, old.AuthMethod, mfa, meta)
 		if err != nil {
 			return err

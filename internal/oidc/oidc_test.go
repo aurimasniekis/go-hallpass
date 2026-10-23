@@ -116,7 +116,7 @@ func TestLoginPreprovisioned(t *testing.T) {
 		t.Fatalf("%+v", res)
 	}
 	p := f.principal(res.SessionToken)
-	if p.Method != opauth.MethodOIDC || !p.HasRole(opauth.RoleApprover) || p.Limited {
+	if p.Method != opauth.MethodOIDC || p.Provider != "corp" || !p.HasRole(opauth.RoleApprover) || p.Limited {
 		t.Fatalf("principal %+v", p)
 	}
 	q := f.idp.LastAuthorizeParams()
@@ -476,6 +476,9 @@ func TestStepUp(t *testing.T) {
 		t.Fatalf("step-up params %v", q)
 	}
 	p2 := f.principal(res.SessionToken)
+	if p2.Provider != "corp" {
+		t.Fatal("provider lost on step-up rotation")
+	}
 	if err := f.auth.RequireRecentAuth(p2, false); err != nil {
 		t.Fatalf("after step-up: %v", err)
 	}

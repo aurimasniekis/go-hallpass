@@ -498,6 +498,7 @@ func (svc *Service) login(ctx context.Context, p *Provider, c *Claims, meta opau
 		if err := tx.Q.TouchIdentity(ctx, db.TouchIdentityParams{LastLoginAt: sql.NullInt64{Int64: tx.NowMicros(), Valid: true}, Issuer: c.Issuer, Subject: c.Subject}); err != nil {
 			return err
 		}
+		meta.Provider = p.Slug
 		if token, err = svc.auth.CreateSessionTx(ctx, tx, operatorID, opauth.MethodOIDC, meta); err != nil {
 			return err
 		}

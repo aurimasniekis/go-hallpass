@@ -256,7 +256,7 @@ func (q *Queries) GetThrottle(ctx context.Context, key string) (LoginThrottle, e
 }
 
 const getWebSession = `-- name: GetWebSession :one
-SELECT id_hash, operator_id, csrf_secret, auth_method, mfa_at, auth_at, created_at, last_seen_at, absolute_expires_at, ip, user_agent, revoked_at, revoke_reason, display_id FROM web_sessions WHERE id_hash = ?
+SELECT id_hash, operator_id, csrf_secret, auth_method, mfa_at, auth_at, created_at, last_seen_at, absolute_expires_at, ip, user_agent, revoked_at, revoke_reason, display_id, auth_provider FROM web_sessions WHERE id_hash = ?
 `
 
 func (q *Queries) GetWebSession(ctx context.Context, idHash []byte) (WebSession, error) {
@@ -277,6 +277,7 @@ func (q *Queries) GetWebSession(ctx context.Context, idHash []byte) (WebSession,
 		&i.RevokedAt,
 		&i.RevokeReason,
 		&i.DisplayID,
+		&i.AuthProvider,
 	)
 	return i, err
 }
@@ -393,8 +394,8 @@ func (q *Queries) InsertRecoveryCode(ctx context.Context, arg InsertRecoveryCode
 
 const insertWebSession = `-- name: InsertWebSession :exec
 INSERT INTO web_sessions (id_hash, operator_id, csrf_secret, auth_method, mfa_at, auth_at, created_at, last_seen_at,
-  absolute_expires_at, ip, user_agent, display_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  absolute_expires_at, ip, user_agent, display_id, auth_provider)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertWebSessionParams struct {
@@ -410,6 +411,7 @@ type InsertWebSessionParams struct {
 	Ip                string
 	UserAgent         string
 	DisplayID         string
+	AuthProvider      string
 }
 
 func (q *Queries) InsertWebSession(ctx context.Context, arg InsertWebSessionParams) error {
@@ -426,6 +428,7 @@ func (q *Queries) InsertWebSession(ctx context.Context, arg InsertWebSessionPara
 		arg.Ip,
 		arg.UserAgent,
 		arg.DisplayID,
+		arg.AuthProvider,
 	)
 	return err
 }
@@ -532,7 +535,7 @@ func (q *Queries) ListOperatorRoles(ctx context.Context, operatorID string) ([]L
 }
 
 const listOperatorSessions = `-- name: ListOperatorSessions :many
-SELECT id_hash, operator_id, csrf_secret, auth_method, mfa_at, auth_at, created_at, last_seen_at, absolute_expires_at, ip, user_agent, revoked_at, revoke_reason, display_id FROM web_sessions WHERE operator_id = ? AND revoked_at IS NULL AND absolute_expires_at > ? ORDER BY last_seen_at DESC
+SELECT id_hash, operator_id, csrf_secret, auth_method, mfa_at, auth_at, created_at, last_seen_at, absolute_expires_at, ip, user_agent, revoked_at, revoke_reason, display_id, auth_provider FROM web_sessions WHERE operator_id = ? AND revoked_at IS NULL AND absolute_expires_at > ? ORDER BY last_seen_at DESC
 `
 
 type ListOperatorSessionsParams struct {
@@ -564,6 +567,7 @@ func (q *Queries) ListOperatorSessions(ctx context.Context, arg ListOperatorSess
 			&i.RevokedAt,
 			&i.RevokeReason,
 			&i.DisplayID,
+			&i.AuthProvider,
 		); err != nil {
 			return nil, err
 		}

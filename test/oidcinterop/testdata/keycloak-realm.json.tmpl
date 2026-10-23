@@ -1,0 +1,92 @@
+{
+  "realm": "hallpass",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "accessTokenLifespan": 3600,
+  "ssoSessionIdleTimeout": 3600,
+  "ssoSessionMaxLifespan": 7200,
+  "groups": [
+    { "name": "hallpass-approvers", "path": "/hallpass-approvers" },
+    { "name": "other", "path": "/other" }
+  ],
+  "users": [
+    {
+      "id": {{ json .Users.alice.ID }},
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@interop.example",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Interop",
+      "requiredActions": [],
+      "credentials": [{ "type": "password", "value": {{ json .Users.alice.Password }}, "temporary": false }],
+      "groups": ["/hallpass-approvers"]
+    },
+    {
+      "id": {{ json .Users.bob.ID }},
+      "username": "bob",
+      "enabled": true,
+      "email": "bob@interop.example",
+      "emailVerified": true,
+      "firstName": "Bob",
+      "lastName": "Interop",
+      "requiredActions": [],
+      "credentials": [{ "type": "password", "value": {{ json .Users.bob.Password }}, "temporary": false }],
+      "groups": ["/other"]
+    },
+    {
+      "id": {{ json .Users.mallory.ID }},
+      "username": "mallory",
+      "enabled": true,
+      "email": "mallory@interop.example",
+      "emailVerified": true,
+      "firstName": "Mallory",
+      "lastName": "Unlinked",
+      "requiredActions": [],
+      "credentials": [{ "type": "password", "value": {{ json .Users.mallory.Password }}, "temporary": false }],
+      "groups": ["/hallpass-approvers"]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": {{ json .ClientID }},
+      "name": "Hallpass",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": {{ json .ClientSecret }},
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": false,
+      "consentRequired": false,
+      "redirectUris": [{{ json .RedirectURI }}],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": {{ json .PostLogoutURI }}
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "false",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "false",
+            "claim.name": "groups"
+          }
+        }
+      ]
+    }
+  ]
+}

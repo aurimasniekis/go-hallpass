@@ -92,5 +92,6 @@ func (svc *Service) rotateWithAuthTx(ctx context.Context, tx *store.Tx, p *Princ
 	if n == 0 {
 		return "", ErrUnauthorized
 	}
+	meta.Provider = p.Provider
 	return svc.createSession(ctx, tx, p.Operator.ID, p.Method, mfaAt, meta)
 }

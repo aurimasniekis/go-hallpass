@@ -73,17 +73,12 @@ func (s *Server) Logout(c *gen.Call) (*gen.Result, error) {
 	if err := s.d.Auth.Logout(c.R.Context(), c.SessionToken); err != nil {
 		return nil, err
 	}
+	// RP-initiated logout at the provider that created this session is optional and not a global logout
+	// (HP-OIDC-015).
 	var logoutURL *string
-	if c.Principal.Method == opauth.MethodOIDC {
-		// RP-initiated logout is optional and not a global logout (HP-OIDC-015); offer it for every enabled provider
-		// that supports it: the UI shows it as an extra step.
-		if ps, err := s.d.OIDC.EnabledProviders(c.R.Context()); err == nil {
-			for _, p := range ps {
-				if u, err := s.d.OIDC.LogoutURL(c.R.Context(), p.Slug, "/login"); err == nil && u != "" {
-					logoutURL = &u
-					break
-				}
-			}
+	if c.Principal.Method == opauth.MethodOIDC && c.Principal.Provider != "" {
+		if u, err := s.d.OIDC.LogoutURL(c.R.Context(), c.Principal.Provider, "/login"); err == nil && u != "" {
+			logoutURL = &u
 		}
 	}
 	return &gen.Result{ClearSession: true, Body: map[string]any{"provider_logout_url": logoutURL}}, nil
