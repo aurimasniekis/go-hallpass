@@ -364,7 +364,7 @@ func TestHealthTransitions(t *testing.T) {
 	h.Observe(fmt.Errorf("%w: x", ErrBusy))
 	fc.Advance(BusyDegradeAfter + time.Second)
 	h.Observe(fmt.Errorf("%w: x", ErrBusy))
-	if h.Status().State != HealthDegraded || h.AcceptsWrites() {
+	if h.Status().State != HealthDegraded || h.AcceptsWrites(context.Background()) {
 		t.Fatalf("sustained busy should degrade: %+v", h.Status())
 	}
 	h.Observe(nil)
@@ -379,11 +379,11 @@ func TestHealthTransitions(t *testing.T) {
 	h.Observe(nil)
 	probeErr := fmt.Errorf("%w: still full", ErrFull)
 	h.probe = func(context.Context) error { return probeErr }
-	if h.Status().State != HealthDegraded || h.AcceptsWrites() {
+	if h.Status().State != HealthDegraded || h.AcceptsWrites(context.Background()) {
 		t.Fatal("disk full cleared by an unrelated success or a failing probe")
 	}
 	probeErr = nil
-	if !h.AcceptsWrites() {
+	if !h.AcceptsWrites(context.Background()) {
 		t.Fatalf("successful probe did not recover: %+v", h.Status())
 	}
 	h.Degrade("low disk")

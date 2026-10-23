@@ -128,12 +128,12 @@ func TestFI09WriterContention(t *testing.T) {
 	}
 	clk.Advance(store.BusyDegradeAfter + time.Second)
 	_ = put("still contended")
-	if s.Health().AcceptsWrites() {
+	if s.Health().AcceptsWrites(context.Background()) {
 		t.Fatalf("health still accepts writes after sustained contention: %+v", s.Health().Status())
 	}
 	release()
 	must(t, put("released"))
-	if !s.Health().AcceptsWrites() {
+	if !s.Health().AcceptsWrites(context.Background()) {
 		t.Fatalf("no recovery after contention ended: %+v", s.Health().Status())
 	}
 

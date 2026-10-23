@@ -203,7 +203,7 @@ func (h *Health) ProbeSpace(ctx context.Context) {
 
 // AcceptsWrites reports whether new access may be granted (fail closed when not OK). While the database is
 // degraded as full it first runs the rate-limited space probe, so access resumes once space returns.
-func (h *Health) AcceptsWrites() bool {
-	h.ProbeSpace(context.Background())
+func (h *Health) AcceptsWrites(ctx context.Context) bool {
+	h.ProbeSpace(ctx)
 	return h.Status().State == HealthOK
 }

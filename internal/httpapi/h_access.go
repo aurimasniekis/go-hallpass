@@ -539,7 +539,7 @@ func (s *Server) systemStatus(ctx context.Context) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	storageOK := s.d.Store.Health() == nil || s.d.Store.Health().AcceptsWrites()
+	storageOK := s.d.Store.Health() == nil || s.d.Store.Health().AcceptsWrites(ctx)
 	bg, bgAt, err := s.d.Auth.BreakGlassAlert(ctx)
 	if err != nil {
 		return nil, err

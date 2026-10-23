@@ -115,7 +115,7 @@ func (svc *Service) Ingest(ctx context.Context, collectorID string, body []byte)
 	if !ids.Valid(PrefixCollector, collectorID) {
 		return nil, errUnauthorized
 	}
-	if !svc.s.Health().AcceptsWrites() {
+	if !svc.s.Health().AcceptsWrites(ctx) {
 		return nil, apperr.New(apperr.CodeUnavailable, "storage unavailable")
 	}
 	c, err := svc.s.R().GetDestauditCollector(ctx, collectorID)

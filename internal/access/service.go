@@ -140,7 +140,7 @@ var errPolicyMoved = errors.New("policy version changed")
 // withPolicy runs fn in a writer transaction with a policy snapshot that is current inside that transaction. The
 // snapshot is loaded outside the transaction (cached per version); if the version moved, it reloads and retries.
 func (svc *Service) withPolicy(ctx context.Context, name string, fn func(tx *store.Tx, snap *policy.Snapshot) error) error {
-	if !svc.s.Health().AcceptsWrites() {
+	if !svc.s.Health().AcceptsWrites(ctx) {
 		return ErrStorageUnavailable
 	}
 	for range 5 {
