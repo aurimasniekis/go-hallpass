@@ -1605,7 +1605,7 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP24 | Packaging and release pipeline | WP22, WP23 | implemented | 16ccfc9 |
 | WP25 | Destination-side audit integration | WP12, WP21 | implemented | 6c10a5f |
 | WP26 | Hardening | WP01–WP25 | implemented | fee5d24, bd08fce, fee9b40, 86b565f, 9cbcfdb, 05734b9, 899b65e |
-| WP27 | Release-gate validation and RC | WP26 | planned | |
+| WP27 | Release-gate validation and RC | WP26 | in-progress | |
 
 ### 19.3 Progress log
 
@@ -1635,6 +1635,7 @@ local run of the same targets the workflow executes, and the entry says so. Chec
 WP25 (2026-10-23): destination-side audit integration (internal/destaudit, cmd/hallpass-collector, migration 0014, /hooks/destaudit/{collector_id}, collector and record API). Deviations in ADR-0037 (route, separate binary, no HALLPASS_SESSION marker). Fixed unbounded webhook rate-limiter key table. OpenSSH+auditd container test pending.
 - **WP19–WP21** (2026-10-23, 366b4c2): all operational pages, session detail with timeline, destination records and per-channel replay; typed API client from the OpenAPI schema; reauth gate with SSO step-up; Chromium E2E (9 specs incl. axe in both themes) against a real gateway. Known gaps: no visual snapshots (HP-UI-015), no /system/time sampling, Storage & keys page is a placeholder (no API). API gaps found by the UI (tracked for follow-up): approver identity on grants/sessions, policy what-if endpoint, storage/keys/retention/backup endpoints, recovery-token redemption endpoint, OperatorPatch If-Match, host-CA list, route PATCH, delivery pagination, records page limit, typed free-form objects.
 - **WP26** (2026-10-23, fee5d24 + fixes): 28 fuzz targets, fault suite (test/fault, make test-fault), soak harness (make soak-smoke), security review checklist. The fault suite found 11 product defects; all were fixed (bd08fce destination keepalives; fee9b40/899b65e unrecorded forwarding, late termination on stalled storage, agent disconnect and stalled agent; 86b565f/9cbcfdb sticky disk-full and corruption guidance; 05734b9 return_to dot segments, egress NAT64/Teredo, enforcer cursor after clock steps, ADR-0039). Also fixed: unbounded webhook rate-limiter key table (42a6805) and the export default contradicting HP-REC-014 (06803ba, ADR-0040). Pending for RG-3/5/6/8: long fuzz runs, 24 h soak and benchmarks on reference hardware, the security review itself.
+- **WP27** (2026-10-24): release gates evaluated in docs/evidence/unreleased/release-gates.md. Not releasable: RG-2/3/5/6/8/9/11 fail or were not run (no CI remote, no reference hardware, no external review, no license), RG-4/7/10 partial. No tag created; nothing pushed.
 <!-- progress-log-end -->
 
 ---
