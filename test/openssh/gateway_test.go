@@ -48,6 +48,7 @@ type Gateway struct {
 	Dest       *Destination
 	Server     *inventory.Server
 	Role       *inventory.Role
+	Agent      *agents.Agent
 	port       int
 	keyFile    string
 	knownHosts string
@@ -88,7 +89,7 @@ func startGateway(t *testing.T) *Gateway {
 	must(t, err)
 	g.keyFile = filepath.Join(dir, "agent_key")
 	must(t, os.WriteFile(g.keyFile, pem.EncodeToMemory(blk), 0o600))
-	_, err = a.Agents.Create(ctx, admin, agents.CreateInput{Name: "sre-bot", Groups: []string{"sre"}, PublicKeys: []string{key.AuthorizedLine("")}})
+	g.Agent, err = a.Agents.Create(ctx, admin, agents.CreateInput{Name: "sre-bot", Groups: []string{"sre"}, PublicKeys: []string{key.AuthorizedLine("")}})
 	must(t, err)
 
 	g.Server, err = a.Inventory.CreateServer(ctx, admin, inventory.ServerInput{Alias: ptr("web1"), Address: ptr(dest.Host), Port: ptr(dest.Port)})
@@ -265,20 +266,20 @@ func TestOpenSSHHostKeyChanged(t *testing.T) {
 	}
 }
 
-// HP-GRT-009: revocation terminates a running command within 5 s.
-func TestOpenSSHRevocation(t *testing.T) {
-	g := startGateway(t)
-	type result struct {
-		code int
-		err  string
-	}
-	done := make(chan result, 1)
+type runResult struct {
+	code int
+	err  string
+}
+
+// startLongCommand runs a long command through real OpenSSH and waits until its channel is active.
+func (g *Gateway) startLongCommand() (done chan runResult, grantID string) {
+	g.t.Helper()
+	done = make(chan runResult, 1)
 	go func() {
 		_, e, c := g.Run("exec web1 --role inspect -- sleep 300")
-		done <- result{c, e}
+		done <- runResult{c, e}
 	}()
 	ctx := context.Background()
-	var grantID string
 	deadline := time.Now().Add(20 * time.Second)
 	for grantID == "" && time.Now().Before(deadline) {
 		time.Sleep(100 * time.Millisecond)
@@ -289,19 +290,77 @@ func TestOpenSSHRevocation(t *testing.T) {
 		}
 	}
 	if grantID == "" {
-		t.Fatal("command never became active")
+		g.t.Fatal("command never became active")
 	}
-	start := time.Now()
-	_, err := g.A.Access.RevokeGrant(ctx, policy.OperatorInfo{ID: "opr_admin", Roles: []string{"administrator"}, Enabled: true}, grantID, "incident")
-	must(t, err)
+	return done, grantID
+}
+
+// expectTerminated asserts the running command ends within the 5 s enforcement bound (HP-GRT-008).
+func (g *Gateway) expectTerminated(done chan runResult, start time.Time) runResult {
+	g.t.Helper()
 	select {
 	case r := <-done:
-		if r.code != 87 {
-			t.Fatalf("exit %d %q", r.code, r.err)
+		if r.code == 0 {
+			g.t.Fatalf("command exited successfully instead of being terminated: %q", r.err)
 		}
-		t.Logf("terminated in %v", time.Since(start))
+		g.t.Logf("terminated in %v (exit %d)", time.Since(start), r.code)
+		return r
 	case <-time.After(5 * time.Second):
-		t.Fatal("not terminated within 5s")
+		g.t.Fatal("not terminated within 5s")
+	}
+	return runResult{}
+}
+
+// HP-GRT-009: revocation terminates a running command within 5 s.
+func TestOpenSSHRevocation(t *testing.T) {
+	g := startGateway(t)
+	done, grantID := g.startLongCommand()
+	start := time.Now()
+	_, err := g.A.Access.RevokeGrant(context.Background(), policy.OperatorInfo{ID: "opr_admin", Roles: []string{"administrator"}, Enabled: true}, grantID, "incident")
+	must(t, err)
+	if r := g.expectTerminated(done, start); r.code != 87 {
+		t.Fatalf("exit %d %q", r.code, r.err)
+	}
+}
+
+// HP-AGT-005: revoking the agent key terminates its live sessions, and the key no longer authenticates.
+func TestOpenSSHKeyRevocation(t *testing.T) {
+	g := startGateway(t)
+	done, _ := g.startLongCommand()
+	keys, err := g.A.Agents.Keys(context.Background(), g.Agent.ID)
+	must(t, err)
+	start := time.Now()
+	_, err = g.A.Agents.RevokeKey(context.Background(), admin, g.Agent.ID, keys[0].ID, "leaked")
+	must(t, err)
+	g.expectTerminated(done, start)
+	if _, errOut, code := g.Run("list"); code != 255 || !strings.Contains(errOut, "Permission denied") {
+		t.Fatalf("revoked key authenticated: %d %q", code, errOut)
+	}
+}
+
+// HP-AGT-008: disabling the agent terminates its live sessions and refuses new logins.
+func TestOpenSSHAgentDisable(t *testing.T) {
+	g := startGateway(t)
+	done, _ := g.startLongCommand()
+	start := time.Now()
+	_, err := g.A.Agents.SetEnabled(context.Background(), admin, g.Agent.ID, false, "incident")
+	must(t, err)
+	g.expectTerminated(done, start)
+	if _, errOut, code := g.Run("list"); code != 255 || !strings.Contains(errOut, "Permission denied") {
+		t.Fatalf("disabled agent authenticated: %d %q", code, errOut)
+	}
+}
+
+// HP-SRV-008: disabling the server terminates live activity on it and hides it from new requests.
+func TestOpenSSHServerDisable(t *testing.T) {
+	g := startGateway(t)
+	done, _ := g.startLongCommand()
+	start := time.Now()
+	_, err := g.A.Inventory.SetServerEnabled(context.Background(), admin, g.Server.ID, false)
+	must(t, err)
+	g.expectTerminated(done, start)
+	if _, errOut, code := g.Run("exec web1 --role inspect -- true"); code == 0 {
+		t.Fatalf("exec on a disabled server: %q", errOut)
 	}
 }
 

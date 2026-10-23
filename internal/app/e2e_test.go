@@ -761,6 +761,66 @@ func TestResealRegistry(t *testing.T) {
 	}
 }
 
+// HP-SSH-022: with a PTY and several candidate roles the gateway asks; an invalid answer fails like a non-PTY call.
+func TestGatewayPTYRolePrompt(t *testing.T) {
+	g := startGateway(t)
+	_, err := g.a.Inventory.CreateRole(context.Background(), admin, g.srv.ID, inventory.RoleInput{Alias: ptr("deploy"), RemoteUser: ptr("deploy")})
+	must(t, err)
+	if _, _, code := g.run("exec web1 --role inspect -- true"); code != 0 { // inspect gets an active grant; deploy stays requestable
+		t.Fatalf("baseline %d", code)
+	}
+	prompt := func(answer func(menu string) string) (string, error) {
+		c, err := g.client(g.key)
+		must(t, err)
+		defer c.Close()
+		s, err := c.NewSession()
+		must(t, err)
+		must(t, s.RequestPty("xterm-256color", 24, 80, ssh.TerminalModes{}))
+		pr, pw := io.Pipe()
+		var out bytes.Buffer
+		var mu sync.Mutex
+		w := writerFunc(func(p []byte) (int, error) { mu.Lock(); defer mu.Unlock(); return out.Write(p) })
+		s.Stdin, s.Stdout, s.Stderr = pr, w, w
+		must(t, s.Start("exec web1 -- echo chosen-ok"))
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			mu.Lock()
+			got := out.String()
+			mu.Unlock()
+			if strings.Contains(got, "role number:") {
+				_, _ = pw.Write([]byte(answer(got) + "\r"))
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("no role prompt: %q", got)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		err = s.Wait()
+		_ = pw.Close()
+		mu.Lock()
+		defer mu.Unlock()
+		return out.String(), err
+	}
+	out, err := prompt(func(menu string) string {
+		for _, line := range strings.Split(menu, "\n") {
+			if n, name, ok := strings.Cut(strings.TrimSpace(line), ") "); ok && strings.HasPrefix(name, "inspect") {
+				return n
+			}
+		}
+		t.Fatalf("inspect not offered: %q", menu)
+		return ""
+	})
+	if err != nil || !strings.Contains(out, "deploy") || !strings.Contains(out, "chosen-ok") {
+		t.Fatalf("chosen role: %v %q", err, out)
+	}
+	_, err = prompt(func(string) string { return "9" })
+	var ee *ssh.ExitError
+	if !errors.As(err, &ee) || ee.ExitStatus() != 81 {
+		t.Fatalf("invalid choice: %v", err)
+	}
+}
+
 // HP-SSH-012: keepalives on the destination leg detect a hung destination and end the channel (exit 88).
 func TestGatewayDestinationKeepalive(t *testing.T) {
 	g := startGateway(t, func(c *config.Config) {

@@ -1694,7 +1694,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-SSH-019` No hang without input — WP10 — evidence: O — ✅ tested: internal/app/e2e_test.go TestGatewayReasonRequiredWithoutPTY (exit 90)
 - [x] `HP-SSH-020` Bounded wait with auto-connect — WP10 — evidence: O, I — ✅ tested: internal/app/e2e_test.go TestGatewayWaitTimeoutAndDisconnect, TestGatewayRequestLifecycle
 - [x] `HP-SSH-021` Disconnect does not mutate requests — WP10 — evidence: O, I — ✅ tested: internal/app/e2e_test.go TestGatewayWaitTimeoutAndDisconnect
-- [ ] `HP-SSH-022` Unambiguous default role — WP10 — evidence: U, O — ◐ tested: internal/app/e2e_test.go TestGatewayImplicitRole (non-PTY); PTY role prompt implemented, untested
+- [x] `HP-SSH-022` Unambiguous default role — WP10 — evidence: U, O — ✅ tested: implicit role only with one candidate (TestGatewayImplicitRole); PTY role prompt with valid and invalid answers (TestGatewayPTYRolePrompt)
 - [x] `HP-SSH-023` Remote exec encoding — WP11 — evidence: U, O, D — ✅ tested: test/openssh/gateway_test.go (real ssh + sshd) TestOpenSSHExec; docs/agent/guide.md quoting
 - [x] `HP-SSH-024` Introspection commands — WP10 — evidence: O — ✅ tested: internal/app/e2e_test.go TestGatewayRequestLifecycle
 - [x] `HP-SSH-025` Grant revalidation per channel — WP11 — evidence: U, I — ✅ tested: access RegisterChannel tests; e2e revocation
@@ -1705,10 +1705,10 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-AGT-002` Multiple keys per agent — WP06 — evidence: U, I — ✅ tested (local) @ WP06: multiple keys per agent, active/revoked, actor/time history
 - [x] `HP-AGT-003` Globally unique key ownership — WP06 — evidence: I — ✅ tested (local) @ WP06: unique fingerprint incl. tombstoned revoked keys (TestKeyUniquenessAcrossAgents)
 - [x] `HP-AGT-004` Validated key parsing — WP06 — evidence: U, Z — ✅ tested (local) @ WP06: ParseAgentKey policy table + FuzzParseAgentKey (20 s local smoke)
-- [ ] `HP-AGT-005` Immediate key revocation — WP09 — evidence: O, I — ◐ WP09: key revoke → enforcer terminates that key's channels (tested); last key → grants revoked; OpenSSH interop WP10/11
+- [x] `HP-AGT-005` Immediate key revocation — WP09 — evidence: O, I — ✅ tested: key revocation terminates live sessions through real OpenSSH within ms and the key no longer authenticates (test/openssh TestOpenSSHKeyRevocation)
 - [x] `HP-AGT-006` No agent private keys — WP06 — evidence: U — ✅ tested (local) @ WP06: private-key input rejected without echo; no private-key storage path exists
 - [x] `HP-AGT-007` Source CIDR restriction — WP10 — evidence: O, D — ✅ tested: source CIDR enforced at SSH auth (internal/app/e2e_test.go TestGatewaySourceCIDR); agents unit tests incl. IPv4-mapped
-- [ ] `HP-AGT-008` Agent disablement — WP09 — evidence: I, O — ◐ WP09: disable hook cancels requests, revokes grants (tested); enforcer termination tested in-process; OpenSSH WP11
+- [x] `HP-AGT-008` Agent disablement — WP09 — evidence: I, O — ✅ tested: agent disable terminates live sessions through real OpenSSH and refuses new logins (test/openssh TestOpenSSHAgentDisable)
 - [x] `HP-AGT-009` Agent audit history — WP06 — evidence: I — ✅ tested (local) @ WP06: audit events for create/update/enable/disable/key add/revoke (hash-chain verified)
 
 #### HP-SRV — Destination servers and roles
@@ -1720,7 +1720,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-SRV-005` Host key rotation — WP07 — evidence: I, O — ✅ tested: changed key refused before auth with exit 88 + audit alert (internal/app/e2e_test.go TestGatewayHostKeyMismatch, test/openssh/gateway_test.go TestOpenSSHHostKeyChanged)
 - [x] `HP-SRV-006` Duplicate host identity detection — WP07 — evidence: I — ✅ tested (local) @ WP07: duplicate active fingerprint rejected; justified, audited exception required
 - [ ] `HP-SRV-007` Host CA model — WP07 — evidence: U, O — ◐ WP07: host CA enrollment + principal binding, validity/CA/type checks (unit); real-sshd host-cert interop pending WP11
-- [ ] `HP-SRV-008` Server/role disablement — WP09 — evidence: I, O — ◐ WP09: server/role disable hooks cancel + revoke (tested); OpenSSH-level termination WP11
+- [x] `HP-SRV-008` Server/role disablement — WP09 — evidence: I, O — ✅ tested: server disable terminates live activity through real OpenSSH and blocks new exec (test/openssh TestOpenSSHServerDisable); role disable via the same hooks (access tests)
 - [x] `HP-SRV-009` Egress validation (anti-SSRF) — WP07 — evidence: U, I — ✅ tested (local) @ WP07: internal/egress default-deny special ranges, allow CIDRs, mixed-DNS refusal, IP-pinned dial with Control re-check
 - [x] `HP-SRV-010` Address confidentiality — WP15 — evidence: I, E — ✅ tested: addresses redacted in API without permission, absent from agent output (SSH e2e)
 
