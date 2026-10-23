@@ -42,6 +42,17 @@ func TestResealColumns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Before re-encryption the old version still protects data; other purposes and versions are unaffected.
+	if inUse, err := keyring.VersionInUse(ctx, s, []keyring.Column{col}, keyring.PurposeField, v2-1); err != nil || !inUse {
+		t.Fatalf("v%d in use: %v %v", v2-1, inUse, err)
+	}
+	if inUse, err := keyring.VersionInUse(ctx, s, []keyring.Column{col}, keyring.PurposeCredential, v2-1); err != nil || inUse {
+		t.Fatalf("other purpose reported in use: %v %v", inUse, err)
+	}
+	if _, err := keyring.VersionInUse(ctx, s, []keyring.Column{{Table: "x; DROP", IDColumn: "id", BlobColumn: "b", Purpose: keyring.PurposeField}},
+		keyring.PurposeField, 1); err == nil {
+		t.Fatal("invalid identifier accepted by VersionInUse")
+	}
 	n, err := kr.ResealColumns(ctx, s, []keyring.Column{col}, 2)
 	if err != nil || n != 2 {
 		t.Fatalf("first batch %d %v", n, err)
@@ -68,6 +79,12 @@ func TestResealColumns(t *testing.T) {
 		if err != nil || string(pt) != "secret-"+id {
 			t.Fatalf("%s: %q %v", id, pt, err)
 		}
+	}
+	if inUse, err := keyring.VersionInUse(ctx, s, []keyring.Column{col}, keyring.PurposeField, v2-1); err != nil || inUse {
+		t.Fatalf("v%d still in use after re-encryption: %v %v", v2-1, inUse, err)
+	}
+	if kr.KEKID() == "" {
+		t.Fatal("empty KEK id")
 	}
 	if _, err := kr.ResealColumns(ctx, s, []keyring.Column{{Table: "x; DROP", IDColumn: "id", BlobColumn: "b"}}, 1); err == nil {
 		t.Fatal("invalid identifier accepted")
