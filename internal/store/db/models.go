@@ -8,6 +8,43 @@ import (
 	"database/sql"
 )
 
+type Agent struct {
+	ID              string
+	Name            string
+	Description     string
+	Enabled         int64
+	SourceCidrsJson string
+	Version         int64
+	CreatedAt       int64
+	CreatedBy       string
+	UpdatedAt       int64
+	UpdatedBy       string
+	DisabledAt      sql.NullInt64
+	DisabledBy      sql.NullString
+}
+
+type AgentGroup struct {
+	AgentID string
+	GroupID string
+}
+
+type AgentKey struct {
+	ID                string
+	AgentID           string
+	FingerprintSha256 string
+	Algorithm         string
+	Bits              int64
+	PublicKey         string
+	Comment           string
+	State             string
+	CreatedAt         int64
+	CreatedBy         string
+	RevokedAt         sql.NullInt64
+	RevokedBy         sql.NullString
+	RevokeReasonEnc   []byte
+	LastUsedAt        sql.NullInt64
+}
+
 type AuditEvent struct {
 	ID            string
 	Seq           int64
@@ -36,6 +73,15 @@ type DeliveryAttempt struct {
 	DurationMs int64
 }
 
+type Group struct {
+	ID          string
+	Kind        string
+	Name        string
+	Description string
+	CreatedAt   int64
+	UpdatedAt   int64
+}
+
 type Job struct {
 	ID          string
 	Kind        string
@@ -60,6 +106,13 @@ type KeyringKey struct {
 	State     string
 	CreatedAt int64
 	UpdatedAt int64
+}
+
+type Label struct {
+	EntityType string
+	EntityID   string
+	Key        string
+	Value      string
 }
 
 type OutboxMessage struct {

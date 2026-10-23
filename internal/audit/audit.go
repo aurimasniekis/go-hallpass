@@ -120,6 +120,14 @@ func (w *Writer) Append(ctx context.Context, tx *store.Tx, ev Event) (string, er
 	if ev.Outcome == "" {
 		ev.Outcome = OutcomeSuccess
 	}
+	if m := MetaFrom(ctx); ev.SourceIP == "" || ev.CorrelationID == "" {
+		if ev.SourceIP == "" {
+			ev.SourceIP = m.SourceIP
+		}
+		if ev.CorrelationID == "" {
+			ev.CorrelationID = m.CorrelationID
+		}
+	}
 	details, err := canonicalJSON(ev.Details)
 	if err != nil {
 		return "", fmt.Errorf("audit details: %w", err)

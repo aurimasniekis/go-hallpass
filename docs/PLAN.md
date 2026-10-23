@@ -1581,8 +1581,8 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP02 | Config, runtime modes, logging | WP01 | tested | 860e1a7 |
 | WP03 | SQLite storage, migrations, lock, backup primitive | WP02 | tested | f0b96c0 |
 | WP04 | Keyring and field crypto | WP03 | tested | dc3680d |
-| WP05 | Audit, jobs, outbox | WP04 | tested | |
-| WP06 | Agents and keys | WP05 | planned | |
+| WP05 | Audit, jobs, outbox | WP04 | tested | 3327bc9 |
+| WP06 | Agents and keys | WP05 | tested | |
 | WP07 | Servers, host identities, roles, credentials/CA | WP06 | planned | |
 | WP08 | Policy engine and effective access | WP07 | planned | |
 | WP09 | Request/grant/session lifecycle and enforcer | WP08 | planned | |
@@ -1618,6 +1618,7 @@ local run of the same targets the workflow executes, and the entry says so. Chec
 - **WP03** (2026-10-23): `internal/store` (modernc SQLite, writer/reader pools with per-connection pragma verification, BEGIN IMMEDIATE Tx with jittered busy retry and after-commit hooks, error classification and Health tracking, flock process lock, Linux/macOS network-FS refusal, data-dir permission checks, goose migrations with pre-migration snapshots, quick/integrity checks, VACUUM INTO snapshot), sqlc (pinned v1.31.1 binary with checksum, drift check in CI), `internal/ids` (prefixed monotonic UUIDv7), `internal/clock`, `internal/store/storetest`, `hallpass migrate`, docs/operator/storage.md. Tested locally on macOS and in a Linux container (incl. FUSE refusal via `make test-netfs`).
 - **WP04** (2026-10-23): `internal/keyring` (LocalKEK AES-256-GCM KeyWrapper, KEK file/env/dev loading with permission checks, purpose keys field/credential/recording/manifest/token, Seal/Open with location-binding AAD, MAC/MACAll/VerifyMAC, purpose rotation with canary reseal, retire, offline KEK rotation), `hallpass keys init-kek|status|rotate|rotate-kek`, docs/operator/keys.md. Found and fixed during testing: retiring a rotated field key orphaned the canary; rotation now reseals it in the same transaction. Coverage 80.6%. Tested locally.
 - **WP05** (2026-10-23): migration 0002 (audit_events, jobs, outbox_messages, delivery_attempts), `internal/audit` (hash chain, Verify, sealed sensitive details, sinks), `internal/jobs` (leased durable queue, retries, dedup, Periodic), `internal/outbox` (encrypted bodies, provider registry, leased delivery, bounded retries, dead-letter, attempt history), `internal/eventbus` (bounded, drop-counting), `internal/keyring/keyringtest`. Tested locally under -race.
+- **WP06** (2026-10-23): migration 0003 (groups, labels, agents, agent_keys, agent_groups), `internal/agents` (strict key parsing/algorithm policy, global key uniqueness with tombstones, revocation with sealed reasons, enable/disable, in-transaction hooks for WP09 cascades, Authenticate with failure reasons and source CIDRs, policy-version bumps, audit), `internal/groups` (group/label validation and persistence), `internal/apperr`, `internal/testutil/sshkeys`, audit request metadata. Tested locally (-race), FuzzParseAgentKey 20 s.
 <!-- progress-log-end -->
 
 ---
@@ -1686,15 +1687,15 @@ check · R recovery drill · SR security review · D documentation review.
 
 #### HP-AGT — Agent registration
 
-- [ ] `HP-AGT-001` Agent record — WP06 — evidence: U, I
-- [ ] `HP-AGT-002` Multiple keys per agent — WP06 — evidence: U, I
-- [ ] `HP-AGT-003` Globally unique key ownership — WP06 — evidence: I
-- [ ] `HP-AGT-004` Validated key parsing — WP06 — evidence: U, Z
-- [ ] `HP-AGT-005` Immediate key revocation — WP09 — evidence: O, I
-- [ ] `HP-AGT-006` No agent private keys — WP06 — evidence: U
-- [ ] `HP-AGT-007` Source CIDR restriction — WP10 — evidence: O, D
-- [ ] `HP-AGT-008` Agent disablement — WP09 — evidence: I, O
-- [ ] `HP-AGT-009` Agent audit history — WP06 — evidence: I
+- [x] `HP-AGT-001` Agent record — WP06 — evidence: U, I — ✅ tested (local) @ WP06: agents table + service (name rules, CIDRs, groups, labels, optimistic version)
+- [x] `HP-AGT-002` Multiple keys per agent — WP06 — evidence: U, I — ✅ tested (local) @ WP06: multiple keys per agent, active/revoked, actor/time history
+- [x] `HP-AGT-003` Globally unique key ownership — WP06 — evidence: I — ✅ tested (local) @ WP06: unique fingerprint incl. tombstoned revoked keys (TestKeyUniquenessAcrossAgents)
+- [x] `HP-AGT-004` Validated key parsing — WP06 — evidence: U, Z — ✅ tested (local) @ WP06: ParseAgentKey policy table + FuzzParseAgentKey (20 s local smoke)
+- [ ] `HP-AGT-005` Immediate key revocation — WP09 — evidence: O, I — ◐ WP06: revoked key rejected at next auth (TestAuthenticate) + in-tx revoke hooks; enforcer termination pending WP09
+- [x] `HP-AGT-006` No agent private keys — WP06 — evidence: U — ✅ tested (local) @ WP06: private-key input rejected without echo; no private-key storage path exists
+- [ ] `HP-AGT-007` Source CIDR restriction — WP10 — evidence: O, D — ◐ WP06: source CIDR check in agents.Authenticate (incl. IPv4-mapped); SSH wiring + docs pending WP10
+- [ ] `HP-AGT-008` Agent disablement — WP09 — evidence: I, O — ◐ WP06: disable rejects auth + in-tx disable hooks + agent.disabled event; grant revocation/termination pending WP09
+- [x] `HP-AGT-009` Agent audit history — WP06 — evidence: I — ✅ tested (local) @ WP06: audit events for create/update/enable/disable/key add/revoke (hash-chain verified)
 
 #### HP-SRV — Destination servers and roles
 
