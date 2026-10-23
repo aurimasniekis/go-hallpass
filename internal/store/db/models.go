@@ -273,6 +273,68 @@ type LoginCredential struct {
 	UpdatedAt         int64
 }
 
+type LoginThrottle struct {
+	Key           string
+	Failures      int64
+	NextAllowedAt int64
+	UpdatedAt     int64
+}
+
+type MfaTotp struct {
+	OperatorID  string
+	SecretEnc   []byte
+	ConfirmedAt sql.NullInt64
+	LastStep    int64
+	CreatedAt   int64
+}
+
+type OneTimeToken struct {
+	Hash       []byte
+	Kind       string
+	OperatorID sql.NullString
+	DataJson   string
+	ExpiresAt  int64
+	UsedAt     sql.NullInt64
+	CreatedAt  int64
+	CreatedBy  string
+}
+
+type Operator struct {
+	ID             string
+	Email          sql.NullString
+	DisplayName    string
+	Enabled        int64
+	ProvisionedVia string
+	MfaRequired    int64
+	Version        int64
+	CreatedAt      int64
+	CreatedBy      string
+	UpdatedAt      int64
+	DisabledAt     sql.NullInt64
+	LastLoginAt    sql.NullInt64
+}
+
+type OperatorGroupMember struct {
+	GroupID    string
+	OperatorID string
+	Source     string
+}
+
+type OperatorLocalCredential struct {
+	OperatorID    string
+	PasswordPhc   string
+	ParamsVersion int64
+	ChangedAt     int64
+	MustChange    int64
+}
+
+type OperatorRole struct {
+	OperatorID string
+	Role       string
+	Source     string
+	SourceRef  string
+}
+
 type OutboxMessage struct {
 	ID          string
 	Provider    string
@@ -318,6 +380,13 @@ type PolicyState struct {
 	LockdownBy sql.NullString
 	LockdownAt sql.NullInt64
 	UpdatedAt  int64
+}
+
+type RecoveryCode struct {
+	OperatorID string
+	CodeHash   []byte
+	UsedAt     sql.NullInt64
+	CreatedAt  int64
 }
 
 type RoleCertBinding struct {
@@ -444,4 +513,21 @@ type UserCa struct {
 	CreatedAt         int64
 	CreatedBy         string
 	UpdatedAt         int64
+}
+
+type WebSession struct {
+	IDHash            []byte
+	OperatorID        string
+	CsrfSecret        []byte
+	AuthMethod        string
+	MfaAt             sql.NullInt64
+	AuthAt            int64
+	CreatedAt         int64
+	LastSeenAt        int64
+	AbsoluteExpiresAt int64
+	Ip                string
+	UserAgent         string
+	RevokedAt         sql.NullInt64
+	RevokeReason      sql.NullString
+	DisplayID         string
 }

@@ -527,8 +527,10 @@ CREATE TABLE action_tokens (hash BLOB PRIMARY KEY, request_id TEXT NOT NULL REFE
 CREATE TABLE webhook_replay (provider TEXT NOT NULL, fingerprint BLOB NOT NULL, expires_at INTEGER NOT NULL, PRIMARY KEY (provider, fingerprint)) STRICT, WITHOUT ROWID;
 ```
 
-Migration plan: `0001`–`0008` in WP03–WP12 as their WPs land, `0009`–`0011` in WP13–WP16. Each WP adds only
-its own tables. The schema version is in the `goose_db_version` table. The `audit_events` hash chain is
+Migration plan: each WP adds only its own tables, numbered in the order the migrations are committed (never inserted
+before an already-committed number, because goose refuses out-of-order history). Actual order so far: 0001 core, 0002 audit/jobs,
+0003 agents, 0004 inventory, 0005 credentials, 0006 policy, 0007 access, 0008 operators (WP13); recording, OIDC and notify
+tables take the next free numbers. The schema version is in the `goose_db_version` table. The `audit_events` hash chain is
 `hash = SHA-256(prev_hash || canonical(row without hash))`, MAC-free (the chain detects reordering and deletion within the DB.
 External anchoring covers a key-holding attacker, §13.8).
 
@@ -1585,11 +1587,11 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP06 | Agents and keys | WP05 | tested | bdf3f05 |
 | WP07 | Servers, host identities, roles, credentials/CA | WP06 | tested | 6284850 |
 | WP08 | Policy engine and effective access | WP07 | tested | d4b4e2a |
-| WP09 | Request/grant/session lifecycle and enforcer | WP08 | tested | |
+| WP09 | Request/grant/session lifecycle and enforcer | WP08 | tested | 0fdc035 |
 | WP10 | SSH front end | WP09 | planned | |
 | WP11 | SSH data plane | WP10 | planned | |
 | WP12 | Recording format, recorder, reconciliation | WP11, WP04 | planned | |
-| WP13 | Local operator auth, sessions, MFA | WP05 | planned | |
+| WP13 | Local operator auth, sessions, MFA | WP05 | in-progress | |
 | WP14 | OIDC SSO | WP13 | planned | |
 | WP15 | RBAC, REST API, SSE | WP14, WP12 | planned | |
 | WP16 | Web approvals and notification core | WP15 | planned | |
@@ -1622,6 +1624,7 @@ local run of the same targets the workflow executes, and the entry says so. Chec
 - **WP07** (2026-10-23): migrations 0004/0005, `internal/inventory` (servers, roles, aliases/reserved words, host identities with paste/scan/confirm/retire, duplicate detection + audited exceptions, host CAs with principal binding, strict Verifier), `internal/credentials` (managed/imported login keys sealed with the credential key, authorized_keys suggestion, probe/activate/overlap/retire/revoke, user CAs + per-connection certificates, Signer/SignerResolver abstraction, gateway host keys with staged rotation), `internal/egress` (anti-SSRF guard), `internal/destssh` (sole outbound dialer, verifier mandatory), `internal/sshalg`, `internal/testutil/sshtest` (in-process destination), config `egress.source_addresses`. txscope analyzer refined (SSH I/O only; AfterCommit callbacks exempt). Tested locally (-race); real-OpenSSH interop deferred to WP10/WP11 harness.
 - **WP08** (2026-10-23): migration 0006 (policy_rules, approver_rules, agent_owners), `internal/policy` (selectors with Kubernetes-style label expressions and empty-matches-nothing semantics, immutable compiled Snapshot: Evaluate/Visible/ResolveServer/ResolveRole with single ErrNotFoundOrForbidden, durations/presets/auto-approve, CanApprove with self-approval prohibition; Engine with per-version cache, consistent ReadTx loading, WhatIf; CRUD service with in-tx version bump + audit + policy.changed), `store.ReadTx`, docs/operator/policy.md. Evaluate ≈1.2 µs, Visible over 2,000 servers × 3 roles × 100 rules ≈8.5 ms (M-series laptop, not RH-1). Coverage 81.8%. Tested locally (-race), FuzzRuleJSON 20 s.
 - **WP09** (2026-10-23): migration 0007 (requests, decisions, grants, sessions, connections, channels, timeline), `internal/access` (CreateRequest with dedup/idempotency/rate limits/sealed sanitized reasons/auto-approval; Decide via one transactional path with authority, self-approval, channel, policy and duration rechecks; grants with time-authoritative expiry; lockdown; disable/key-revoke/target cascades; ReconcilePolicy (cancel/revoke/clamp); channel registration with atomic concurrency limits and full revalidation; per-session Sequencer with DB-reserved blocks; timeline events with idempotency keys; Enforcer (events + ticker + DB reconciliation, registration-race guard); startup reconciliation; background loop). Decide no longer writes state on its rejection paths (would roll back). Tests: 30+ cases incl. concurrency races, enforcement bound (in-process), lost-event path; coverage 80.8%; FuzzSanitizeReason 15 s. Frontend foundation, HPREC1 format and SSH grammar started in parallel by sub-agents (separate directories; committed separately after review).
+- **WP13 (service layer)** (2026-10-23): migration 0009 (operators, local credentials, roles, operator groups, TOTP, recovery codes, one-time tokens, web sessions, throttle), `internal/opauth` (Argon2id with versioned params, NFKC passwords, TOTP RFC 6238, recovery codes, setup/invite/reset/recovery-login tokens, login with throttling and enumeration resistance, MFA verification, reauth, server-side sessions with rotation/idle/absolute expiry and CSRF tokens, last-admin protection, break-glass). HTTP endpoints, cookies and Origin/CSRF middleware are delivered with the API in WP15 (deviation from PLAN WP13 file list: avoids building the router twice). Bug found by the new timing test and fixed: the unknown-account dummy hash was computed once at init and could diverge from current parameters (35× timing difference in tests). Coverage 81.0%.
 <!-- progress-log-end -->
 
 ---
@@ -1822,24 +1825,24 @@ check · R recovery drill · SR security review · D documentation review.
 
 #### HP-AUTH — Operator authentication and browser sessions
 
-- [ ] `HP-AUTH-001` Secure bootstrap — WP13 — evidence: I, E
-- [ ] `HP-AUTH-002` Argon2id hashing — WP13 — evidence: U
-- [ ] `HP-AUTH-003` Password policy — WP13 — evidence: U, E
-- [ ] `HP-AUTH-004` Throttling without permanent lockout — WP13 — evidence: I
-- [ ] `HP-AUTH-005` Enumeration resistance — WP13 — evidence: U, I
-- [ ] `HP-AUTH-006` TOTP MFA — WP13 — evidence: U, I, E
-- [ ] `HP-AUTH-007` Recovery codes — WP13 — evidence: U, I
-- [ ] `HP-AUTH-008` Mandatory MFA for privileged accounts — WP13 — evidence: I, E
-- [ ] `HP-AUTH-009` Password change and reset — WP13 — evidence: I, E
-- [ ] `HP-AUTH-010` Session invalidation — WP13 — evidence: I
-- [ ] `HP-AUTH-011` Invitations — WP13 — evidence: I, E
-- [ ] `HP-AUTH-012` Server-side sessions — WP13 — evidence: I, E
-- [ ] `HP-AUTH-013` CSRF protection — WP13 — evidence: I, E
-- [ ] `HP-AUTH-014` Recent authentication — WP13 — evidence: I, E
-- [ ] `HP-AUTH-015` Lockout prevention — WP13 — evidence: I, E
-- [ ] `HP-AUTH-016` Break-glass recovery — WP23 — evidence: I, R
+- [ ] `HP-AUTH-001` Secure bootstrap — WP13 — evidence: I, E — ◐ WP13: one-time setup token (CLI path), hashed, 30 min, single use, refused once an admin exists; first admin must enroll MFA (tested). CLI command + web setup page pending WP15/WP19
+- [x] `HP-AUTH-002` Argon2id hashing — WP13 — evidence: U — ✅ tested (local) @ WP13: Argon2id PHC, 16-byte salts, versioned params (prod m=64MiB t=3 p=2 guarded by test), rehash-on-login, Calibrate
+- [ ] `HP-AUTH-003` Password policy — WP13 — evidence: U, E — ◐ WP13: NFKC, 12..1024 bytes, no truncation (tested incl. >72-byte difference); UI paste/password-manager E2E pending WP19
+- [x] `HP-AUTH-004` Throttling without permanent lockout — WP13 — evidence: I — ✅ tested (local) @ WP13: per-account and per-IP (/64) progressive throttle capped at 15 min, decays after 24 h, admin clear; no permanent lockout
+- [x] `HP-AUTH-005` Enumeration resistance — WP13 — evidence: U, I — ✅ tested (local) @ WP13: identical error for unknown/wrong/disabled; dummy hash at current params; timing medians within 25% (asserted; found and fixed a stale-dummy-hash timing leak)
+- [ ] `HP-AUTH-006` TOTP MFA — WP13 — evidence: U, I, E — ◐ WP13: RFC 6238 vectors, ±1 step, step-reuse rejection, sealed secret, confirmed enrollment (tested); UI E2E pending WP19
+- [x] `HP-AUTH-007` Recovery codes — WP13 — evidence: U, I — ✅ tested (local) @ WP13: 10 HMAC-hashed single-use recovery codes, shown once, regenerable with recent auth
+- [ ] `HP-AUTH-008` Mandatory MFA for privileged accounts — WP13 — evidence: I, E — ◐ WP13: admins/approvers (local) forced to enroll; sessions limited until MFA (tested); UI E2E pending WP19
+- [ ] `HP-AUTH-009` Password change and reset — WP13 — evidence: I, E — ◐ WP13: admin-issued single-use 1 h hashed reset tokens; change requires current password (tested); SMTP delivery + UI pending WP16/WP20
+- [x] `HP-AUTH-010` Session invalidation — WP13 — evidence: I — ✅ tested (local) @ WP13: reset/change/disable/MFA change/role reduction revoke sessions
+- [ ] `HP-AUTH-011` Invitations — WP13 — evidence: I, E — ◐ WP13: single-use 72 h hashed invitations with preset roles (tested); UI pending WP20
+- [ ] `HP-AUTH-012` Server-side sessions — WP13 — evidence: I, E — ◐ WP13: server-side sessions (256-bit token, SHA-256 at rest), idle 30 m / absolute 12 h, rotation, logout, listing/revocation (tested); __Host- cookie flags in WP15
+- [ ] `HP-AUTH-013` CSRF protection — WP13 — evidence: I, E — ◐ WP13: session-bound HMAC CSRF token + constant-time verify (tested); header/Origin/Sec-Fetch-Site middleware WP15
+- [ ] `HP-AUTH-014` Recent authentication — WP13 — evidence: I, E — ◐ WP13: RequireRecentAuth (5 m, MFA when enrolled) + Reauth with rotation (tested); per-endpoint gating WP15
+- [ ] `HP-AUTH-015` Lockout prevention — WP13 — evidence: I, E — ◐ WP13: last enabled administrator cannot be disabled/demoted (tested); SSO-only gating WP14
+- [ ] `HP-AUTH-016` Break-glass recovery — WP23 — evidence: I, R — ◐ WP13: IssueRecoveryLogin (existing or new admin) + RecoveryLogin, audited breakglass.used/login (tested); offline CLI command WP23
 - [ ] `HP-AUTH-017` Dev auth isolation — WP13 — evidence: C, I
-- [ ] `HP-AUTH-018` Credential secrecy — WP13 — evidence: U, I
+- [x] `HP-AUTH-018` Credential secrecy — WP13 — evidence: U, I — ✅ tested (local) @ WP13: no passwords/TOTP/codes in audit or plaintext storage; redaction layer from WP02
 
 #### HP-OIDC — Generic OpenID Connect SSO
 
