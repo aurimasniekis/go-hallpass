@@ -23,6 +23,8 @@ import { orDash } from './text';
 import { formatBytes, formatDateTime, formatDuration, shortId } from '../../lib/format';
 import { usePermissions } from '../../lib/usePermissions';
 import { AgentName, RoleName, ServerName } from '../../shared/names';
+import { channelKind, reasonText } from '../../shared/channelClose';
+import { ChannelEndCell, GatewayExitLegend } from '../../shared/ChannelEnd';
 import { StateBadge } from '../../shared/StateBadge';
 import { DestinationRecords } from './DestinationRecords';
 import { ExportButton } from './ExportButton';
@@ -83,7 +85,7 @@ function GrantPanel({ grantId }: { grantId: string }) {
             value: g.capabilities && g.capabilities.length > 0 ? g.capabilities.join(', ') : '—',
           },
           { key: 'user', label: 'Remote user', value: <Mono value={g.remote_user} /> },
-          { key: 'end', label: 'End reason', value: orDash(g.end_reason) },
+          { key: 'end', label: 'End reason', value: reasonText(g.end_reason) ?? '—' },
           { key: 'policy', label: 'Policy version', value: g.policy_version ?? '—' },
           {
             key: 'request',
@@ -99,7 +101,7 @@ function GrantPanel({ grantId }: { grantId: string }) {
             label: 'Requested duration',
             value: request.data ? formatDuration(request.data.requested_duration) : '—',
           },
-          { key: 'reason', label: 'Agent reason', value: reason },
+          { key: 'reason', label: 'Agent reason', value: reason, span: 'full' },
         ]}
       />
       <div>
@@ -121,7 +123,7 @@ function ChannelsTable({ sessionId }: { sessionId: string }) {
         </code>
       ),
     },
-    { key: 'kind', title: 'Kind', render: (_, c) => `${c.kind}${c.pty ? ' (pty)' : ''}` },
+    { key: 'kind', title: 'Kind', render: (_, c) => channelKind(c) },
     { key: 'state', title: 'State', render: (_, c) => <StateBadge kind="channel" state={c.state} /> },
     { key: 'opened', title: 'Opened', render: (_, c) => formatDateTime(c.opened_at) },
     { key: 'closed', title: 'Closed', render: (_, c) => (c.closed_at ? formatDateTime(c.closed_at) : '—') },
@@ -135,7 +137,7 @@ function ChannelsTable({ sessionId }: { sessionId: string }) {
             ? String(c.exit_status)
             : '—',
     },
-    { key: 'reason', title: 'Close reason', render: (_, c) => orDash(c.close_reason) },
+    { key: 'reason', title: 'Why it ended', render: (_, c) => <ChannelEndCell channel={c} /> },
     {
       key: 'connection',
       title: 'Connection',
@@ -157,6 +159,11 @@ function ChannelsTable({ sessionId }: { sessionId: string }) {
       onRetry={() => void q.refetch()}
       emptyTitle="No channels"
       emptyDescription="The agent has not opened a shell or exec channel in this session."
+      footer={
+        q.data?.items.some((c) => c.gateway_exit_code !== null && c.gateway_exit_code !== undefined) ? (
+          <GatewayExitLegend />
+        ) : undefined
+      }
     />
   );
 }
@@ -281,7 +288,6 @@ export function SessionDetailPage({ id }: { id: string }) {
         ) : null}
         <Card title="Summary" size="small">
           <KeyValueGrid
-            columns={3}
             items={[
               { key: 'state', label: 'State', value: <StateBadge kind="session" state={s.state} /> },
               { key: 'agent', label: 'Agent', value: <AgentName id={s.agent_id} /> },
@@ -296,7 +302,7 @@ export function SessionDetailPage({ id }: { id: string }) {
               },
               { key: 'opened', label: 'Opened', value: formatDateTime(s.opened_at) },
               { key: 'closed', label: 'Closed', value: s.closed_at ? formatDateTime(s.closed_at) : '—' },
-              { key: 'close', label: 'Close reason', value: orDash(s.close_reason) },
+              { key: 'close', label: 'Close reason', value: reasonText(s.close_reason) ?? '—' },
               {
                 key: 'channels',
                 label: 'Channels (live / total)',

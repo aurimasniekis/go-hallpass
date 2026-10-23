@@ -1,8 +1,8 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { makeMe } from '../../test/fixtures';
+import { jsonResponse, makeMe } from '../../test/fixtures';
 import { mockApi, on, renderInRouter } from '../requests/testHelpers';
 import { ActivitiesPage, terminateOutcome } from './ActivitiesPage';
 
@@ -55,6 +55,48 @@ describe('<ActivitiesPage>', () => {
     renderInRouter(<ActivitiesPage />);
     expect(await screen.findByText('Live')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Terminate/ })).not.toBeInTheDocument();
+  });
+
+  it('lists recently ended channels with the reason, detail and gateway exit code', async () => {
+    const failed = {
+      ...channel,
+      id: 'chn_2',
+      kind: 'exec',
+      pty: false,
+      state: 'failed',
+      closed_at: '2026-01-01T00:00:05Z',
+      close_reason: 'failed_before_start',
+      close_detail: 'destination host key changed or unknown (host verification failed)',
+      gateway_exit_code: 88,
+    };
+    const old = {
+      ...channel,
+      id: 'chn_3',
+      state: 'closed',
+      closed_at: '2026-01-01T00:00:04Z',
+      close_reason: 'exit',
+      exit_status: 0,
+    };
+    const seen = mockApi(
+      on('GET', '/api/v1/me', makeMe({ permissions: ['sessions.read'] })),
+      (req) =>
+        req.method === 'GET' && req.url.startsWith('/api/v1/activities?ended_since=')
+          ? jsonResponse(200, { items: [channel, failed, old] })
+          : undefined,
+      on('GET', '/api/v1/activities', { items: [channel] }),
+    );
+    renderInRouter(<ActivitiesPage />);
+    expect(await screen.findByText('Failed before it started')).toBeInTheDocument();
+    expect(
+      screen.getByText('destination host key changed or unknown (host verification failed)'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Gateway exit 88 (destination unavailable)')).toBeInTheDocument();
+    expect(screen.getByText(/Gateway exit codes/)).toBeInTheDocument();
+    expect(screen.getByText('Exited')).toBeInTheDocument();
+    expect(seen.some((r) => r.url === '/api/v1/activities?ended_since=86400')).toBe(true);
+    // The live table lists only the live channel.
+    const live = screen.getByRole('region', { name: 'Live channels' });
+    expect(within(live).getAllByRole('row')).toHaveLength(2);
   });
 
   it('describes both termination outcomes', () => {

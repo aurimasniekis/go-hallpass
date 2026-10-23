@@ -4,11 +4,27 @@ import { useState } from 'react';
 
 import { api } from '../../api/client';
 import { userCAsQueryOptions } from '../../api/queries';
+import type { UserCA } from '../../api/types';
 import { ConfirmAction } from '../../ds/ConfirmAction';
 import { DurationInput } from '../../ds/DurationInput';
 import { TagsInput } from '../../ds/TagsInput';
 import { cleanList } from '../servers/formUtils';
 import { FormModal } from '../servers/FormModal';
+import { UserCASetupTip } from '../servers/SetupTips';
+
+/** Setup commands for the CA currently chosen in the bind dialog. */
+function BindTip({ remoteUser, cas }: { remoteUser: string; cas: readonly UserCA[] }) {
+  const caId = Form.useWatch<string | undefined>('user_ca_id');
+  const principals = Form.useWatch<string[] | undefined>('principals');
+  const ca = cas.find((c) => c.id === caId);
+  return (
+    <UserCASetupTip
+      remoteUser={remoteUser}
+      principals={principals ?? []}
+      {...(ca ? { caPublicKey: ca.public_key } : {})}
+    />
+  );
+}
 
 export interface CertBindingValues {
   user_ca_id: string;
@@ -33,7 +49,16 @@ export function toCertBinding(v: CertBindingValues): {
  * Certificate login binding for a role (`PUT/DELETE /roles/{id}/cert-binding`). The API does not return
  * the current binding (Role has no binding fields), so this panel can set or remove it but not show it.
  */
-export function CertBindingPanel({ roleId, remoteUser }: { roleId: string; remoteUser: string }) {
+export function CertBindingPanel({
+  roleId,
+  remoteUser,
+  onBound,
+}: {
+  roleId: string;
+  remoteUser: string;
+  /** Called after the server confirmed the binding. */
+  onBound?: () => void;
+}) {
   const { message } = App.useApp();
   const cas = useQuery(userCAsQueryOptions());
   const [open, setOpen] = useState(false);
@@ -63,13 +88,15 @@ export function CertBindingPanel({ roleId, remoteUser }: { roleId: string; remot
         </Space>
       }
     >
-      <p style={{ margin: 0 }}>
+      <p className="hp-card-intro">
         Instead of a static key, Hallpass can sign a short-lived certificate per connection with a user CA.
         The current binding is not reported by the API; binding again replaces it.
       </p>
+      <UserCASetupTip remoteUser={remoteUser} />
       <FormModal<CertBindingValues>
         open={open}
         title="Bind user CA"
+        width={720}
         okText="Bind"
         formLabel="Bind user CA"
         initialValues={{ principals: remoteUser ? [remoteUser] : [] }}
@@ -83,8 +110,10 @@ export function CertBindingPanel({ roleId, remoteUser }: { roleId: string; remot
           });
           void message.success('Certificate binding saved.');
           setOpen(false);
+          onBound?.();
         }}
       >
+        <BindTip remoteUser={remoteUser} cas={cas.data?.items ?? []} />
         <Form.Item label="User CA" name="user_ca_id" rules={[{ required: true, message: 'Choose a CA' }]}>
           <Select
             aria-label="User CA"

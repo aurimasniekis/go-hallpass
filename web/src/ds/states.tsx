@@ -27,6 +27,7 @@ export function EmptyState({
 }) {
   return (
     <Empty
+      className="hp-empty"
       image={Empty.PRESENTED_IMAGE_SIMPLE}
       description={
         <span>

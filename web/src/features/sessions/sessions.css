@@ -1,44 +1,138 @@
 /* Session detail: timeline and replay (WP21). Colors come from the ThemeProvider --hp-* variables. */
-.hp-session-timeline {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.hp-session-timeline__item {
-  padding: 8px 0 8px 12px;
-  border-left: 2px solid var(--hp-color-border-secondary);
-}
-.hp-session-timeline__item + .hp-session-timeline__item {
-  margin-top: 2px;
-}
-.hp-session-timeline__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-}
-.hp-session-timeline__time,
 .hp-session-timeline__meta {
   color: var(--hp-color-text-secondary);
   font-size: 12px;
 }
-.hp-session-timeline__data {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 2px 12px;
-  margin: 4px 0 0;
+
+/* Session timeline: one compact row per event; channel rows indented under their connection. */
+.hp-tl {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hp-tl__day {
+  padding: 8px 0 4px;
   font-size: 12px;
-}
-.hp-session-timeline__data > div {
-  display: contents;
-}
-.hp-session-timeline__data dt {
+  font-weight: 600;
   color: var(--hp-color-text-secondary);
 }
-.hp-session-timeline__data dd {
+.hp-tl__day:not(:first-child) {
+  margin-top: 8px;
+  border-top: 1px solid var(--hp-color-border-secondary);
+}
+.hp-tl__row {
+  display: grid;
+  grid-template-columns: 96px 44px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 8px;
+  padding: 3px 0;
+  line-height: 22px;
+}
+.hp-tl__row:hover {
+  background: var(--hp-color-bg-subtle);
+}
+.hp-tl__time {
+  color: var(--hp-color-text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.hp-tl__group {
+  font-family: var(--hp-font-family-code);
+  font-size: 11px;
+  color: var(--hp-color-text-tertiary);
+  white-space: nowrap;
+}
+.hp-tl__main {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+.hp-tl__row--depth-1 .hp-tl__main {
+  padding-left: 12px;
+  border-left: 2px solid var(--hp-color-border-secondary);
+}
+.hp-tl__row--depth-2 .hp-tl__main {
+  margin-left: 14px;
+  padding-left: 12px;
+  border-left: 2px solid var(--hp-color-border-secondary);
+}
+.hp-tl__icon {
+  flex: none;
+  width: 16px;
+  color: var(--hp-color-text-tertiary);
+}
+.hp-tl__row--success .hp-tl__icon {
+  color: var(--hp-color-success);
+}
+.hp-tl__row--warning .hp-tl__icon {
+  color: var(--hp-color-warning);
+}
+.hp-tl__row--error .hp-tl__icon {
+  color: var(--hp-color-error);
+}
+.hp-tl__row--info .hp-tl__icon,
+.hp-tl__row--processing .hp-tl__icon {
+  color: var(--hp-color-info);
+}
+.hp-tl__row--error .hp-tl__text {
+  color: var(--hp-color-error-text);
+}
+.hp-tl__body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 10px;
+  min-width: 0;
+}
+.hp-tl__text {
+  overflow-wrap: anywhere;
+}
+.hp-tl__badge {
+  font-size: 12px;
+}
+.hp-tl__details {
+  font-size: 12px;
+}
+.hp-tl__details > summary {
+  cursor: pointer;
+  color: var(--hp-color-text-tertiary);
+}
+.hp-tl__details > summary:hover {
+  color: var(--hp-color-link, var(--hp-color-text));
+}
+.hp-tl__details[open] {
+  flex-basis: 100%;
+  margin: 4px 0 6px;
+}
+.hp-tl__data {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px 12px;
+  margin: 4px 0 0;
+  padding: 6px 10px;
+  border: 1px solid var(--hp-color-border-secondary);
+  border-radius: 4px;
+}
+.hp-tl__data > div {
+  display: contents;
+}
+.hp-tl__data dt {
+  color: var(--hp-color-text-secondary);
+}
+.hp-tl__data dd {
   margin: 0;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+@media (max-width: 600px) {
+  .hp-tl__row {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+  .hp-tl__group {
+    display: none;
+  }
 }
 .hp-replay-controls {
   display: flex;
@@ -73,4 +167,19 @@
 }
 .hp-replay-terminal .hp-terminal {
   overflow: auto;
+}
+.hp-replay-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.hp-replay-picker__select {
+  flex: 0 1 420px;
+  min-width: 0;
+}
+@media (max-width: 600px) {
+  .hp-replay-picker__select {
+    flex-basis: 100%;
+  }
 }

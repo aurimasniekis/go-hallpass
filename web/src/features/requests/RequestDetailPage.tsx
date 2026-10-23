@@ -264,6 +264,7 @@ export function RequestDetailPage({ id }: { id: string }) {
               },
               { key: 'agent', label: 'Agent', value: <AgentName id={r.agent_id} /> },
               {
+                span: 2,
                 key: 'key',
                 label: 'Agent key',
                 value: r.agent_key_id ? <code className="hp-mono">{r.agent_key_id}</code> : '—',

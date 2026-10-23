@@ -34,6 +34,9 @@ export const qk = {
   recordingPage: (segmentId: string, fromSeq: number) => ['recording', segmentId, fromSeq] as const,
 
   activities: ['activities'] as const,
+  activityList: (endedSince: number | undefined) => ['activities', { ended_since: endedSince ?? 0 }] as const,
+
+  sshBans: ['system', 'ssh-bans'] as const,
 
   agents: ['agents'] as const,
   agent: (id: string) => ['agent', id] as const,

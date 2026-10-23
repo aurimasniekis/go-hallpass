@@ -23,6 +23,7 @@ import { formatDateTime, formatDuration, formatRelative } from '../../lib/format
 import { useNow } from '../../lib/useNow';
 import { usePermissions } from '../../lib/usePermissions';
 import { AgentName, RoleName, ServerName } from '../../shared/names';
+import { channelKind } from '../../shared/channelClose';
 import { StateBadge } from '../../shared/StateBadge';
 import { useSseState, type SseStatus } from '../../stores/sse';
 import { BreakGlassAck, LockdownControls } from './LockdownControls';
@@ -211,7 +212,7 @@ function LiveActivitiesCard() {
         columns={[
           { key: 'agent', title: 'Agent', render: (_v, c) => <AgentName id={c.agent_id} /> },
           { key: 'role', title: 'Role', render: (_v, c) => <RoleName id={c.role_id} /> },
-          { key: 'kind', title: 'Kind', render: (_v, c) => `${c.kind}${c.pty ? ' (pty)' : ''}` },
+          { key: 'kind', title: 'Kind', render: (_v, c) => channelKind(c) },
           { key: 'state', title: 'State', render: (_v, c) => <StateBadge kind="channel" state={c.state} /> },
           {
             key: 'opened',
@@ -249,7 +250,7 @@ function StatsCharts() {
   return (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{rangeSelector}</div>
-      <Row gutter={[16, 16]}>
+      <Row gutter={[16, 16]} className="hp-equal-cards">
         <Col xs={24} xl={8}>
           <ChartCard
             title="Requests over time"
@@ -341,7 +342,7 @@ export function DashboardPage() {
   return (
     <>
       <PageHeader title="Dashboard" description="Overview of access activity." />
-      <Row gutter={[16, 16]}>
+      <Row gutter={[16, 16]} className="hp-equal-cards">
         {canDashboard ? (
           <Col span={24}>
             <SystemStatusCard />

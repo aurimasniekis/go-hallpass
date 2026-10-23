@@ -61,7 +61,12 @@ export function MePage() {
                 ),
               },
               { key: 'perms', label: 'Permissions', value: `${String(permissions.length)} granted` },
-              { key: 'id', label: 'Operator ID', value: <code className="hp-mono">{operator.id}</code> },
+              {
+                span: 2,
+                key: 'id',
+                label: 'Operator ID',
+                value: <code className="hp-mono">{operator.id}</code>,
+              },
               {
                 key: 'method',
                 label: 'Signed in with',

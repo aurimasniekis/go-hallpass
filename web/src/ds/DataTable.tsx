@@ -75,6 +75,8 @@ export interface DataTableProps<T extends object> {
   onFiltersChange?: (filters: FilterState) => void;
   pagination?: CursorPagination;
   onRowClick?: (row: T) => void;
+  /** Note rendered under the table (legends, hints). */
+  footer?: ReactNode;
 }
 
 function columnKey<T>(column: TableColumnsType<T>[number]): string | undefined {
@@ -105,6 +107,7 @@ export function DataTable<T extends object>({
   onFiltersChange,
   pagination,
   onRowClick,
+  footer,
 }: DataTableProps<T>) {
   const density = useDensity();
 
@@ -194,6 +197,7 @@ export function DataTable<T extends object>({
             }
           : {})}
       />
+      {footer ? <div className="hp-table-note">{footer}</div> : null}
       {pagination ? (
         <nav className="hp-table-footer" aria-label={`${caption} pagination`}>
           {pagination.onPageSizeChange ? (

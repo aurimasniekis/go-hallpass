@@ -12,6 +12,7 @@ import { TagsInput } from '../../ds/TagsInput';
 import { formatDuration } from '../../lib/format';
 import { FormModal } from './FormModal';
 import { cleanList } from './formUtils';
+import { HostCASetupTip } from './SetupTips';
 
 /**
  * Host certificate authority for a server (PLAN §11.2): trust host certificates signed by a CA instead of
@@ -94,6 +95,7 @@ export function HostCAPanel({ server, canWrite }: { server: Server; canWrite: bo
       <FormModal<{ name: string; public_key: string; max_validity?: number | null }>
         open={creating}
         title="Register host CA"
+        width={720}
         okText="Register"
         formLabel="Register host CA"
         onCancel={() => {
@@ -111,6 +113,10 @@ export function HostCAPanel({ server, canWrite }: { server: Server; canWrite: bo
           setCreating(false);
         }}
       >
+        <HostCASetupTip
+          alias={server.alias}
+          principals={[server.alias, ...(server.address && !server.address_redacted ? [server.address] : [])]}
+        />
         <Form.Item label="Name" name="name" rules={[{ required: true, message: 'Enter a name' }]}>
           <Input maxLength={128} />
         </Form.Item>
@@ -119,7 +125,12 @@ export function HostCAPanel({ server, canWrite }: { server: Server; canWrite: bo
           name="public_key"
           rules={[{ required: true, message: 'Paste the CA public key' }]}
         >
-          <Input.TextArea rows={3} spellCheck={false} className="hp-mono" />
+          <Input.TextArea
+            rows={3}
+            spellCheck={false}
+            className="hp-mono"
+            placeholder="ssh-ed25519 AAAA… hallpass-host-ca"
+          />
         </Form.Item>
         <Form.Item label="Maximum certificate validity" name="max_validity" extra="Optional.">
           <DurationInput aria-label="Maximum certificate validity" minSeconds={60} />

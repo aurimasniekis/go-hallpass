@@ -3,7 +3,7 @@ import '@xterm/xterm/css/xterm.css';
 import { Terminal } from '@xterm/xterm';
 import { useEffect, useImperativeHandle, useRef, type Ref } from 'react';
 
-import { hardenTerminal, SAFE_TERMINAL_OPTIONS, writeBounded } from './terminal';
+import { hardenTerminal, replayTerminalOptions, writeBounded } from './terminal';
 
 /** Imperative control used by the replay player (WP21). */
 export interface TerminalHandle {
@@ -21,6 +21,11 @@ export interface TerminalReplayProps {
   rows?: number;
   cols?: number;
   handleRef?: Ref<TerminalHandle>;
+  /**
+   * The recorded channel had a PTY. Non-PTY output uses bare LF, which is translated to CRLF
+   * (`convertEol`); PTY output is replayed raw. Defaults to true (raw).
+   */
+  pty?: boolean;
 }
 
 /**
@@ -28,7 +33,14 @@ export interface TerminalReplayProps {
  * handler, OSC 0/1/2/8/52 swallowed, no title/bell subscriptions, no proposed APIs or addons. Recorded
  * bytes are only ever *written* into the emulator; nothing is rendered as HTML.
  */
-export function TerminalReplay({ chunks, ariaLabel, rows = 24, cols = 80, handleRef }: TerminalReplayProps) {
+export function TerminalReplay({
+  chunks,
+  ariaLabel,
+  rows = 24,
+  cols = 80,
+  handleRef,
+  pty = true,
+}: TerminalReplayProps) {
   const el = useRef<HTMLDivElement>(null);
   const term = useRef<Terminal | null>(null);
 
@@ -37,7 +49,7 @@ export function TerminalReplay({ chunks, ariaLabel, rows = 24, cols = 80, handle
     if (!node) {
       return;
     }
-    const t = new Terminal({ ...SAFE_TERMINAL_OPTIONS, rows, cols });
+    const t = new Terminal({ ...replayTerminalOptions({ pty }), rows, cols });
     const guards = hardenTerminal(t);
     t.open(node);
     term.current = t;
@@ -51,7 +63,7 @@ export function TerminalReplay({ chunks, ariaLabel, rows = 24, cols = 80, handle
       }
       t.dispose();
     };
-  }, [chunks, rows, cols]);
+  }, [chunks, rows, cols, pty]);
 
   useImperativeHandle(
     handleRef,

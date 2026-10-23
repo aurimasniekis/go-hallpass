@@ -171,3 +171,40 @@ export function shortId(id: string | null | undefined, keep = 10): string {
   }
   return id.length <= keep + 1 ? id : `${id.slice(0, keep)}…`;
 }
+
+/** Local time of day (`01:55:54 PM`) in the same style as formatDateTime, or `—`. */
+export function formatTime(iso: string | null | undefined): string {
+  const t = parseTime(iso);
+  if (t === null) {
+    return iso ?? '—';
+  }
+  return new Date(t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+/** Local calendar date (`Oct 24, 2026`) in the same style as formatDateTime, or `—`. */
+export function formatDate(iso: string | null | undefined): string {
+  const t = parseTime(iso);
+  if (t === null) {
+    return iso ?? '—';
+  }
+  return new Date(t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' });
+}
+
+/**
+ * Go `time.Duration` strings as sent in event data (`30m0s`, `1h30m0s`, `1.5s`) → whole seconds, or
+ * null when the text is not such a duration.
+ */
+export function parseGoDuration(text: string): number | null {
+  const t = text.trim();
+  if (t === '' || t === '0') {
+    return t === '0' ? 0 : null;
+  }
+  const unit: Record<string, number> = { h: 3600, m: 60, s: 1, ms: 1e-3, us: 1e-6, µs: 1e-6, ns: 1e-9 };
+  let total = 0;
+  let consumed = '';
+  for (const m of t.matchAll(/(\d+(?:\.\d+)?)(h|ms|m|s|us|µs|ns)/g)) {
+    total += Number(m[1]) * (unit[m[2] ?? ''] ?? 0);
+    consumed += m[0];
+  }
+  return consumed === t ? Math.floor(total) : null;
+}

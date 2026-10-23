@@ -1,4 +1,4 @@
-import { PlusOutlined } from '@ant-design/icons';
+import { PlusOutlined, RocketOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Button, Card, Input, Space } from 'antd';
@@ -69,15 +69,25 @@ export function ServersPage() {
         description="Destination hosts, their verified host identities and the roles agents can request."
         extra={
           can('inventory.write') ? (
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => {
-                setCreating(true);
-              }}
-            >
-              New server
-            </Button>
+            <Space wrap>
+              <Button
+                icon={<PlusOutlined />}
+                onClick={() => {
+                  setCreating(true);
+                }}
+              >
+                New server
+              </Button>
+              <Button
+                type="primary"
+                icon={<RocketOutlined />}
+                onClick={() => {
+                  void navigate({ to: '/servers/onboard' });
+                }}
+              >
+                New server (guided)
+              </Button>
+            </Space>
           ) : null
         }
       />

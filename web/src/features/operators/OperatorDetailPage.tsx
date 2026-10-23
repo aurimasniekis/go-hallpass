@@ -191,7 +191,7 @@ export function OperatorDetailPage({ id }: { id: string }) {
         <Card title="Profile" size="small">
           <KeyValueGrid
             items={[
-              { key: 'id', label: 'Operator ID', value: <code className="hp-mono">{op.id}</code> },
+              { span: 2, key: 'id', label: 'Operator ID', value: <code className="hp-mono">{op.id}</code> },
               {
                 key: 'status',
                 label: 'Status',

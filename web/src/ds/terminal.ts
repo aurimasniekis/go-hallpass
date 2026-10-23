@@ -28,6 +28,20 @@ export const SAFE_TERMINAL_OPTIONS: ITerminalOptions & ITerminalInitOnlyOptions 
   },
 };
 
+/**
+ * Options for one replay terminal. Channels without a PTY (exec, or a shell opened without a terminal)
+ * emit bare LF line endings because no terminal line discipline translated them; xterm must convert LF to
+ * CRLF there or every line starts where the previous one ended. PTY output already carries CRLF and is
+ * replayed raw. Everything else stays the hardened SAFE_TERMINAL_OPTIONS.
+ */
+export function replayTerminalOptions({
+  pty,
+}: {
+  pty: boolean;
+}): ITerminalOptions & ITerminalInitOnlyOptions {
+  return { ...SAFE_TERMINAL_OPTIONS, convertEol: !pty };
+}
+
 /** OSC identifiers swallowed during replay. */
 export const SWALLOWED_OSC = [0, 1, 2, 8, 52] as const;
 

@@ -48,6 +48,7 @@ export function WebSessionsTable({
             title={ua}
             style={{
               display: 'inline-block',
+              verticalAlign: 'middle',
               maxWidth: 280,
               overflow: 'hidden',
               textOverflow: 'ellipsis',

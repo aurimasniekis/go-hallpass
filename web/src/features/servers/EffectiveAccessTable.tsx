@@ -1,7 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { Card, Space, Table, Tag } from 'antd';
 
-import { agentEffectiveAccessQueryOptions, serverEffectiveAccessQueryOptions } from '../../api/queries';
+import {
+  agentEffectiveAccessQueryOptions,
+  policyRulesQueryOptions,
+  serverEffectiveAccessQueryOptions,
+} from '../../api/queries';
 import type { EffectiveAccessItem } from '../../api/types';
 import { EmptyState, ErrorState, LoadingState } from '../../ds/states';
 import { StatusBadge, type StatusTone } from '../../ds/StatusBadge';
@@ -28,6 +32,9 @@ export function EffectiveAccessCard({ kind, id }: { kind: 'agent' | 'server'; id
   const agentQuery = useQuery({ ...agentEffectiveAccessQueryOptions(id), enabled: kind === 'agent' });
   const serverQuery = useQuery({ ...serverEffectiveAccessQueryOptions(id), enabled: kind === 'server' });
   const query = kind === 'agent' ? agentQuery : serverQuery;
+  // Rule IDs are resolved to names when the caller can read policy (this card needs policy.read anyway).
+  const rules = useQuery(policyRulesQueryOptions());
+  const ruleNames = new Map((rules.data?.items ?? []).map((r) => [r.id ?? '', r.name]));
   const columns = [
     kind === 'agent'
       ? {
@@ -81,7 +88,9 @@ export function EffectiveAccessCard({ kind, id }: { kind: 'agent' | 'server'; id
         r.rules && r.rules.length > 0 ? (
           <Space size={4} wrap>
             {r.rules.map((rule) => (
-              <Tag key={rule}>{rule}</Tag>
+              <Tag key={rule} title={rule}>
+                {ruleNames.get(rule) ?? rule}
+              </Tag>
             ))}
           </Space>
         ) : (

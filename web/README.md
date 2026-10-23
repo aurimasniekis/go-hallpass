@@ -147,3 +147,11 @@ confirmation, and axe (WCAG 2.2 AA tags, no serious/critical violations) on ever
   deletes for agents, servers and roles. Free-form objects (`jit`, `config`, `details`, `data`, `claims`)
   are typed `Record<string, never>` by openapi-typescript and need `additionalProperties`.
 - `/system/time` clock sampling and the DataTable column chooser are not implemented.
+- **Server onboarding wizard** (`/servers/onboard`, "New server (guided)" on Servers, "Guided setup" on a
+  server): server → host identity → roles → login credentials (generate, install command, test login,
+  activate, or certificate binding) → access rules → summary. State is derived from the API, so it resumes
+  after a reload; certificate bindings made in the wizard are not reported back by the API and therefore
+  only count as done within the browser session. Unit-tested with mocked fetch; not covered end to end.
+- **SSH bans** (Settings → System) and **Activities → Recently ended** (`ended_since`, `close_detail`,
+  `gateway_exit_code`) are unit-tested with mocked data only.
+- Replay translates LF→CRLF (`convertEol`) only for channels without a PTY; PTY output is replayed raw.

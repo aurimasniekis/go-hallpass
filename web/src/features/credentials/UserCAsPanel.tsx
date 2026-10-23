@@ -12,6 +12,7 @@ import { Fingerprint } from '../../ds/Fingerprint';
 import { EmptyState, ErrorState, LoadingState } from '../../ds/states';
 import { StateBadge } from '../../shared/StateBadge';
 import { FormModal } from '../servers/FormModal';
+import { UserCASetupTip } from '../servers/SetupTips';
 
 /**
  * User certificate authorities (PLAN §11.3): Hallpass can log in to destinations with short-lived
@@ -88,6 +89,9 @@ export function UserCAsPanel() {
           {showCA ? (
             <div style={{ marginTop: 12 }}>
               <CopyField label={`${showCA.name} public key (TrustedUserCAKeys)`} value={showCA.public_key} />
+              <div style={{ marginTop: 12 }}>
+                <UserCASetupTip caPublicKey={showCA.public_key} />
+              </div>
             </div>
           ) : null}
         </>

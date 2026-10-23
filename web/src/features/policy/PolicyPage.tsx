@@ -1,6 +1,6 @@
 import { EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Space, Tabs, Tag, type TableColumnsType } from 'antd';
+import { Button, Card, Space, Tabs, Tag, type TableColumnsType } from 'antd';
 import { useCallback, useState } from 'react';
 
 import { api } from '../../api/client';
@@ -304,8 +304,24 @@ export function PolicyPage() {
       />
       <Tabs
         items={[
-          { key: 'rules', label: 'Access rules', children: <RulesTab canWrite={canWrite} /> },
-          { key: 'approvers', label: 'Approver rules', children: <ApproverRulesTab canWrite={canWrite} /> },
+          {
+            key: 'rules',
+            label: 'Access rules',
+            children: (
+              <Card size="small">
+                <RulesTab canWrite={canWrite} />
+              </Card>
+            ),
+          },
+          {
+            key: 'approvers',
+            label: 'Approver rules',
+            children: (
+              <Card size="small">
+                <ApproverRulesTab canWrite={canWrite} />
+              </Card>
+            ),
+          },
           { key: 'preview', label: 'Effective access', children: <EffectiveAccessPreview /> },
         ]}
       />

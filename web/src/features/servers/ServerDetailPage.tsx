@@ -1,10 +1,11 @@
+import { RocketOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { Alert, Button, Card, Space, Tabs } from 'antd';
 import { useState } from 'react';
 
 import { api } from '../../api/client';
-import { serverQueryOptions } from '../../api/queries';
+import { serverQueryOptions, serverRolesQueryOptions } from '../../api/queries';
 import { qk } from '../../api/queryKeys';
 import { KeyValueGrid } from '../../ds/KeyValueGrid';
 import { PageHeader } from '../../ds/PageHeader';
@@ -19,6 +20,7 @@ import { FormModal } from './FormModal';
 import { orDash } from './formUtils';
 import { HostCAPanel } from './HostCA';
 import { HostIdentities } from './HostIdentities';
+import { needsOnboarding } from './onboarding/model';
 import { ServerFormFields } from './ServerFormFields';
 import { serverFormValues, toServerInput, type ServerFormValues } from './serverForm';
 import { ServerRoles } from './ServerRoles';
@@ -39,7 +41,9 @@ export function ServerDetailPage({
   const { can, loading } = usePermissions();
   const queryClient = useQueryClient();
   const query = useQuery({ ...serverQueryOptions(id), enabled: can('inventory.read') });
+  const roles = useQuery({ ...serverRolesQueryOptions(id), enabled: can('inventory.read') });
   const [editing, setEditing] = useState(false);
+  const navigate = useNavigate();
   const canWrite = can('inventory.write');
   const canAddress = can('inventory.address.read');
 
@@ -70,8 +74,26 @@ export function ServerDetailPage({
   }
   const server = query.data;
 
+  const setupIncomplete = needsOnboarding(server, roles.data?.items);
   const overview = (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+      {setupIncomplete && canWrite ? (
+        <Alert
+          type="warning"
+          showIcon
+          title="Setup is not finished"
+          description={
+            (server.active_host_identities ?? 0) === 0 && !server.host_ca_id
+              ? 'The gateway cannot verify this host yet, so agents cannot connect. Continue the guided setup to confirm a host key, add roles and install login credentials.'
+              : 'This server has no roles yet, so agents cannot request access. Continue the guided setup to add roles and login credentials.'
+          }
+          action={
+            <Link to="/servers/onboard" search={{ server: server.id }}>
+              Continue guided setup
+            </Link>
+          }
+        />
+      ) : null}
       <Alert
         type="info"
         showIcon
@@ -81,9 +103,9 @@ export function ServerDetailPage({
       <Card size="small" title="Details">
         <KeyValueGrid
           items={[
-            { key: 'id', label: 'Server ID', value: <code className="hp-mono">{server.id}</code> },
+            { span: 2, key: 'id', label: 'Server ID', value: <code className="hp-mono">{server.id}</code> },
             { key: 'name', label: 'Display name', value: server.display_name },
-            { key: 'desc', label: 'Description', value: orDash(server.description) },
+            { span: 2, key: 'desc', label: 'Description', value: orDash(server.description) },
             { key: 'env', label: 'Environment', value: orDash(server.environment) },
             { key: 'addr', label: 'Address', value: <AddressCell server={server} /> },
             { key: 'status', label: 'Status', value: <EnabledBadge enabled={server.enabled} /> },
@@ -113,13 +135,23 @@ export function ServerDetailPage({
         description={server.display_name !== server.alias ? server.display_name : undefined}
         extra={
           canWrite ? (
-            <Button
-              onClick={() => {
-                setEditing(true);
-              }}
-            >
-              Edit
-            </Button>
+            <Space wrap>
+              <Button
+                icon={<RocketOutlined />}
+                onClick={() => {
+                  void navigate({ to: '/servers/onboard', search: { server: server.id } });
+                }}
+              >
+                Guided setup
+              </Button>
+              <Button
+                onClick={() => {
+                  setEditing(true);
+                }}
+              >
+                Edit
+              </Button>
+            </Space>
           ) : null
         }
       />

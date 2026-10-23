@@ -10,6 +10,7 @@ import { ErrorState, LoadingState, PermissionDenied } from '../../ds/states';
 import { StatusBadge } from '../../ds/StatusBadge';
 import { formatDateTime } from '../../lib/format';
 import { usePermissions } from '../../lib/usePermissions';
+import { SshBansCard } from './SshBans';
 import { SystemControls } from './SystemControls';
 
 /** Settings → System: health, version, lockdown controls and gateway host keys (PLAN §14.3, §18.17). */
@@ -30,7 +31,7 @@ export function SystemPage() {
   }
   return (
     <>
-      <PageHeader title="System" description="Health, emergency lockdown and gateway host keys." />
+      <PageHeader title="System" description="Health, emergency lockdown, SSH bans and gateway host keys." />
       <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Card title="Status" size="small">
           {status.isPending ? (
@@ -39,7 +40,6 @@ export function SystemPage() {
             <ErrorState error={status.error} onRetry={() => void status.refetch()} />
           ) : (
             <KeyValueGrid
-              columns={3}
               items={[
                 {
                   key: 'lockdown',
@@ -77,6 +77,7 @@ export function SystemPage() {
                   value: <code className="hp-mono">{status.data.version}</code>,
                 },
                 {
+                  span: 2,
                   key: 'boot',
                   label: 'Boot ID',
                   value: <code className="hp-mono">{status.data.boot_id}</code>,
@@ -90,8 +91,9 @@ export function SystemPage() {
           )}
         </Card>
         <SystemControls />
+        <SshBansCard />
         <Card title="Gateway host keys" size="small">
-          <p>
+          <p className="hp-card-intro">
             Agents pin these keys in <code className="hp-mono">known_hosts</code> before connecting. They are
             public and not secret.
           </p>
@@ -114,7 +116,11 @@ export function SystemPage() {
                 {
                   key: 'key',
                   title: 'Public key',
-                  render: (_v, k) => <CopyField label={`${k.algorithm} public key`} value={k.public_key} />,
+                  render: (_v, k) => (
+                    <div style={{ minWidth: 280 }}>
+                      <CopyField label={`${k.algorithm} public key`} value={k.public_key} hideLabel />
+                    </div>
+                  ),
                 },
               ]}
             />

@@ -91,9 +91,9 @@ export function RoleDetailPage({ id }: { id: string }) {
         <Card size="small" title="Settings">
           <KeyValueGrid
             items={[
-              { key: 'id', label: 'Role ID', value: <code className="hp-mono">{role.id}</code> },
+              { span: 2, key: 'id', label: 'Role ID', value: <code className="hp-mono">{role.id}</code> },
               { key: 'name', label: 'Display name', value: orDash(role.display_name) },
-              { key: 'desc', label: 'Description', value: orDash(role.description) },
+              { span: 2, key: 'desc', label: 'Description', value: orDash(role.description) },
               { key: 'status', label: 'Status', value: <EnabledBadge enabled={role.enabled} /> },
               { key: 'caps', label: 'Capabilities', value: <TagList values={role.capabilities} /> },
               {
@@ -125,7 +125,7 @@ export function RoleDetailPage({ id }: { id: string }) {
               { key: 'env', label: 'Allowed environment', value: <TagList values={role.env_allow} /> },
               { key: 'retention', label: 'Retention class', value: orDash(role.retention_class) },
               { key: 'labels', label: 'Labels', value: <TagList values={labelsToTags(role.labels)} /> },
-              { key: 'notes', label: 'Restriction notes', value: orDash(role.restriction_notes) },
+              { span: 2, key: 'notes', label: 'Restriction notes', value: orDash(role.restriction_notes) },
               { key: 'version', label: 'Version', value: role.version },
               { key: 'updated', label: 'Updated', value: formatDateTime(role.updated_at ?? null) },
             ]}

@@ -111,10 +111,15 @@ export const sessionSegmentsQueryOptions = (id: string) =>
       api.call('get', '/api/v1/access-sessions/{id}/segments', { path: { id }, signal }),
   });
 
-export const activitiesQueryOptions = () =>
+/** Live channels; with `endedSince` (seconds) also channels that ended within that window. */
+export const activitiesQueryOptions = (endedSince?: number) =>
   queryOptions({
-    queryKey: qk.activities,
-    queryFn: ({ signal }) => api.call('get', '/api/v1/activities', { signal }),
+    queryKey: qk.activityList(endedSince),
+    queryFn: ({ signal }) =>
+      api.call('get', '/api/v1/activities', {
+        ...(endedSince ? { query: { ended_since: endedSince } } : {}),
+        signal,
+      }),
   });
 
 // ---- inventory
@@ -295,6 +300,13 @@ export const systemStatusQueryOptions = () =>
   queryOptions({
     queryKey: qk.systemStatus,
     queryFn: ({ signal }) => api.call('get', '/api/v1/system/status', { signal }),
+  });
+
+/** fail2ban-style bans of agent SSH sources (system.read). */
+export const sshBansQueryOptions = () =>
+  queryOptions({
+    queryKey: qk.sshBans,
+    queryFn: ({ signal }) => api.call('get', '/api/v1/ssh-bans', { signal }),
   });
 
 export const gatewayHostKeysQueryOptions = () =>

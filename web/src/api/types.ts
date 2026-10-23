@@ -52,6 +52,7 @@ export type HostCA = S['HostCA'];
 export type LoginCredential = S['LoginCredential'];
 export type UserCA = S['UserCA'];
 export type GatewayHostKey = S['GatewayHostKey'];
+export type SSHBan = S['SSHBan'];
 
 // policy
 export type PolicyRule = S['PolicyRule'];

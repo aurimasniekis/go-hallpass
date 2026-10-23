@@ -9,15 +9,21 @@ export interface CopyFieldProps {
   value: string;
   /** Render the value in the monospace face (URLs, IDs, keys). */
   monospace?: boolean;
+  /** Keep the label for assistive technology only (dense tables whose column header names the value). */
+  hideLabel?: boolean;
 }
 
 /** Read-only value with a copy button (e.g. the OIDC callback URL). */
-export function CopyField({ label, value, monospace = true }: CopyFieldProps) {
+export function CopyField({ label, value, monospace = true, hideLabel = false }: CopyFieldProps) {
   const copy = useCopy();
   const id = useId();
   return (
     <div>
-      <label htmlFor={id} style={{ display: 'block', marginBottom: 4 }}>
+      <label
+        htmlFor={id}
+        className={hideLabel ? 'hp-visually-hidden' : undefined}
+        style={hideLabel ? undefined : { display: 'block', marginBottom: 4 }}
+      >
         {label}
       </label>
       <Space.Compact style={{ width: '100%' }}>

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   hardenTerminal,
   MAX_WRITE_BYTES,
+  replayTerminalOptions,
   SAFE_TERMINAL_OPTIONS,
   SWALLOWED_OSC,
   writeBounded,
@@ -49,6 +50,38 @@ describe('replay terminal hardening', () => {
     });
     expect(titles).toEqual([]);
     term.dispose();
+  });
+});
+
+describe('line endings of non-PTY channels', () => {
+  async function lines(pty: boolean, data: string): Promise<string[]> {
+    const term = new Terminal({ ...replayTerminalOptions({ pty }), cols: 40, rows: 6 });
+    await new Promise<void>((resolve) => {
+      term.write(data, resolve);
+    });
+    const out = Array.from(
+      { length: 3 },
+      (_, i) => term.buffer.active.getLine(i)?.translateToString(true) ?? '',
+    );
+    term.dispose();
+    return out;
+  }
+
+  it('translates bare LF to CRLF only when the channel had no PTY', async () => {
+    expect(replayTerminalOptions({ pty: false }).convertEol).toBe(true);
+    expect(replayTerminalOptions({ pty: true }).convertEol).toBe(false);
+    // Hardening is kept either way.
+    for (const pty of [true, false]) {
+      const o = replayTerminalOptions({ pty });
+      expect(o.disableStdin).toBe(true);
+      expect(o.allowProposedApi).toBe(false);
+      expect(o.linkHandler).toBe(SAFE_TERMINAL_OPTIONS.linkHandler);
+    }
+    // Non-PTY output: no staircase, every line starts in column 0.
+    expect(await lines(false, 'one\ntwo\nthree')).toEqual(['one', 'two', 'three']);
+    // PTY output is raw: a bare LF moves down without returning the cursor.
+    expect(await lines(true, 'one\ntwo')).toEqual(['one', '   two', '']);
+    expect(await lines(true, 'one\r\ntwo')).toEqual(['one', 'two', '']);
   });
 });
 

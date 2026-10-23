@@ -128,8 +128,8 @@ export function AgentDetailPage({ id }: { id: string }) {
         <Card size="small" title="Details">
           <KeyValueGrid
             items={[
-              { key: 'id', label: 'Agent ID', value: <code className="hp-mono">{agent.id}</code> },
-              { key: 'desc', label: 'Description', value: agent.description || '—' },
+              { span: 2, key: 'id', label: 'Agent ID', value: <code className="hp-mono">{agent.id}</code> },
+              { span: 2, key: 'desc', label: 'Description', value: agent.description || '—' },
               { key: 'groups', label: 'Groups', value: <TagList values={agent.groups} /> },
               { key: 'labels', label: 'Labels', value: <TagList values={labelsToTags(agent.labels)} /> },
               {
@@ -147,7 +147,7 @@ export function AgentDetailPage({ id }: { id: string }) {
                     {agent.created_by ? (
                       <>
                         {' '}
-                        by <OperatorName id={agent.created_by} />
+                        by <OperatorName id={agent.created_by.replace(/^operator:/, '')} />
                       </>
                     ) : null}
                   </>

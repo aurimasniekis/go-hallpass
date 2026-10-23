@@ -30,6 +30,7 @@ import { Route as AppRequestsIdRouteImport } from './routes/_app/requests/$id'
 import { Route as AppRolesIdRouteImport } from './routes/_app/roles/$id'
 import { Route as AppServersIndexRouteImport } from './routes/_app/servers/index'
 import { Route as AppServersIdRouteImport } from './routes/_app/servers/$id'
+import { Route as AppServersOnboardRouteImport } from './routes/_app/servers/onboard'
 import { Route as AppSessionsIndexRouteImport } from './routes/_app/sessions/index'
 import { Route as AppSessionsIdRouteImport } from './routes/_app/sessions/$id'
 import { Route as AppSettingsAuthRouteImport } from './routes/_app/settings/auth'
@@ -141,6 +142,11 @@ const AppServersIdRoute = AppServersIdRouteImport.update({
   path: '/servers/$id',
   getParentRoute: () => AppRoute,
 } as any)
+const AppServersOnboardRoute = AppServersOnboardRouteImport.update({
+  id: '/servers/onboard',
+  path: '/servers/onboard',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSessionsIndexRoute = AppSessionsIndexRouteImport.update({
   id: '/sessions/',
   path: '/sessions/',
@@ -189,6 +195,7 @@ export interface FileRoutesByFullPath {
   '/requests/$id': typeof AppRequestsIdRoute
   '/roles/$id': typeof AppRolesIdRoute
   '/servers/$id': typeof AppServersIdRoute
+  '/servers/onboard': typeof AppServersOnboardRoute
   '/sessions/$id': typeof AppSessionsIdRoute
   '/settings/auth': typeof AppSettingsAuthRoute
   '/settings/integrations': typeof AppSettingsIntegrationsRoute
@@ -217,6 +224,7 @@ export interface FileRoutesByTo {
   '/requests/$id': typeof AppRequestsIdRoute
   '/roles/$id': typeof AppRolesIdRoute
   '/servers/$id': typeof AppServersIdRoute
+  '/servers/onboard': typeof AppServersOnboardRoute
   '/sessions/$id': typeof AppSessionsIdRoute
   '/settings/auth': typeof AppSettingsAuthRoute
   '/settings/integrations': typeof AppSettingsIntegrationsRoute
@@ -247,6 +255,7 @@ export interface FileRoutesById {
   '/_app/requests/$id': typeof AppRequestsIdRoute
   '/_app/roles/$id': typeof AppRolesIdRoute
   '/_app/servers/$id': typeof AppServersIdRoute
+  '/_app/servers/onboard': typeof AppServersOnboardRoute
   '/_app/sessions/$id': typeof AppSessionsIdRoute
   '/_app/settings/auth': typeof AppSettingsAuthRoute
   '/_app/settings/integrations': typeof AppSettingsIntegrationsRoute
@@ -277,6 +286,7 @@ export interface FileRouteTypes {
     | '/requests/$id'
     | '/roles/$id'
     | '/servers/$id'
+    | '/servers/onboard'
     | '/sessions/$id'
     | '/settings/auth'
     | '/settings/integrations'
@@ -305,6 +315,7 @@ export interface FileRouteTypes {
     | '/requests/$id'
     | '/roles/$id'
     | '/servers/$id'
+    | '/servers/onboard'
     | '/sessions/$id'
     | '/settings/auth'
     | '/settings/integrations'
@@ -334,6 +345,7 @@ export interface FileRouteTypes {
     | '/_app/requests/$id'
     | '/_app/roles/$id'
     | '/_app/servers/$id'
+    | '/_app/servers/onboard'
     | '/_app/sessions/$id'
     | '/_app/settings/auth'
     | '/_app/settings/integrations'
@@ -504,6 +516,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppServersIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/servers/onboard': {
+      id: '/_app/servers/onboard'
+      path: '/servers/onboard'
+      fullPath: '/servers/onboard'
+      preLoaderRoute: typeof AppServersOnboardRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/sessions/': {
       id: '/_app/sessions/'
       path: '/sessions'
@@ -561,6 +580,7 @@ interface AppRouteChildren {
   AppRequestsIdRoute: typeof AppRequestsIdRoute
   AppRolesIdRoute: typeof AppRolesIdRoute
   AppServersIdRoute: typeof AppServersIdRoute
+  AppServersOnboardRoute: typeof AppServersOnboardRoute
   AppSessionsIdRoute: typeof AppSessionsIdRoute
   AppSettingsAuthRoute: typeof AppSettingsAuthRoute
   AppSettingsIntegrationsRoute: typeof AppSettingsIntegrationsRoute
@@ -585,6 +605,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppRequestsIdRoute: AppRequestsIdRoute,
   AppRolesIdRoute: AppRolesIdRoute,
   AppServersIdRoute: AppServersIdRoute,
+  AppServersOnboardRoute: AppServersOnboardRoute,
   AppSessionsIdRoute: AppSessionsIdRoute,
   AppSettingsAuthRoute: AppSettingsAuthRoute,
   AppSettingsIntegrationsRoute: AppSettingsIntegrationsRoute,

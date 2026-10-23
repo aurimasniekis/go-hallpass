@@ -17,7 +17,7 @@ import { ProvenanceBadge } from './ProvenanceBadge';
  * Full record (exe, argv, cwd), fetched only when the operator expands a row: every read is audited
  * server-side. All fields are destination-provided text, shown strictly as plain text.
  */
-function RecordDetails({ id }: { id: string }) {
+export function RecordDetails({ id }: { id: string }) {
   const q = useQuery(destinationRecordQueryOptions(id));
   if (q.isPending) {
     return <LoadingState label="Loading reported command…" />;

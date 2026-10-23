@@ -96,7 +96,13 @@ export function AgentKeys({
           scroll={{ x: 'max-content' }}
           aria-label="Agent SSH keys"
           columns={[
-            { key: 'fp', title: 'Fingerprint', render: (_, k) => <Fingerprint value={k.fingerprint} /> },
+            {
+              key: 'fp',
+              title: 'Fingerprint',
+              // Long fingerprints wrap instead of pushing the other columns out of the card.
+              onCell: () => ({ style: { minWidth: 240, maxWidth: 340 } }),
+              render: (_, k) => <Fingerprint value={k.fingerprint} />,
+            },
             {
               key: 'alg',
               title: 'Algorithm',
@@ -113,6 +119,7 @@ export function AgentKeys({
             {
               key: 'actions',
               title: <span className="hp-visually-hidden">Actions</span>,
+              fixed: 'right',
               render: (_, k) =>
                 canWrite && k.state === 'active' ? <RevokeKey agentId={agentId} keyItem={k} /> : null,
             },

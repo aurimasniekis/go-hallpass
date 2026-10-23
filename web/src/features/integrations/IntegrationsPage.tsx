@@ -122,10 +122,12 @@ function IntegrationsTab() {
       ) : integrations.isError ? (
         <ErrorState error={integrations.error} onRetry={() => void integrations.refetch()} />
       ) : integrations.data.items.length === 0 ? (
-        <EmptyState
-          title="No chat integrations"
-          description="Approvers can still decide every request in the web console. Add Slack or Telegram to notify approvers in chat."
-        />
+        <Card size="small">
+          <EmptyState
+            title="No chat integrations"
+            description="Approvers can still decide every request in the web console. Add Slack or Telegram to notify approvers in chat."
+          />
+        </Card>
       ) : (
         integrations.data.items.map((i) => (
           <IntegrationCard
@@ -514,8 +516,24 @@ export function IntegrationsPage() {
       <Tabs
         items={[
           { key: 'integrations', label: 'Integrations', children: <IntegrationsTab /> },
-          { key: 'routes', label: 'Routes', children: <RoutesTab /> },
-          { key: 'deliveries', label: 'Deliveries', children: <DeliveriesTab /> },
+          {
+            key: 'routes',
+            label: 'Routes',
+            children: (
+              <Card size="small">
+                <RoutesTab />
+              </Card>
+            ),
+          },
+          {
+            key: 'deliveries',
+            label: 'Deliveries',
+            children: (
+              <Card size="small">
+                <DeliveriesTab />
+              </Card>
+            ),
+          },
         ]}
       />
     </>

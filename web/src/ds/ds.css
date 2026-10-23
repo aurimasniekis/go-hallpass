@@ -87,20 +87,37 @@
   background: var(--hp-color-info);
 }
 
-/* KeyValueGrid */
+/* KeyValueGrid: as many columns of at least --hp-kv-min as the panel fits, capped at --hp-kv-columns */
 .hp-kv {
+  --hp-kv-gap: 24px;
+  container-type: inline-size;
   display: grid;
-  grid-template-columns: repeat(var(--hp-kv-columns, 2), minmax(0, 1fr));
-  gap: 12px 24px;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(
+      min(
+        100%,
+        max(
+          var(--hp-kv-min, 180px),
+          calc((100% - (var(--hp-kv-columns, 6) - 1) * var(--hp-kv-gap)) / var(--hp-kv-columns, 6))
+        )
+      ),
+      1fr
+    )
+  );
+  gap: 12px var(--hp-kv-gap);
   margin: 0;
-}
-@media (max-width: 720px) {
-  .hp-kv {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 .hp-kv__item {
   min-width: 0;
+}
+.hp-kv__item--full {
+  grid-column: 1 / -1;
+}
+@container (min-width: 400px) {
+  .hp-kv__item--wide {
+    grid-column: span 2;
+  }
 }
 .hp-kv dt {
   color: var(--hp-color-text-secondary);
@@ -158,6 +175,120 @@
   color: var(--hp-color-warning-text);
 }
 
+/* Short explanatory paragraph at the top of a card */
+.hp-card-intro {
+  margin: 0 0 12px;
+  color: var(--hp-color-text-secondary);
+}
+
+/* CodeBlock: copyable command */
+.hp-code {
+  position: relative;
+  margin: 4px 0 8px;
+}
+.hp-code__pre {
+  margin: 0;
+  padding: 8px 40px 8px 12px;
+  overflow-x: auto;
+  font-family: var(--hp-font-family-code);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre;
+  color: var(--hp-color-text);
+  background: var(--hp-color-fill-quaternary);
+  border: 1px solid var(--hp-color-border-secondary);
+  border-radius: var(--hp-radius);
+}
+.hp-code__copy {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
+.hp-tip {
+  margin-bottom: 16px;
+}
+.hp-tip:last-child {
+  margin-bottom: 0;
+}
+.hp-steps {
+  margin: 0;
+  padding-left: 20px;
+}
+.hp-steps > li + li {
+  margin-top: 8px;
+}
+
+/* Inline forms outside antd Form (wizard steps) */
+.hp-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 16px 24px;
+}
+.hp-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+.hp-field > .ant-select {
+  align-self: stretch;
+}
+.hp-field__label {
+  font-weight: 500;
+}
+.hp-form-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--hp-color-border-secondary);
+}
+.hp-ok-icon {
+  color: var(--hp-color-success);
+  font-size: 16px;
+  margin-top: 3px;
+}
+
+/* Onboarding wizard */
+.hp-wizard-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.hp-wizard-form {
+  max-width: 720px;
+}
+.hp-checklist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hp-checklist li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 2px 0;
+}
+.hp-checklist__done .anticon {
+  color: var(--hp-color-success);
+}
+.hp-checklist__todo {
+  color: var(--hp-color-text-secondary);
+}
+
+/* Cards in one grid row share the row's height */
+.hp-equal-cards > .ant-col > .ant-card {
+  height: 100%;
+}
+
+/* Table cells: one vertical rhythm whatever the cell holds (badges, mono text, buttons) */
+.ant-table-wrapper .ant-table-tbody > tr > td {
+  vertical-align: middle;
+}
+.ant-table-wrapper .hp-status {
+  vertical-align: middle;
+}
+
 /* ChartCard */
 .hp-chart-summary {
   margin: 0 0 8px;
@@ -172,6 +303,44 @@
   justify-content: flex-end;
   gap: 8px;
   padding-top: 8px;
+}
+.hp-table-note {
+  padding-top: 8px;
+}
+.hp-legend {
+  margin: 0;
+  font-size: 12px;
+  color: var(--hp-color-text-secondary);
+}
+.hp-chan-end {
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  max-width: 360px;
+  white-space: normal;
+}
+.hp-chan-end__detail {
+  font-size: 12px;
+  color: var(--hp-color-text-secondary);
+}
+.hp-chan-end__reason--error {
+  color: var(--hp-color-error-text);
+}
+.hp-chan-end__reason--warning {
+  color: var(--hp-color-warning-text);
+}
+
+/* Empty states stay compact: a small mark, the title and the hint */
+.hp-empty.ant-empty {
+  margin-block: 12px;
+}
+.hp-empty .ant-empty-image {
+  height: 28px;
+  margin-bottom: 6px;
+}
+.hp-empty .ant-empty-image svg {
+  height: 28px;
+  width: auto;
 }
 .hp-table-notice {
   margin-bottom: 8px;
@@ -211,6 +380,11 @@
   justify-content: space-between;
   gap: 12px;
   border-bottom: 1px solid var(--hp-color-border-secondary);
+}
+/* Narrow screens: the collapsed sidebar's menu button sits in the header instead of over the page title */
+.ant-layout-sider-zero-width-trigger.ant-layout-sider-zero-width-trigger {
+  top: 4px;
+  z-index: 20;
 }
 .hp-shell-content {
   padding: 16px 24px 32px;

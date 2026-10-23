@@ -1,6 +1,6 @@
 import { SafetyCertificateOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Form, Input, Modal, Space, type TableColumnsType } from 'antd';
+import { Alert, Button, Card, Form, Input, Modal, Space, type TableColumnsType } from 'antd';
 import { useEffect, useState } from 'react';
 
 import { api } from '../../api/client';
@@ -223,9 +223,11 @@ export function AuditPage({ search, onSearchChange }: AuditPageProps) {
     {
       key: 'details',
       title: <span className="hp-visually-hidden">Details</span>,
+      fixed: 'right',
       render: (_v, e) => (
         <Button
           size="small"
+          type="link"
           aria-label={`Details of event ${String(e.seq)}`}
           onClick={() => {
             setDetails(e);
@@ -244,41 +246,43 @@ export function AuditPage({ search, onSearchChange }: AuditPageProps) {
         description="Append-only, hash-chained record of security-relevant actions."
         extra={can('audit.verify') ? <VerifyChain /> : null}
       />
-      <Space orientation="vertical" size={12} style={{ width: '100%' }}>
-        <Space wrap align="start" style={{ justifyContent: 'space-between', width: '100%' }}>
-          <FilterForm search={search} onChange={onSearchChange} />
-          <SavedFilters
-            table="audit"
-            current={auditSearchToValues(search)}
-            onApply={(f) => {
-              onSearchChange(parseAuditSearch(f));
+      <Card size="small">
+        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
+          <Space wrap align="start" style={{ justifyContent: 'space-between', width: '100%' }}>
+            <FilterForm search={search} onChange={onSearchChange} />
+            <SavedFilters
+              table="audit"
+              current={auditSearchToValues(search)}
+              onApply={(f) => {
+                onSearchChange(parseAuditSearch(f));
+              }}
+            />
+          </Space>
+          <DataTable<AuditEvent>
+            caption="Audit events"
+            columns={cols}
+            rows={list.data?.items}
+            rowKey="id"
+            loading={list.isPending}
+            fetching={list.isFetching}
+            error={list.error}
+            onRetry={() => void list.refetch()}
+            stale={sse.status === 'stale' || sse.status === 'disconnected'}
+            emptyTitle="No audit events"
+            emptyDescription={Object.keys(search).length ? 'No events match these filters.' : undefined}
+            pagination={{
+              pageSize,
+              hasPreviousPage: pager.hasPrevious,
+              hasNextPage: Boolean(list.data?.next_cursor),
+              onPreviousPage: pager.previous,
+              onNextPage: () => {
+                pager.next(list.data?.next_cursor);
+              },
+              onPageSizeChange: setPageSize,
             }}
           />
         </Space>
-        <DataTable<AuditEvent>
-          caption="Audit events"
-          columns={cols}
-          rows={list.data?.items}
-          rowKey="id"
-          loading={list.isPending}
-          fetching={list.isFetching}
-          error={list.error}
-          onRetry={() => void list.refetch()}
-          stale={sse.status === 'stale' || sse.status === 'disconnected'}
-          emptyTitle="No audit events"
-          emptyDescription={Object.keys(search).length ? 'No events match these filters.' : undefined}
-          pagination={{
-            pageSize,
-            hasPreviousPage: pager.hasPrevious,
-            hasNextPage: Boolean(list.data?.next_cursor),
-            onPreviousPage: pager.previous,
-            onNextPage: () => {
-              pager.next(list.data?.next_cursor);
-            },
-            onPageSizeChange: setPageSize,
-          }}
-        />
-      </Space>
+      </Card>
       <Modal
         open={details !== null}
         title={details ? `Event ${String(details.seq)} · ${details.action}` : ''}
