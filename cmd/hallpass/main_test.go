@@ -71,3 +71,43 @@ func TestMigrateCommand(t *testing.T) {
 		t.Fatalf("unexpected output %q", out.String())
 	}
 }
+
+func TestKeysLifecycle(t *testing.T) {
+	dir := t.TempDir()
+	kek := filepath.Join(dir, "kek")
+	kek2 := filepath.Join(dir, "kek2")
+	ctx := context.Background()
+	var out, errb bytes.Buffer
+	for _, p := range []string{kek, kek2} {
+		if code := run(ctx, []string{"keys", "init-kek", "--out", p}, &out, &errb); code != 0 {
+			t.Fatalf("init-kek exit %d: %s", code, errb.String())
+		}
+	}
+	cfg := filepath.Join(dir, "hp.yaml")
+	write := func(k string) {
+		content := "public_url: https://hp.example.com\nkek:\n  file: " + k + "\ndata_dir: " + filepath.Join(dir, "data") + "\n"
+		if err := os.WriteFile(cfg, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(kek)
+	for _, args := range [][]string{
+		{"keys", "status", "--config", cfg},
+		{"keys", "rotate", "--config", cfg, "--purpose", "field"},
+		{"keys", "rotate-kek", "--config", cfg, "--new", kek2},
+	} {
+		out.Reset()
+		errb.Reset()
+		if code := run(ctx, args, &out, &errb); code != 0 {
+			t.Fatalf("%v exit %d: %s", args, code, errb.String())
+		}
+	}
+	if code := run(ctx, []string{"keys", "status", "--config", cfg}, &out, &errb); code != 1 {
+		t.Fatalf("old KEK should be rejected after rotation, exit %d", code)
+	}
+	write(kek2)
+	out.Reset()
+	if code := run(ctx, []string{"keys", "status", "--config", cfg, "--json"}, &out, &errb); code != 0 || !strings.Contains(out.String(), `"active_version":2`) {
+		t.Fatalf("status with new KEK: exit %d %s %s", code, out.String(), errb.String())
+	}
+}

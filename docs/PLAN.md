@@ -1579,8 +1579,8 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP00 | Planning documents | — | implemented | e15801b |
 | WP01 | Scaffolding, CI, lint | WP00 | tested | 89620d3 |
 | WP02 | Config, runtime modes, logging | WP01 | tested | 860e1a7 |
-| WP03 | SQLite storage, migrations, lock, backup primitive | WP02 | tested | |
-| WP04 | Keyring and field crypto | WP03 | planned | |
+| WP03 | SQLite storage, migrations, lock, backup primitive | WP02 | tested | f0b96c0 |
+| WP04 | Keyring and field crypto | WP03 | tested | |
 | WP05 | Audit, jobs, outbox | WP04 | planned | |
 | WP06 | Agents and keys | WP05 | planned | |
 | WP07 | Servers, host identities, roles, credentials/CA | WP06 | planned | |
@@ -1616,6 +1616,7 @@ local run of the same targets the workflow executes, and the entry says so. Chec
 - **WP01** (2026-10-23): Go module (`go 1.27.3`, latest stable per user instruction; A-2 updated), `hallpass version`, golangci-lint v2 config (depguard: no math/rand, no log; forbidigo), custom analyzers `nohostkeyignore` and `txscope` with analysistest suites (tools module), Makefile, coverage-floor script, CI workflow (actions pinned by SHA, actionlint-clean), gitleaks config, CONTRIBUTING.md, docs index. Tested locally: `make vet custom-vet lint race tools-test coverage` green, gitleaks clean. Not yet run on GitHub (not pushed).
 - **WP02** (2026-10-23): `internal/config` (YAML via go.yaml.in/yaml/v3 with KnownFields, reflective HALLPASS_* overrides, aggregated validation, production vs development rules incl. KEK location and dev-feature rejection), `internal/obs` (ECS-aligned slog JSON, LevelVar) and `internal/obs/redact` (Secret[T], sensitive-key redaction), `hallpass config check|env`, example config, docs/operator/{configuration,logging}.md. Config loader is hand-rolled (no koanf), recorded as ADR-0025. Tested locally (race, lint, vet).
 - **WP03** (2026-10-23): `internal/store` (modernc SQLite, writer/reader pools with per-connection pragma verification, BEGIN IMMEDIATE Tx with jittered busy retry and after-commit hooks, error classification and Health tracking, flock process lock, Linux/macOS network-FS refusal, data-dir permission checks, goose migrations with pre-migration snapshots, quick/integrity checks, VACUUM INTO snapshot), sqlc (pinned v1.31.1 binary with checksum, drift check in CI), `internal/ids` (prefixed monotonic UUIDv7), `internal/clock`, `internal/store/storetest`, `hallpass migrate`, docs/operator/storage.md. Tested locally on macOS and in a Linux container (incl. FUSE refusal via `make test-netfs`).
+- **WP04** (2026-10-23): `internal/keyring` (LocalKEK AES-256-GCM KeyWrapper, KEK file/env/dev loading with permission checks, purpose keys field/credential/recording/manifest/token, Seal/Open with location-binding AAD, MAC/MACAll/VerifyMAC, purpose rotation with canary reseal, retire, offline KEK rotation), `hallpass keys init-kek|status|rotate|rotate-kek`, docs/operator/keys.md. Found and fixed during testing: retiring a rotated field key orphaned the canary; rotation now reseals it in the same transaction. Coverage 80.6%. Tested locally.
 <!-- progress-log-end -->
 
 ---
@@ -1787,9 +1788,9 @@ check · R recovery drill · SR security review · D documentation review.
 
 #### HP-CRY — Cryptography and key management
 
-- [ ] `HP-CRY-001` Master KEK provisioning — WP04 — evidence: U, I
-- [ ] `HP-CRY-002` Purpose keys and rotation — WP04 — evidence: U, I
-- [ ] `HP-CRY-003` Field encryption — WP04 — evidence: U, P
+- [x] `HP-CRY-001` Master KEK provisioning — WP04 — evidence: U, I — ✅ tested (local) @ WP04: LoadKEK file/env/dev, production refusal, perms/owner checks, canary detects wrong KEK; `hallpass keys init-kek`
+- [ ] `HP-CRY-002` Purpose keys and rotation — WP04 — evidence: U, I — ◐ WP04: purpose keys wrapped AES-256-GCM, versioned, Rotate/Reseal/Retire, offline RotateKEK (tests + CLI); background re-encryption job pending (WP05 jobs + per-table resealers)
+- [x] `HP-CRY-003` Field encryption — WP04 — evidence: U, P — ✅ tested (local) @ WP04: Keyring.Seal/Open with FieldAAD(table|column|row) + key version; bit-flip, row-swap and purpose-confusion tests
 - [ ] `HP-CRY-004` Recording file format — WP12 — evidence: U, Z, SR
 - [ ] `HP-CRY-005` Integrity verification — WP12 — evidence: I, R
 - [ ] `HP-CRY-006` Vetted cryptography only — WP01 — evidence: C, SR — ◐ WP01: depguard bans math/rand; nohostkeyignore analyzer; ongoing constraint, SR at WP26
@@ -1808,7 +1809,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-DB-007` Unsupported storage refusal — WP03 — evidence: I — ✅ tested (local, Linux container) @ WP03: statfs magic check; `make test-netfs` verifies refusal on a FUSE mount
 - [ ] `HP-DB-008` Corruption checks — WP03 — evidence: I, FI — ◐ WP03: startup quick_check refuses corrupt DB (TestCorruptionRefused), IntegrityCheck method; scheduled job WP05, runtime readiness WP22
 - [ ] `HP-DB-009` Disk-full and I/O failure — WP03 — evidence: FI — ◐ WP03: error classification + Health (degraded/failed, fail-closed AcceptsWrites); fault tests FI-06 and recording termination pending WP12/WP26
-- [ ] `HP-DB-010` Filesystem permissions — WP03 — evidence: I — ◐ WP03: data dir 0700/owner check, DB files 0600; KEK file checks pending WP04
+- [x] `HP-DB-010` Filesystem permissions — WP03 — evidence: I — ✅ tested (local) @ WP03/WP04: data dir 0700 + owner, DB files 0600, KEK file mode/owner refusal
 - [ ] `HP-DB-011` Bounded growth — WP03 — evidence: I, S — ◐ WP03: incremental auto_vacuum, Checkpoint/IncrementalVacuum/Sizes; retention jobs + metrics pending WP05/WP12/WP22
 - [ ] `HP-DB-012` Consistent backup primitive — WP03 — evidence: I, R — ◐ WP03: Snapshot (VACUUM INTO, fsync, 0600) primitive tested; segment copy + manifest pending WP23
 - [ ] `HP-DB-013` Crash reconciliation — WP09 — evidence: FI, I
