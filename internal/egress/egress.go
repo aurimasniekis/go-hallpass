@@ -37,6 +37,8 @@ var DefaultDenied = mustPrefixes(
 	"fd00:ec2::254/128",  // AWS IPv6 metadata
 	"64:ff9b::/96",       // NAT64 well-known prefix (can reach arbitrary IPv4)
 	"2002::/16",          // 6to4 (embeds arbitrary IPv4)
+	"64:ff9b:1::/48",     // local-use NAT64 (RFC 8215, can reach arbitrary IPv4)
+	"2001::/32",          // Teredo (embeds arbitrary IPv4)
 )
 
 func mustPrefixes(ss ...string) []netip.Prefix {

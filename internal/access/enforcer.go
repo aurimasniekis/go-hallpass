@@ -233,6 +233,11 @@ const overlap = 5 * time.Second
 // reconcile reads grants, keys and credentials changed since the last pass.
 func (e *Enforcer) reconcile(ctx context.Context) error {
 	q := e.svc.s.R()
+	// Cursors are wall-clock timestamps. After a backward clock step new rows are stamped earlier than rows already
+	// seen, so a cursor ahead of now would skip them (lost revocations, HP-GRT-008): never let a cursor exceed now.
+	// Rows committed since the step are within the overlap window of now.
+	now := e.svc.Clock().Now().UnixMicro()
+	e.grantCursor, e.keyCursor, e.credCursor = min(e.grantCursor, now), min(e.keyCursor, now), min(e.credCursor, now)
 	grants, err := q.GrantsChangedSince(ctx, e.grantCursor-overlap.Microseconds())
 	if err != nil {
 		return err

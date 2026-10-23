@@ -591,6 +591,23 @@
   automated tests. The UI uses standard React, Ant Design and xterm.js, which support Firefox, but Firefox support is
   no longer verified. Reverting is adding the project back to `web/playwright.config.ts` and the nightly job.
 
+### ADR-0039 — Wall-clock steps and enforcement
+- **Status:** accepted. Not a weakening: it documents existing behavior under THREAT_MODEL assumption 6 (clocks are
+  NTP-synchronized) and fixes a lost-revocation gap. Flagged for operator review because it states a limit of G-4.
+- **Context:** WP26 fault test FI-21 showed that after a backward wall-clock step the enforcer's database safety
+  net skipped grant, key and credential changes stamped earlier than rows it had already seen, so a revocation
+  whose in-process event was lost was never enforced.
+- **Decision:**
+  1. Reconciliation cursors never exceed the current time. After a backward step, rows written since the step fall
+     inside the 5 s overlap window. Until the clock catches up, changes from before the step are re-read on every
+     pass; handling them is idempotent.
+  2. Grant start, expiry and token windows stay wall-clock UTC, as specified. A backward step of N lengthens the real
+     duration of active grants by N, and a forward step shortens them. Hallpass does not use the monotonic clock for
+     expiry, because grants must survive restarts and be comparable across components.
+  3. Operators must run NTP with slewing (no large steps); `docs/operator/install.md` states the requirement.
+- **Consequences:** G-4 holds with the documented clock assumption; under a backward step, the 5 s revocation
+  bound holds even when the in-process event is lost (TestFI21).
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

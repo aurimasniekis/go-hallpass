@@ -35,6 +35,16 @@ under test.
 | P-10 | OIDC / HP-OIDC-005 | `SanitizeReturnTo` checks the raw path for `/api` and `/auth` prefixes. Dot segments bypass the check: `/./api/v1/me` or `/%2e/auth/...` is returned unchanged, and the browser (and `http.ServeMux`) normalizes it to `/api/...`. The redirect stays same-origin; only the allowlist is bypassed. | `internal/oidc/flow.go:82–99` | `SanitizeReturnTo("/./api/v1/me") == "/./api/v1/me"` |
 | P-11 | Egress / HP-SRV-009 | `DefaultDenied` does not list the local-use NAT64 prefix `64:ff9b:1::/48` or Teredo `2001::/32`. Both can embed IPv4 addresses, but this only matters if an operator puts them in `allow_cidrs`. | `internal/egress/egress.go:25–40` | review |
 
+**Fix status (implementing session, not a review conclusion; reviewers should verify):**
+
+| # | Status | Commit / test |
+|---|---|---|
+| P-1, P-2, P-3, P-7, P-8 | fixed | fee9b40; fault tests TestFI05FI07…, TestFI08…, TestQueueBytesBelowRecordSize, TestAgentDisconnectReleasesDestination, TestFI17 pass |
+| P-4, P-5 | fixed | 86b565f; TestFI06SQLiteFull, TestFI10 pass |
+| P-6 | fixed | bd08fce (keepalives on both legs, started before session setup); TestFI15 passes |
+| P-9 | fixed (cursor) / documented (expiry) | cursor clamp + ADR-0039; TestFI21 passes |
+| P-10, P-11 | fixed | dot segments rejected (FuzzSanitizeReturnTo seeds), NAT64 local-use and Teredo denied (TestAllowedAddr) |
+
 ## 1. Authentication paths
 
 ### 1.1 Agent SSH authentication (HP-SSH-001..005, HP-AGT-*)

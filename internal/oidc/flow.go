@@ -92,6 +92,13 @@ func SanitizeReturnTo(p string) string {
 			return "/"
 		}
 	}
+	// Dot segments (also percent-encoded: u.Path is decoded) would let the browser resolve "/./api/…" or
+	// "/x/../auth/…" past the deny list below; no UI route needs them.
+	for _, seg := range strings.Split(u.Path, "/") {
+		if seg == "." || seg == ".." {
+			return "/"
+		}
+	}
 	if strings.HasPrefix(u.Path, "/api/") || strings.HasPrefix(u.Path, "/auth/") || u.Path == "/api" || u.Path == "/auth" {
 		return "/"
 	}

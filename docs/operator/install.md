@@ -36,6 +36,9 @@ Install only artifacts whose checksum and attestation both verify.
   filesystems are refused (HP-DB-007). Use full-disk encryption: the database stores inventory and policy in plaintext
   ([storage.md](storage.md)).
 - One Hallpass process per data directory. There is no clustering ([storage.md](storage.md)).
+- A clock synchronized by NTP with slewing (chrony or systemd-timesyncd), not stepped. Grant expiry, approval-token
+  windows and webhook timestamp checks use wall-clock UTC. A backward step lengthens active grants by the size of the
+  step (ADR-0039).
 - Network: agents reach the SSH port (default `2222`). Hallpass reaches destination servers on port 22 from addresses you
   pin with `from=` in `authorized_keys` ([../destination/hardening.md](../destination/hardening.md)). The web console port
   (default `8080`) should only be reachable through a TLS-terminating reverse proxy.
