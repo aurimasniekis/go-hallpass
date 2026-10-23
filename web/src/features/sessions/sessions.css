@@ -1,0 +1,76 @@
+/* Session detail: timeline and replay (WP21). Colors come from the ThemeProvider --hp-* variables. */
+.hp-session-timeline {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hp-session-timeline__item {
+  padding: 8px 0 8px 12px;
+  border-left: 2px solid var(--hp-color-border-secondary);
+}
+.hp-session-timeline__item + .hp-session-timeline__item {
+  margin-top: 2px;
+}
+.hp-session-timeline__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.hp-session-timeline__time,
+.hp-session-timeline__meta {
+  color: var(--hp-color-text-secondary);
+  font-size: 12px;
+}
+.hp-session-timeline__data {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+.hp-session-timeline__data > div {
+  display: contents;
+}
+.hp-session-timeline__data dt {
+  color: var(--hp-color-text-secondary);
+}
+.hp-session-timeline__data dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.hp-replay-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 12px 0;
+}
+.hp-replay-controls__seek {
+  flex: 1 1 240px;
+  min-width: 200px;
+}
+.hp-replay-time {
+  font-family: var(--hp-font-family-code);
+  font-variant-numeric: tabular-nums;
+  color: var(--hp-color-text-secondary);
+}
+.hp-replay-panes {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 1200px) {
+  .hp-replay-panes--exec {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.hp-replay-pane h4 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.hp-replay-terminal .hp-terminal {
+  overflow: auto;
+}

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { ApiClient, buildQueryString, readPreSessionCsrfCookie } from './client';
+import { makeMe } from '../test/fixtures';
+import { ApiClient, buildQueryString } from './client';
+import { buildApiPath } from './endpoints';
 import { ApiError, isApiError } from './errors';
 import type { Me } from './types';
 
@@ -28,14 +30,7 @@ function problem(status: number, code: string, detail = code, errors?: unknown[]
 }
 
 function me(token: string): Me {
-  return {
-    operator_id: 'op_1',
-    display_name: 'Ada',
-    roles: ['administrator'],
-    permissions: ['dashboard.view'],
-    csrf_token: token,
-    auth_time: '2026-01-01T00:00:00Z',
-  };
+  return makeMe({ csrf: token });
 }
 
 /** Fake fetch answering from a queue of responders and recording calls. */
@@ -91,7 +86,7 @@ describe('ApiClient', () => {
   it('parses RFC 9457 problem details into ApiError with field errors', async () => {
     const { fetch } = fakeFetch(() =>
       problem(422, 'validation_failed', 'Name is invalid', [
-        { field: 'name', detail: 'too long' },
+        { field: 'name', message: 'too long' },
         { pointer: '/spec/labels/0', message: 'bad label' },
         { code: 'required' },
       ]),
@@ -228,17 +223,64 @@ describe('ApiClient', () => {
     expect(unauthorized).toHaveBeenCalledTimes(1);
   });
 
-  it('sends the pre-session CSRF token for login-type requests', async () => {
+  it('treats mfa_required as a reauthentication prompt, not a sign-out', async () => {
+    const { fetch, calls } = fakeFetch(
+      () => problem(401, 'mfa_required'),
+      () => json(200, me('t2')),
+      () => json(200, { ok: true }),
+    );
+    const client = new ApiClient({ fetch });
+    client.setCsrfToken('t1');
+    const prompt = vi.fn((_e: ApiError) => Promise.resolve(true));
+    const unauthorized = vi.fn();
+    client.setHandlers({ onReauthRequired: prompt, onUnauthorized: unauthorized });
+    await expect(client.post('/me/recovery-codes')).resolves.toEqual({ ok: true });
+    expect(prompt).toHaveBeenCalledTimes(1);
+    expect(prompt.mock.calls[0]?.[0].code).toBe('mfa_required');
+    expect(unauthorized).not.toHaveBeenCalled();
+    expect(calls[2]?.headers.get('X-CSRF-Token')).toBe('t2');
+  });
+
+  it('does not prompt for requests that opt out of reauthentication', async () => {
+    const { fetch } = fakeFetch(() => problem(401, 'mfa_required'));
+    const client = new ApiClient({ fetch });
+    client.setCsrfToken('t');
+    const prompt = vi.fn(() => Promise.resolve(true));
+    const unauthorized = vi.fn();
+    client.setHandlers({ onReauthRequired: prompt, onUnauthorized: unauthorized });
+    await expect(client.post('/auth/mfa', { code: '1' }, { reauth: false })).rejects.toMatchObject({
+      code: 'mfa_required',
+    });
+    expect(prompt).not.toHaveBeenCalled();
+    expect(unauthorized).not.toHaveBeenCalled();
+  });
+
+  it('sends no CSRF header for public auth endpoints', async () => {
     const { fetch, calls } = fakeFetch(() => json(200, {}));
     const client = new ApiClient({ fetch });
-    client.setHandlers({ getPreSessionCsrfToken: () => 'pre' });
-    await client.post(
-      '/auth/login',
-      { username: 'a', password: 'b' },
-      { csrf: 'pre-session', authRedirect: false },
-    );
+    await client.post('/auth/login', { email: 'a@example.test', password: 'b' }, { csrf: 'none' });
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.headers.get('X-CSRF-Token')).toBe('pre');
+    expect(calls[0]?.headers.has('X-CSRF-Token')).toBe(false);
+  });
+
+  it('typed calls substitute encoded path parameters and pass query, body and headers', async () => {
+    const { fetch, calls } = fakeFetch(
+      () => json(200, me('t')),
+      () => json(201, { id: 'k1' }),
+      () => json(200, { items: [], next_cursor: null }),
+    );
+    const client = new ApiClient({ fetch });
+    await client.call('post', '/api/v1/agents/{id}/keys', {
+      path: { id: 'a/1' },
+      body: { public_key: 'ssh-ed25519 AAAA' },
+      idempotencyKey: 'k',
+    });
+    await client.call('get', '/api/v1/requests', { query: { state: 'pending', limit: 25 } });
+    expect(calls[1]?.url).toBe('/api/v1/agents/a%2F1/keys');
+    expect(calls[1]?.init.method).toBe('POST');
+    expect(calls[1]?.headers.get('Idempotency-Key')).toBe('k');
+    expect(calls[1]?.init.body).toBe('{"public_key":"ssh-ed25519 AAAA"}');
+    expect(calls[2]?.url).toBe('/api/v1/requests?state=pending&limit=25');
   });
 
   it('rejects a /me response without a CSRF token', async () => {
@@ -279,9 +321,18 @@ describe('buildQueryString', () => {
   });
 });
 
-describe('readPreSessionCsrfCookie', () => {
-  it('reads only the known cookie names', () => {
-    expect(readPreSessionCsrfCookie('foo=1; hp_login_csrf=abc%3D; bar=2')).toBe('abc=');
-    expect(readPreSessionCsrfCookie('foo=1')).toBeNull();
+describe('buildApiPath', () => {
+  it('strips the API prefix and encodes parameters', () => {
+    expect(buildApiPath('/api/v1/servers/{id}/host-identities:scan', { id: 's 1' })).toBe(
+      '/servers/s%201/host-identities:scan',
+    );
+    expect(buildApiPath('/api/v1/agents/{id}/keys/{kid}/revoke', { id: 'a', kid: 'k' })).toBe(
+      '/agents/a/keys/k/revoke',
+    );
+  });
+
+  it('refuses to build a URL with a missing parameter', () => {
+    expect(() => buildApiPath('/api/v1/agents/{id}', {})).toThrow(/missing path parameter/);
+    expect(() => buildApiPath('/api/v1/agents/{id}', { id: '' })).toThrow(/missing path parameter/);
   });
 });

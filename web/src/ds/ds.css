@@ -268,3 +268,31 @@
   font-size: 15px;
   margin: 0 0 8px;
 }
+
+/* OneTimeSecret */
+.hp-secret-list {
+  margin: 0;
+  padding: 8px 12px;
+  list-style: none;
+  border: 1px solid var(--hp-color-border-secondary);
+  border-radius: 4px;
+  max-height: 240px;
+  overflow: auto;
+  word-break: break-all;
+}
+.hp-secret-list li + li {
+  margin-top: 4px;
+}
+
+/* Preformatted data (JSON details, claims): text only, scrollable, wraps long tokens */
+.hp-pre {
+  margin: 0;
+  padding: 8px 12px;
+  max-height: 360px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border: 1px solid var(--hp-color-border-secondary);
+  border-radius: 4px;
+  color: var(--hp-color-text);
+}

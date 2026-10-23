@@ -1,43 +1,39 @@
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Divider, Form, Input } from 'antd';
-import { useEffect, useRef, useState } from 'react';
 import type { InputRef } from 'antd';
+import { useEffect, useRef, useState } from 'react';
 
 import { api as defaultClient, type ApiClient } from '../../api/client';
-import { errorMessage, isApiError } from '../../api/errors';
+import { errorMessage } from '../../api/errors';
 import { authConfigQueryOptions } from '../../api/queries';
-import type {
-  AuthConfig,
-  LoginRequest,
-  LoginResponse,
-  MfaRequest,
-  OidcProviderSummary,
-} from '../../api/types';
+import type { AuthConfig, AuthProviderSummary, LoginRequest, Me } from '../../api/types';
 import { ErrorState, LoadingState } from '../../ds/states';
 import { AuthLayout } from './AuthLayout';
+import { oidcStartUrl, ssoErrorMessage, takeStepUpReturn } from './sso';
+import { TotpEnrollment } from './TotpEnrollment';
 
 /**
- * Login (docs/PLAN.md §12.1; HP-UI-006). Renders from `GET /auth/config`:
- * local form only, SSO buttons only, or both. A `mfa_required` answer moves to the TOTP step.
+ * Login (docs/PLAN.md §12.1; HP-UI-006). Renders from `GET /auth/config`: local form only, SSO buttons
+ * only, or both. `POST /auth/login` returns `{mfa_pending, must_enroll, me}`: a pending MFA moves to the
+ * code step (`POST /auth/mfa`), a required enrollment to TOTP setup. An existing limited session (for
+ * example after a reload) resumes at the right step. SSO errors arrive as `?sso_error=<code>`; for
+ * `mfa_required` after an SSO step-up the TOTP fallback (`POST /auth/reauth/totp`) is offered.
  *
- * PROVISIONAL backend contract: request bodies, the `return_to` OIDC start parameter and the
- * login-CSRF transport are not yet fixed in api/openapi.yaml (see src/api/types.ts).
+ * Public auth endpoints carry no CSRF token (the server checks Origin); after login the session's token
+ * comes from `me.csrf_token`.
  */
 
-const AUTH_OPTS = { csrf: 'pre-session', authRedirect: false, reauth: false } as const;
+const PUBLIC_OPTS = { csrf: 'none', authRedirect: false, reauth: false } as const;
+const SESSION_OPTS = { authRedirect: false, reauth: false } as const;
 
-export function oidcStartUrl(provider: OidcProviderSummary, next: string): string {
-  return `/api/v1/auth/oidc/${encodeURIComponent(provider.id)}/start?return_to=${encodeURIComponent(next)}`;
-}
+type Step = 'credentials' | 'mfa' | 'enroll' | 'stepup-totp';
 
 function LocalLoginForm({
   client,
-  onMfaRequired,
-  onSignedIn,
+  onResult,
 }: {
   client: ApiClient;
-  onMfaRequired: () => void;
-  onSignedIn: () => void;
+  onResult: (step: Step | 'done', me: Me) => void;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -46,18 +42,14 @@ function LocalLoginForm({
     setPending(true);
     setError(null);
     try {
-      const res = await client.post<LoginResponse | undefined>('/auth/login', values, AUTH_OPTS);
-      if (res?.mfa_required) {
-        onMfaRequired();
-      } else {
-        onSignedIn();
-      }
+      const res = await client.call('post', '/api/v1/auth/login', {
+        body: { email: values.email.trim(), password: values.password },
+        ...PUBLIC_OPTS,
+      });
+      client.setCsrfToken(res.me.csrf_token);
+      onResult(res.must_enroll ? 'enroll' : res.mfa_pending ? 'mfa' : 'done', res.me);
     } catch (e) {
-      if (isApiError(e) && e.code === 'mfa_required') {
-        onMfaRequired();
-      } else {
-        setError(e);
-      }
+      setError(e);
     } finally {
       setPending(false);
     }
@@ -70,14 +62,10 @@ function LocalLoginForm({
       onFinish={(values) => {
         void submit(values);
       }}
-      aria-label="Sign in with username and password"
+      aria-label="Sign in with email and password"
     >
-      <Form.Item
-        label="Username"
-        name="username"
-        rules={[{ required: true, message: 'Enter your username' }]}
-      >
-        <Input autoComplete="username" autoCapitalize="none" spellCheck={false} />
+      <Form.Item label="Email" name="email" rules={[{ required: true, message: 'Enter your email' }]}>
+        <Input type="email" autoComplete="username" autoCapitalize="none" spellCheck={false} />
       </Form.Item>
       <Form.Item
         label="Password"
@@ -96,14 +84,18 @@ function LocalLoginForm({
   );
 }
 
-function MfaForm({
-  client,
-  onSignedIn,
+function CodeForm({
+  label,
+  intro,
+  onSubmit,
   onBack,
+  backLabel = 'Use a different account',
 }: {
-  client: ApiClient;
-  onSignedIn: () => void;
-  onBack: () => void;
+  label: string;
+  intro: string;
+  onSubmit: (code: string) => Promise<void>;
+  onBack?: () => void;
+  backLabel?: string;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -114,12 +106,11 @@ function MfaForm({
     codeInput.current?.focus();
   }, []);
 
-  const submit = async (values: MfaRequest) => {
+  const submit = async (values: { code: string }) => {
     setPending(true);
     setError(null);
     try {
-      await client.post('/auth/mfa', { code: values.code.trim() }, AUTH_OPTS);
-      onSignedIn();
+      await onSubmit(values.code.trim());
     } catch (e) {
       setError(e);
     } finally {
@@ -128,15 +119,15 @@ function MfaForm({
   };
 
   return (
-    <Form<MfaRequest>
+    <Form<{ code: string }>
       layout="vertical"
       requiredMark={false}
       onFinish={(values) => {
         void submit(values);
       }}
-      aria-label="Two-factor authentication"
+      aria-label={label}
     >
-      <p>Enter the code from your authenticator app, or one of your recovery codes.</p>
+      <p>{intro}</p>
       <Form.Item
         label="Authentication code"
         name="code"
@@ -156,18 +147,20 @@ function MfaForm({
       <Button type="primary" htmlType="submit" block loading={pending}>
         Verify
       </Button>
-      <Button type="link" block onClick={onBack} disabled={pending} style={{ marginTop: 8 }}>
-        Use a different account
-      </Button>
+      {onBack ? (
+        <Button type="link" block onClick={onBack} disabled={pending} style={{ marginTop: 8 }}>
+          {backLabel}
+        </Button>
+      ) : null}
     </Form>
   );
 }
 
-function SsoButtons({ providers, next }: { providers: readonly OidcProviderSummary[]; next: string }) {
+function SsoButtons({ providers, next }: { providers: readonly AuthProviderSummary[]; next: string }) {
   return (
     <nav aria-label="Single sign-on providers" style={{ display: 'grid', gap: 8 }}>
       {providers.map((p) => (
-        <Button key={p.id} block href={oidcStartUrl(p, next)}>
+        <Button key={p.slug} block href={oidcStartUrl(p.slug, 'login', next)}>
           Sign in with {p.display_name}
         </Button>
       ))}
@@ -175,63 +168,178 @@ function SsoButtons({ providers, next }: { providers: readonly OidcProviderSumma
   );
 }
 
+export interface LoginFormsProps {
+  config: AuthConfig;
+  next: string;
+  /** Called once the session is complete; `target` overrides `next` (step-up fallback). */
+  onSignedIn: (target?: string) => void;
+  client?: ApiClient;
+  /** Step to start at (resuming a limited session or an SSO `mfa_required` fallback). */
+  initialStep?: Step;
+  ssoError?: string | undefined;
+}
+
 export function LoginForms({
   config,
   next,
   onSignedIn,
   client = defaultClient,
-}: {
-  config: AuthConfig;
-  next: string;
-  onSignedIn: () => void;
-  client?: ApiClient;
-}) {
-  const [step, setStep] = useState<'credentials' | 'mfa'>('credentials');
-  const providers = config.oidc_providers;
+  initialStep = 'credentials',
+  ssoError,
+}: LoginFormsProps) {
+  const [step, setStep] = useState<Step>(initialStep);
+  const providers = config.providers;
+  const back = () => {
+    // Abandon the limited session server-side; ignore failures (it expires anyway).
+    void client.call('post', '/api/v1/auth/logout', SESSION_OPTS).catch(() => undefined);
+    client.clearSession();
+    setStep('credentials');
+  };
 
   if (step === 'mfa') {
     return (
-      <MfaForm
-        client={client}
-        onSignedIn={onSignedIn}
-        onBack={() => {
-          setStep('credentials');
+      <CodeForm
+        label="Two-factor authentication"
+        intro="Enter the code from your authenticator app, or one of your recovery codes."
+        onSubmit={async (code) => {
+          const me = await client.call('post', '/api/v1/auth/mfa', { body: { code }, ...SESSION_OPTS });
+          client.setCsrfToken(me.csrf_token);
+          onSignedIn();
         }}
+        onBack={back}
       />
     );
   }
-  if (!config.local_enabled && providers.length === 0) {
+  if (step === 'enroll') {
     return (
-      <Alert
-        type="warning"
-        showIcon
-        title="No sign-in method is enabled"
-        description="An administrator can restore access with `hallpass admin recover` on the server."
+      <>
+        <Alert
+          type="info"
+          showIcon
+          title="Set up two-factor authentication"
+          description="Your account requires an authenticator app before you can continue."
+          style={{ marginBottom: 16 }}
+        />
+        <TotpEnrollment
+          client={client}
+          onDone={() => {
+            onSignedIn();
+          }}
+          onCancel={back}
+        />
+      </>
+    );
+  }
+  if (step === 'stepup-totp') {
+    return (
+      <CodeForm
+        label="Confirm with authenticator code"
+        intro={ssoErrorMessage('mfa_required')}
+        onSubmit={async (code) => {
+          await client.call('post', '/api/v1/auth/reauth/totp', { body: { code }, ...SESSION_OPTS });
+          client.clearSession();
+          onSignedIn(takeStepUpReturn());
+        }}
+        onBack={() => {
+          onSignedIn(takeStepUpReturn());
+        }}
+        backLabel="Skip and return"
       />
+    );
+  }
+
+  const error = ssoError ? (
+    <Alert type="error" showIcon title={ssoErrorMessage(ssoError)} style={{ marginBottom: 16 }} />
+  ) : null;
+
+  if (!config.local_login && providers.length === 0) {
+    return (
+      <>
+        {error}
+        <Alert
+          type="warning"
+          showIcon
+          title="No sign-in method is enabled"
+          description="An administrator can restore access with `hallpass admin recover` on the server."
+        />
+      </>
     );
   }
   return (
     <>
-      {config.local_enabled ? (
+      {error}
+      {config.bootstrap_required ? (
+        <Alert
+          type="info"
+          showIcon
+          title="Hallpass is not set up yet"
+          description="Run `hallpass admin bootstrap` on the server and open the setup link it prints."
+          style={{ marginBottom: 16 }}
+        />
+      ) : null}
+      {config.local_login ? (
         <LocalLoginForm
           client={client}
-          onSignedIn={onSignedIn}
-          onMfaRequired={() => {
-            setStep('mfa');
+          onResult={(nextStep) => {
+            if (nextStep === 'done') {
+              onSignedIn();
+            } else {
+              setStep(nextStep);
+            }
           }}
         />
       ) : null}
-      {config.local_enabled && providers.length > 0 ? <Divider plain>or</Divider> : null}
+      {config.local_login && providers.length > 0 ? <Divider plain>or</Divider> : null}
       {providers.length > 0 ? <SsoButtons providers={providers} next={next} /> : null}
     </>
   );
 }
 
-export function LoginPage({ next, onSignedIn }: { next: string; onSignedIn: () => void }) {
+/** Where to resume for an existing session (`null`: none, show the credentials form). */
+export function resumeStep(me: Me | undefined, ssoError: string | undefined): Step | 'done' | null {
+  if (!me) {
+    return null;
+  }
+  if (ssoError === 'mfa_required' && !me.session.limited && me.session.method === 'oidc') {
+    return me.operator.mfa_enrolled ? 'stepup-totp' : null;
+  }
+  if (me.session.limited) {
+    return me.session.needs_enroll ? 'enroll' : 'mfa';
+  }
+  return ssoError ? null : 'done';
+}
+
+export function LoginPage({
+  next,
+  ssoError,
+  onSignedIn,
+  client = defaultClient,
+}: {
+  next: string;
+  ssoError?: string | undefined;
+  onSignedIn: (target?: string) => void;
+  client?: ApiClient;
+}) {
   const config = useQuery(authConfigQueryOptions());
+  // An existing session (limited, or a full one after an SSO step-up fallback) decides the first step.
+  const session = useQuery({
+    queryKey: ['login-session'],
+    queryFn: ({ signal }) => client.getMe({ signal, authRedirect: false }),
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+  });
+  const resume = session.isSuccess ? resumeStep(session.data, ssoError) : null;
+
+  useEffect(() => {
+    if (resume === 'done') {
+      onSignedIn();
+    }
+  }, [resume, onSignedIn]);
+
   return (
     <AuthLayout title="Sign in to Hallpass">
-      {config.isPending ? (
+      {config.isPending || session.isPending ? (
         <LoadingState label="Loading sign-in options…" />
       ) : config.isError ? (
         <ErrorState
@@ -241,8 +349,17 @@ export function LoginPage({ next, onSignedIn }: { next: string; onSignedIn: () =
             void config.refetch();
           }}
         />
+      ) : resume === 'done' ? (
+        <LoadingState label="Signing in…" />
       ) : (
-        <LoginForms config={config.data} next={next} onSignedIn={onSignedIn} />
+        <LoginForms
+          config={config.data}
+          next={next}
+          onSignedIn={onSignedIn}
+          client={client}
+          ssoError={ssoError}
+          {...(resume ? { initialStep: resume } : {})}
+        />
       )}
     </AuthLayout>
   );

@@ -1,20 +1,27 @@
-import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
+import { expectNoSeriousViolations } from './axe';
 import { requireBackend } from './env';
 
 requireBackend();
-
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
 for (const scheme of ['light', 'dark'] as const) {
   test(`login page renders and has no serious axe violations (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
     await page.goto('/login');
     await expect(page.getByRole('heading', { level: 1, name: /sign in/i })).toBeVisible();
-
-    const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
-    const blocking = results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
-    expect(blocking, JSON.stringify(blocking, null, 2)).toEqual([]);
+    await expect(page.getByRole('textbox', { name: 'Email' })).toBeVisible();
+    await expectNoSeriousViolations(page);
   });
 }
+
+test('unknown SSO error codes are shown generically and the login form stays usable', async ({ page }) => {
+  await page.goto('/login?sso_error=forbidden');
+  await expect(page.getByText(/Single sign-on was refused/)).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Email' })).toBeVisible();
+});
+
+test('protected pages redirect to /login with a return path', async ({ page }) => {
+  await page.goto('/requests?state=pending');
+  await expect(page).toHaveURL(/\/login\?next=/);
+});

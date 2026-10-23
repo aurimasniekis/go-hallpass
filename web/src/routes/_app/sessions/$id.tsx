@@ -1,9 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { PlaceholderPage } from '../../../features/placeholder/PlaceholderPage';
+import { SessionDetailPage } from '../../../features/sessions/SessionDetailPage';
 
 export const Route = createFileRoute('/_app/sessions/$id')({
-  component: () => (
-    <PlaceholderPage title="Session" description="Session summary, timeline and replay." workPackage="WP21" />
-  ),
+  component: SessionRoute,
 });
+
+function SessionRoute() {
+  const { id } = Route.useParams();
+  return <SessionDetailPage id={id} />;
+}

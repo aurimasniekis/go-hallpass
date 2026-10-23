@@ -4,43 +4,64 @@ Operator console for Hallpass (docs/PLAN.md §14, requirements `HP-UI-*` in docs
 React 19 + TypeScript (strict) + Vite, TanStack Router/Query/Store, Ant Design with Hallpass theme
 tokens, Apache ECharts, xterm.js.
 
-Status: **WP19 foundation**. The design system, API client, live-event manager, stores, login/setup
-flows and app shell exist. Operational pages (WP20) and session replay (WP21) are placeholders that
-render an explicit "not implemented yet" state. They never show mock data.
+Status: **WP19 foundation + WP20 operational pages + WP21 timeline/replay, implemented** (not yet
+accepted against GOAL §7). Every page in PLAN §14.3 is backed by the real API except Settings → Storage &
+keys, whose endpoints do not exist yet and which shows an explicit "not implemented" state. No page shows
+mock data. See "Known gaps" for what is implemented but untested or missing.
 
 ## Commands
 
 Requires Node 24 and pnpm 10 (`packageManager` is pinned in `package.json`).
 
-| Command          | What it does                                                                                                                    |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm install`   | Install the exact pinned dependencies (`save-exact`, strict peer deps).                                                         |
-| `pnpm dev`       | Vite dev server on :5173. Proxies `/api` and `/auth/oidc/callback` to `HALLPASS_DEV_API_URL` (default `http://127.0.0.1:8080`). |
-| `pnpm lint`      | ESLint (typescript-eslint strict type-checked, jsx-a11y strict, react-hooks) and Prettier check.                                |
-| `pnpm format`    | Prettier write.                                                                                                                 |
-| `pnpm typecheck` | `tsc --noEmit`.                                                                                                                 |
-| `pnpm test`      | Vitest (jsdom) unit and component tests.                                                                                        |
-| `pnpm build`     | Typecheck, production build to `dist/` (gitignored), then `scripts/check-dist.mjs`.                                             |
-| `pnpm preview`   | Serve `dist/` with the production CSP header from PLAN §12.3.                                                                   |
-| `pnpm e2e`       | Playwright (Chromium, Firefox) with axe. Every spec is skipped unless `HALLPASS_E2E_URL` is set.                                |
+| Command          | What it does                                                                                                           |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `pnpm install`   | Install the exact pinned dependencies (`save-exact`, strict peer deps).                                                |
+| `pnpm dev`       | Vite dev server on :5173. Proxies `/api` and `/auth/oidc` to `HALLPASS_DEV_API_URL` (default `http://127.0.0.1:8080`). |
+| `pnpm lint`      | ESLint (typescript-eslint strict type-checked, jsx-a11y strict, react-hooks) and Prettier check.                       |
+| `pnpm format`    | Prettier write.                                                                                                        |
+| `pnpm typecheck` | `tsc --noEmit`.                                                                                                        |
+| `pnpm test`      | Vitest (jsdom) unit and component tests.                                                                               |
+| `pnpm build`     | Typecheck, production build to `dist/` (gitignored), then `scripts/check-dist.mjs`.                                    |
+| `pnpm preview`   | Serve `dist/` with the production CSP header from PLAN §12.3.                                                          |
+| `pnpm e2e`       | Playwright (Chromium) with axe. Every spec is skipped unless `HALLPASS_E2E_URL` is set.                                |
 
 E2E against a running backend:
 
 ```sh
-pnpm exec playwright install chromium firefox   # once
+pnpm exec playwright install chromium   # once
 HALLPASS_E2E_URL=http://127.0.0.1:8080 pnpm e2e
 ```
+
+The backend must serve the embedded UI on the same origin as the API (mutations require a same-origin
+`Origin`): `pnpm build`, then `go build -tags embedui -o hp ./cmd/hallpass` from the repository root, with a
+development config (`mode: development`, an `http://127.0.0.1:<port>` `public_url`, `kek.file: ""`, and
+`egress.allow_cidrs`/`allow_special_cidrs: [127.0.0.0/8]` for the loopback test server). Environment:
+
+| Variable                   | Purpose                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------- |
+| `HALLPASS_E2E_URL`         | Backend base URL. Unset → every spec skips.                                                       |
+| `HALLPASS_E2E_SETUP_TOKEN` | Fresh backend only: token from `hallpass admin bootstrap` (stop the server first; it is offline). |
+| `HALLPASS_E2E_SSH`         | Gateway SSH address (`127.0.0.1:2222`) for the agent-side request in the approval flow.           |
+
+The `setup` project creates the first administrator, enrolls TOTP (codes computed from the enrolled
+secret) and stores the generated credentials and browser state in `web/.e2e-state/` (gitignored). Agent
+keys are generated with `ssh-keygen` at test time. Specs throttle themselves under the API rate limit.
 
 ## Layout
 
 ```
 src/
-  api/          fetch client (CSRF, problem+json → ApiError, reauth retry, 401 → /login),
-                hand-written types (to be replaced by openapi-typescript output), query keys/options
+  api/          fetch client (CSRF, problem+json → ApiError, reauth/MFA retry, 401 → /login),
+                `client.call(method, path, …)` typed by the generated OpenAPI `paths` (schema.gen.ts,
+                `make api`), type aliases (types.ts), query keys and query option factories
   sse/          EventSource manager for /api/v1/events and the resource → query-key invalidation map
   stores/       TanStack Store: theme, density, SSE status, server clock offset
   ds/           design system: theme tokens, components, the dev-only /__ds gallery
-  features/     page implementations (auth, dashboard, me, placeholders)
+  features/     page implementations (auth, dashboard, requests, sessions (+ timeline, replay),
+                activities, agents, servers, roles, credentials, groups, policy, integrations, audit,
+                operators, settings, me)
+  shared/       app-level components: resource names (AgentName, ServerName, …), state badges
+  lib/          formatting (durations in seconds), permissions hook, cursor pager, idempotency keys
   layout/       app shell, navigation, theme toggle
   routes/       TanStack Router file routes (routeTree.gen.ts is generated by the Vite plugin; commit it)
   devtools/     TanStack devtools, loaded only through an import.meta.env.DEV dynamic import
@@ -107,15 +128,22 @@ scripts/        build checks
 - Avoid file names that differ only by case (macOS file systems are case-insensitive). Example:
   `countdownMath.ts` sits beside `Countdown.tsx`.
 
-## Known gaps (tracked in WP19 / later packages)
+## Known gaps
 
-- API types are hand-written and partly **provisional**: the bodies for login, MFA, reauth and bootstrap,
-  the `return_to` parameter for OIDC start, the problem `errors[]` field naming, the login-CSRF cookie
-  name, and the SSE `resource` names. Reconcile them with `api/openapi.yaml` once it exists, then switch
-  to `openapi-typescript`.
-- No Go embedding of `dist/` yet (HP-UI-016).
-- The setup page does not enroll TOTP yet, and ReauthGate has no OIDC step-up.
-- The Playwright suite has one smoke/axe spec. It does not yet cover login flows in all three modes, axe on
-  every route, or visual snapshots of `/__ds`. Those need a running backend.
-- `/system/time` clock sampling, the DataTable column chooser and saved filters, and the `Timeline`
-  component are not implemented.
+Implemented vs tested: unit/component tests (Vitest, jsdom) cover the API typing, client, reauth,
+replay decoders/pager/player, formatting and every page group with mocked fetch. Playwright ran against a
+real backend (Chromium only, ADR-0038): bootstrap + TOTP enrollment, login with MFA, agent/server/role/
+policy/approver-rule creation, an agent request over real SSH approved in the UI, the lockdown typed
+confirmation, and axe (WCAG 2.2 AA tags, no serious/critical violations) on every page in light and dark.
+
+- **Not covered end to end:** terminal replay of a real recording (needs a destination sshd), SSO flows
+  (needs an IdP), chat link codes, credentials probe/activate against a destination, visual snapshots
+  (HP-UI-015).
+- **API gaps** (no UI possible until the spec has them): storage/keys/retention endpoints; policy what-if
+  preview (`POST /policy/preview`); decision-latency, storage-growth and notification charts in
+  `/stats/*`; approver identity on grants/sessions; the SSO provider of the current session (step-up
+  offers every enabled provider); a ciphertext recording export (the export endpoint returns decrypted
+  JSON); recovery-login (`/recover?token=`) redemption; listing host CAs; the current cert binding of a role;
+  deletes for agents, servers and roles. Free-form objects (`jit`, `config`, `details`, `data`, `claims`)
+  are typed `Record<string, never>` by openapi-typescript and need `additionalProperties`.
+- `/system/time` clock sampling and the DataTable column chooser are not implemented.

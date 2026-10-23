@@ -8,11 +8,26 @@ import { api } from '../api/client';
 import { errorMessage } from '../api/errors';
 import type { Me } from '../api/types';
 import { ConnectionBanner } from '../ds/ConnectionBanner';
+import { watchScrollableRegions } from '../ds/scrollableRegions';
+import { LockdownBanner } from '../features/dashboard/LockdownControls';
 import { SseManager } from '../sse/manager';
-import { activeNavPath, NAV_SECTIONS } from './nav';
+import { activeNavPath, visibleNavSections } from './nav';
 import { ThemeToggle } from './ThemeToggle';
 
 const { Sider, Header, Content } = Layout;
+
+/** Only absolute http(s) URLs are followed; anything else (javascript:, data:) is ignored. */
+export function safeExternalUrl(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
 
 function useLiveEvents(): SseManager {
   const queryClient = useQueryClient();
@@ -32,10 +47,11 @@ export function AppShell({ me }: { me: Me }) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const sse = useLiveEvents();
+  useEffect(() => watchScrollableRegions(), []);
 
   const items = useMemo<MenuProps['items']>(
     () =>
-      NAV_SECTIONS.map((section) => ({
+      visibleNavSections(me.permissions).map((section) => ({
         type: 'group' as const,
         key: section.label,
         label: section.label,
@@ -44,13 +60,16 @@ export function AppShell({ me }: { me: Me }) {
           label: <Link to={item.to}>{item.label}</Link>,
         })),
       })),
-    [],
+    [me.permissions],
   );
   const selected = activeNavPath(pathname);
 
+  const { modal } = App.useApp();
   const signOut = async () => {
+    let providerLogoutUrl: string | null;
     try {
-      await api.post('/auth/logout', undefined, { authRedirect: false, reauth: false });
+      const res = await api.call('post', '/api/v1/auth/logout', { authRedirect: false, reauth: false });
+      providerLogoutUrl = res.provider_logout_url ?? null;
     } catch (e) {
       // Logout must not be reported as successful unless the server confirmed it.
       void message.error(`Sign-out failed: ${errorMessage(e)}`);
@@ -59,6 +78,19 @@ export function AppShell({ me }: { me: Me }) {
     api.clearSession();
     queryClient.clear();
     await navigate({ to: '/login' });
+    const idpLogout = safeExternalUrl(providerLogoutUrl);
+    if (idpLogout) {
+      // RP-initiated logout is optional and not a global logout (HP-OIDC-015): offer it as an extra step.
+      modal.confirm({
+        title: 'Signed out of Hallpass',
+        content: 'You are still signed in at your identity provider. Sign out there too?',
+        okText: 'Sign out at provider',
+        cancelText: 'Not now',
+        onOk: () => {
+          window.location.assign(idpLogout);
+        },
+      });
+    }
   };
 
   return (
@@ -106,7 +138,7 @@ export function AppShell({ me }: { me: Me }) {
               }}
             >
               <Button type="text" icon={<UserOutlined />}>
-                {me.display_name}
+                {me.operator.display_name}
               </Button>
             </Dropdown>
           </div>
@@ -116,6 +148,7 @@ export function AppShell({ me }: { me: Me }) {
             sse.reconnectNow();
           }}
         />
+        <LockdownBanner />
         <Content>
           <main id="main" tabIndex={-1} className="hp-shell-content">
             <Outlet />

@@ -34,3 +34,15 @@ export const SWALLOWED_OSC = [0, 1, 2, 8, 52] as const;
 export function hardenTerminal(term: Pick<Terminal, 'parser'>): IDisposable[] {
   return SWALLOWED_OSC.map((ident) => term.parser.registerOscHandler(ident, () => true));
 }
+
+/** Largest single write into the emulator; recorded output is fed in bounded chunks (HP-UI-013). */
+export const MAX_WRITE_BYTES = 16 * 1024;
+
+/** Writes `data` in chunks of at most MAX_WRITE_BYTES (strings are chunked by UTF-16 units). */
+export function writeBounded(term: Pick<Terminal, 'write'>, data: Uint8Array | string): void {
+  for (let i = 0; i < data.length; i += MAX_WRITE_BYTES) {
+    term.write(
+      typeof data === 'string' ? data.slice(i, i + MAX_WRITE_BYTES) : data.subarray(i, i + MAX_WRITE_BYTES),
+    );
+  }
+}

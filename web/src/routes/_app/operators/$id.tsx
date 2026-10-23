@@ -1,9 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { PlaceholderPage } from '../../../features/placeholder/PlaceholderPage';
+import { OperatorDetailPage } from '../../../features/operators/OperatorDetailPage';
 
 export const Route = createFileRoute('/_app/operators/$id')({
-  component: () => (
-    <PlaceholderPage title="Operator" description="Operator roles, sessions and audit." workPackage="WP20" />
-  ),
+  component: OperatorRoute,
 });
+
+function OperatorRoute() {
+  const { id } = Route.useParams();
+  return <OperatorDetailPage id={id} />;
+}

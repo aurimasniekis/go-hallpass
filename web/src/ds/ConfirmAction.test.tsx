@@ -71,4 +71,32 @@ describe('<ConfirmAction>', () => {
     expect(onSuccess).not.toHaveBeenCalled();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
+
+  it('reuses one idempotency key for retries and issues a new one per opening', async () => {
+    const user = userEvent.setup();
+    const keys: string[] = [];
+    let fail = true;
+    const onConfirm = vi.fn(({ idempotencyKey }: { idempotencyKey: string }) => {
+      keys.push(idempotencyKey);
+      return fail
+        ? Promise.reject(new ApiError({ status: 0, code: 'network_error', detail: 'unreachable' }))
+        : Promise.resolve('ok');
+    });
+    renderWithProviders(<ConfirmAction label="Approve" title="Approve" onConfirm={onConfirm} />);
+    await user.click(screen.getByRole('button', { name: 'Approve' }));
+    await user.click(await screen.findByRole('button', { name: 'Confirm' }));
+    await screen.findByText('unreachable');
+    fail = false;
+    await user.click(await screen.findByRole('button', { name: /Confirm/ }));
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledTimes(2);
+    });
+    expect(keys[0]).toBe(keys[1]);
+    await user.click(screen.getByRole('button', { name: 'Approve' }));
+    await user.click(await screen.findByRole('button', { name: /Confirm/ }));
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledTimes(3);
+    });
+    expect(keys[2]).not.toBe(keys[0]);
+  });
 });

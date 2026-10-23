@@ -1,13 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { PlaceholderPage } from '../../../features/placeholder/PlaceholderPage';
+import { RoleDetailPage } from '../../../features/roles/RoleDetailPage';
 
 export const Route = createFileRoute('/_app/roles/$id')({
-  component: () => (
-    <PlaceholderPage
-      title="Role"
-      description="Server role, login binding and credentials."
-      workPackage="WP20"
-    />
-  ),
+  component: RoleRoute,
 });
+
+function RoleRoute() {
+  const { id } = Route.useParams();
+  return <RoleDetailPage id={id} />;
+}

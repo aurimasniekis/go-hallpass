@@ -121,6 +121,7 @@ describe('SseManager', () => {
       [{ queryKey: ['requests'] }],
       [{ queryKey: ['request', 'r1'] }],
       [{ queryKey: ['stats'] }],
+      [{ queryKey: ['system'] }],
     ]);
     expect(store.state.lastEventAt).not.toBeNull();
   });

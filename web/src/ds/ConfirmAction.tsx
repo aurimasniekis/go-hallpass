@@ -2,6 +2,15 @@ import { Alert, Button, Input, Modal, type ButtonProps } from 'antd';
 import { useId, useState, type ReactNode } from 'react';
 
 import { errorMessage } from '../api/errors';
+import { newIdempotencyKey } from '../lib/idempotency';
+
+export interface ConfirmContext {
+  /**
+   * `Idempotency-Key` for this confirmation. Created when the dialog opens and reused if the operator
+   * retries after a failure, so a request that reached the server is never applied twice (HP-API-006).
+   */
+  idempotencyKey: string;
+}
 
 export interface ConfirmActionProps<T> {
   /** Trigger button content. */
@@ -16,10 +25,14 @@ export interface ConfirmActionProps<T> {
    */
   typedConfirmation?: string;
   /** Performs the mutation. The dialog stays open, showing progress, until the server answers. */
-  onConfirm: () => Promise<T>;
+  onConfirm: (context: ConfirmContext) => Promise<T>;
   /** Called only after the server confirmed success (HP-UI-012: no optimistic success). */
   onSuccess?: (result: T) => void;
   disabled?: boolean;
+  /** Disables the confirm button (e.g. a required reason is still empty). */
+  confirmDisabled?: boolean;
+  /** Called when the dialog opens (reset embedded form state here). */
+  onOpen?: () => void;
   buttonProps?: Omit<ButtonProps, 'onClick' | 'danger' | 'disabled'>;
 }
 
@@ -33,9 +46,12 @@ export function ConfirmAction<T>({
   onConfirm,
   onSuccess,
   disabled,
+  confirmDisabled = false,
+  onOpen,
   buttonProps,
 }: ConfirmActionProps<T>) {
   const [open, setOpen] = useState(false);
+  const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);
   const [typed, setTyped] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -53,13 +69,13 @@ export function ConfirmAction<T>({
   };
 
   const confirm = async () => {
-    if (!phraseOk || pending) {
+    if (!phraseOk || pending || confirmDisabled) {
       return;
     }
     setPending(true);
     setError(null);
     try {
-      const result = await onConfirm();
+      const result = await onConfirm({ idempotencyKey });
       setOpen(false);
       setTyped('');
       onSuccess?.(result);
@@ -77,6 +93,8 @@ export function ConfirmAction<T>({
         danger={danger}
         disabled={disabled}
         onClick={() => {
+          setIdempotencyKey(newIdempotencyKey());
+          onOpen?.();
           setOpen(true);
         }}
       >
@@ -99,7 +117,7 @@ export function ConfirmAction<T>({
             type="primary"
             danger={danger}
             loading={pending}
-            disabled={!phraseOk}
+            disabled={!phraseOk || confirmDisabled}
             onClick={() => {
               void confirm();
             }}

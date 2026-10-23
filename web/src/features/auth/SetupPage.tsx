@@ -5,19 +5,23 @@ import { api as defaultClient, type ApiClient } from '../../api/client';
 import { errorMessage } from '../../api/errors';
 import type { BootstrapRequest } from '../../api/types';
 import { AuthLayout } from './AuthLayout';
-import { validatePasswordLength } from './password';
+import { NewPasswordFields } from './PasswordFields';
+import { TotpEnrollment } from './TotpEnrollment';
 
 /**
  * First-run setup (docs/PLAN.md §12.2). `hallpass admin bootstrap` prints a one-time URL carrying the
  * setup token; the route strips it from the address bar on arrival (see routes/setup.tsx).
  *
- * WP19 scope: account step against a PROVISIONAL `POST /auth/bootstrap` body. TOTP enrollment, which
- * setup must force, is a placeholder until the backend enrollment API exists.
+ * 1. `POST /auth/bootstrap` creates the first administrator (MFA required).
+ * 2. The page signs in with the same credentials (`POST /auth/login` → `must_enroll`), held in memory
+ *    only for this step, and runs TOTP enrollment; recovery codes are shown once.
  */
 
 interface SetupValues extends BootstrapRequest {
   confirm: string;
 }
+
+const PUBLIC_OPTS = { csrf: 'none', authRedirect: false, reauth: false } as const;
 
 export function SetupPage({
   initialToken,
@@ -36,12 +40,19 @@ export function SetupPage({
     setPending(true);
     setError(null);
     try {
-      await client.post('/auth/bootstrap', values, {
-        csrf: 'pre-session',
-        authRedirect: false,
-        reauth: false,
+      const body = { ...values, email: values.email.trim(), display_name: values.display_name.trim() };
+      await client.call('post', '/api/v1/auth/bootstrap', { body, ...PUBLIC_OPTS });
+      const login = await client.call('post', '/api/v1/auth/login', {
+        body: { email: body.email, password: body.password },
+        ...PUBLIC_OPTS,
       });
-      setStep(1);
+      client.setCsrfToken(login.me.csrf_token);
+      if (login.must_enroll) {
+        setStep(1);
+      } else {
+        // Already enrolled (should not happen for a fresh administrator); continue to sign-in.
+        onDone();
+      }
     } catch (e) {
       setError(e);
     } finally {
@@ -76,11 +87,11 @@ export function SetupPage({
             <Input.Password autoComplete="off" spellCheck={false} />
           </Form.Item>
           <Form.Item
-            label="Username"
-            name="username"
-            rules={[{ required: true, message: 'Choose a username' }]}
+            label="Email"
+            name="email"
+            rules={[{ required: true, type: 'email', message: 'Enter a valid email address' }]}
           >
-            <Input autoComplete="username" autoCapitalize="none" spellCheck={false} />
+            <Input type="email" autoComplete="username" autoCapitalize="none" spellCheck={false} />
           </Form.Item>
           <Form.Item
             label="Display name"
@@ -89,38 +100,7 @@ export function SetupPage({
           >
             <Input autoComplete="name" />
           </Form.Item>
-          <Form.Item
-            label="Password"
-            name="password"
-            extra="12 to 1024 bytes. Long passphrases are encouraged."
-            rules={[
-              { required: true, message: 'Choose a password' },
-              {
-                validator: (_rule, value: unknown) => {
-                  const problem = typeof value === 'string' ? validatePasswordLength(value) : null;
-                  return problem ? Promise.reject(new Error(problem)) : Promise.resolve();
-                },
-              },
-            ]}
-          >
-            <Input.Password autoComplete="new-password" />
-          </Form.Item>
-          <Form.Item
-            label="Confirm password"
-            name="confirm"
-            dependencies={['password']}
-            rules={[
-              { required: true, message: 'Repeat the password' },
-              ({ getFieldValue }) => ({
-                validator: (_rule, value: unknown) =>
-                  value === getFieldValue('password')
-                    ? Promise.resolve()
-                    : Promise.reject(new Error('Passwords do not match')),
-              }),
-            ]}
-          >
-            <Input.Password autoComplete="new-password" />
-          </Form.Item>
+          <NewPasswordFields />
           {error !== null ? (
             <Alert type="error" showIcon title={errorMessage(error)} style={{ marginBottom: 16 }} />
           ) : null}
@@ -129,18 +109,7 @@ export function SetupPage({
           </Button>
         </Form>
       ) : (
-        <>
-          <Alert
-            type="warning"
-            showIcon
-            title="TOTP enrollment is not implemented in the UI yet"
-            description="Setup must enroll an authenticator before the account is usable (docs/PLAN.md §12.2). This step is a placeholder until the enrollment API exists."
-            style={{ marginBottom: 16 }}
-          />
-          <Button type="primary" block onClick={onDone}>
-            Continue to sign in
-          </Button>
-        </>
+        <TotpEnrollment client={client} onDone={onDone} />
       )}
     </AuthLayout>
   );

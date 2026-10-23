@@ -36,14 +36,14 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': { target: apiTarget, changeOrigin: false },
-      '/auth/oidc/callback': { target: apiTarget, changeOrigin: false },
+      '/auth/oidc': { target: apiTarget, changeOrigin: false },
     },
   },
   preview: {
     headers: { 'Content-Security-Policy': productionCsp },
     proxy: {
       '/api': { target: apiTarget, changeOrigin: false },
-      '/auth/oidc/callback': { target: apiTarget, changeOrigin: false },
+      '/auth/oidc': { target: apiTarget, changeOrigin: false },
     },
   },
   build: {

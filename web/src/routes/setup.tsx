@@ -27,7 +27,8 @@ function SetupRoute() {
     <SetupPage
       initialToken={initialToken}
       onDone={() => {
-        void navigate({ to: '/login' });
+        // The enrolled session is complete; the dashboard re-reads /me.
+        void navigate({ to: '/' });
       }}
     />
   );

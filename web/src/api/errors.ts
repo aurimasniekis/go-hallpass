@@ -42,12 +42,28 @@ export class ApiError extends Error {
     return this.code === 'reauth_required';
   }
 
+  /** A password session must complete (or repeat) its second factor. */
+  get isMfaRequired(): boolean {
+    return this.code === 'mfa_required';
+  }
+
+  /** The operation needs recent authentication (`reauth_required`) or a recent MFA (`mfa_required`). */
+  get needsReauth(): boolean {
+    return this.isReauthRequired || this.isMfaRequired;
+  }
+
+  /** `If-Match` missing (428) or the resource changed since it was read (409 conflict). */
+  get isConflict(): boolean {
+    return this.code === 'conflict' || this.code === 'precondition_failed' || this.status === 409;
+  }
+
   get isForbidden(): boolean {
     return this.status === 403 || this.code === 'forbidden';
   }
 
+  /** The session is missing or expired. `reauth_required` and `mfa_required` (also 401) are not. */
   get isUnauthenticated(): boolean {
-    return this.status === 401 && this.code !== 'reauth_required';
+    return this.status === 401 && !this.needsReauth;
   }
 }
 
@@ -80,7 +96,7 @@ function normalizeFields(errors: unknown): Record<string, string[]> {
     const e = raw as ProblemFieldError;
     const pointer = str(e.pointer);
     const key = str(e.field) ?? (pointer !== undefined ? pointerToField(pointer) : '_');
-    const message = str(e.detail) ?? str(e.message) ?? str(e.code) ?? 'Invalid value';
+    const message = str(e.message) ?? str(e.detail) ?? str(e.code) ?? 'Invalid value';
     (fields[key] ??= []).push(message);
   }
   return fields;

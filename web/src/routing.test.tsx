@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ThemeProvider } from './ds/theme/ThemeProvider';
 import { routeTree } from './routeTree.gen';
+import { makeMe } from './test/fixtures';
 import { createTestQueryClient } from './test/utils';
 
 function json(status: number, body: unknown, type = 'application/json') {
@@ -58,7 +59,7 @@ describe('routing', () => {
         );
       }
       if (url.startsWith('/api/v1/auth/config')) {
-        return Promise.resolve(json(200, { local_enabled: true, oidc_providers: [] }));
+        return Promise.resolve(json(200, { local_login: true, providers: [], bootstrap_required: false }));
       }
       return Promise.reject(new Error(`unexpected ${url}`));
     });
@@ -68,30 +69,46 @@ describe('routing', () => {
     expect(router.state.location.search).toEqual({ next: '/requests?state=pending' });
   });
 
-  it('renders the shell and an honest placeholder for unbuilt pages when signed in', async () => {
+  it('renders the shell with permission-filtered navigation when signed in', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       const url = input instanceof Request ? input.url : input.toString();
       if (url.startsWith('/api/v1/me')) {
         return Promise.resolve(
-          json(200, {
-            operator_id: 'op_1',
-            display_name: 'Ada Operator',
-            roles: ['administrator'],
-            permissions: [],
-            csrf_token: 'csrf',
-            auth_time: '2026-01-01T00:00:00Z',
-          }),
+          json(
+            200,
+            makeMe({
+              operator: { display_name: 'Ada Operator' },
+              permissions: ['system.read', 'requests.read'],
+            }),
+          ),
         );
       }
       return Promise.reject(new Error(`unexpected ${url}`));
     });
-    renderAt('/agents');
-    expect(await screen.findByRole('heading', { level: 1, name: 'Agents' })).toBeInTheDocument();
-    expect(screen.getByText('Agents is not implemented yet')).toBeInTheDocument();
+    renderAt('/settings/storage');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Storage & keys' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Ada Operator/ })).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByRole('link', { name: 'Requests' })).toHaveAttribute('href', '/requests');
     });
+    // Pages outside the operator's permissions are not offered.
+    expect(screen.queryByRole('link', { name: 'Operators' })).not.toBeInTheDocument();
+  });
+
+  it('sends a limited (MFA pending) session back to /login', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = input instanceof Request ? input.url : input.toString();
+      if (url.startsWith('/api/v1/me')) {
+        return Promise.resolve(json(200, makeMe({ permissions: [], session: { limited: true } })));
+      }
+      if (url.startsWith('/api/v1/auth/config')) {
+        return Promise.resolve(json(200, { local_login: true, providers: [], bootstrap_required: false }));
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    const router = renderAt('/agents');
+    expect(await screen.findByLabelText('Authentication code')).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/login');
   });
 });

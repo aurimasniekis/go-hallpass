@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, redirect } from '@tanstack/react-router';
 
 import { api } from '../api/client';
@@ -14,6 +15,10 @@ export const Route = createFileRoute('/_app')({
         ...meQueryOptions(),
         queryFn: ({ signal }) => api.getMe({ signal, authRedirect: false }),
       });
+      if (me.session.limited) {
+        // Password accepted but MFA (or TOTP enrollment) is still outstanding: finish on /login.
+        throw redirect({ to: '/login', search: { next: location.href } });
+      }
       return { me };
     } catch (error) {
       if (isApiError(error) && error.isUnauthenticated) {
@@ -26,6 +31,8 @@ export const Route = createFileRoute('/_app')({
 });
 
 function AppLayout() {
-  const { me } = Route.useRouteContext();
-  return <AppShell me={me} />;
+  const { me: initial } = Route.useRouteContext();
+  // Live /me (permissions change with role edits; SSE operator events invalidate it).
+  const me = useQuery(meQueryOptions());
+  return <AppShell me={me.data ?? initial} />;
 }

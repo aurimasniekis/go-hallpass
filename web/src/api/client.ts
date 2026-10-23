@@ -1,4 +1,12 @@
 import { recordClockSample, type ClockSample } from '../stores/clock';
+import {
+  buildApiPath,
+  type ApiPath,
+  type CallOptions,
+  type HttpVerb,
+  type Operation,
+  type ResponseOf,
+} from './endpoints';
 import { ApiError, problemToApiError } from './errors';
 import type { AuthConfig, Me } from './types';
 
@@ -8,9 +16,11 @@ import type { AuthConfig, Me } from './types';
  * - Same-origin cookies only (`credentials: 'same-origin'`), `cache: 'no-store'`.
  * - Mutations carry `X-CSRF-Token`, taken from `GET /me` (`csrf_token`). The token is fetched lazily
  *   and refreshed after a reauthentication, because the server rotates the session (and therefore the
- *   HMAC-derived token) on reauth.
+ *   HMAC-derived token) on reauth. Public auth endpoints (login, bootstrap, invitation, reset) carry no
+ *   token: the server protects them with its Origin check (api/openapi.yaml, ADR-0031).
  * - Errors are parsed from RFC 9457 problem+json into `ApiError`.
- * - `reauth_required` opens the registered reauth prompt (ReauthGate) and retries the request once.
+ * - `reauth_required` and `mfa_required` open the registered reauth prompt (ReauthGate) and retry the
+ *   request once after the operator re-authenticated.
  * - Any other 401 calls `onUnauthorized` (navigates to /login) unless `authRedirect: false`.
  * - The HTTP `Date` header feeds the server clock offset estimate (HP-UI-011).
  *
@@ -25,10 +35,9 @@ export type QueryParams = Record<string, QueryValue>;
 
 /**
  * - `session`: send the per-session CSRF token (default for mutations).
- * - `pre-session`: send the pre-session login-CSRF token (login, MFA, bootstrap).
- * - `none`: send no CSRF header (default for GET).
+ * - `none`: send no CSRF header (default for GET; public auth endpoints).
  */
-export type CsrfMode = 'session' | 'pre-session' | 'none';
+export type CsrfMode = 'session' | 'none';
 
 export interface RequestOptions {
   method?: HttpMethod;
@@ -37,7 +46,7 @@ export interface RequestOptions {
   signal?: AbortSignal;
   /** Call `onUnauthorized` on 401. Default true. Login/reauth/bootstrap endpoints pass false. */
   authRedirect?: boolean;
-  /** Prompt for reauthentication and retry once on `reauth_required`. Default true. */
+  /** Prompt for reauthentication and retry once on `reauth_required`/`mfa_required`. Default true. */
   reauth?: boolean;
   csrf?: CsrfMode;
   /** `Idempotency-Key` for non-idempotent POSTs (HP-API-006). */
@@ -49,43 +58,20 @@ export interface RequestOptions {
 export interface ApiClientHandlers {
   /** Session missing or expired. */
   onUnauthorized: () => void;
-  /** Ask the operator to reauthenticate. Resolve true when the server accepted it. */
-  onReauthRequired: (() => Promise<boolean>) | null;
+  /**
+   * Ask the operator to reauthenticate (the error says whether `reauth_required` or `mfa_required`).
+   * Resolve true when the server accepted the new authentication.
+   */
+  onReauthRequired: ((error: ApiError) => Promise<boolean>) | null;
   /** Called after the session was rotated (reauth) and the CSRF token refreshed. */
   onSessionRotated: () => void | Promise<void>;
   onClockSample: (sample: ClockSample) => void;
-  /**
-   * Returns the pre-session (login-CSRF) token. PROVISIONAL: PLAN §12.3 specifies "a pre-session CSRF
-   * cookie plus header" but not the cookie name; see `readPreSessionCsrfCookie`.
-   */
-  getPreSessionCsrfToken: () => string | null;
 }
 
 export interface ApiClientConfig {
   baseUrl?: string;
   fetch?: typeof fetch;
   now?: () => number;
-}
-
-/** Candidate cookie names for the login-CSRF token. PROVISIONAL until the backend contract fixes one. */
-export const PRE_SESSION_CSRF_COOKIES = ['__Host-hp_login_csrf', 'hp_login_csrf'] as const;
-
-export function readPreSessionCsrfCookie(cookieString: string = document.cookie): string | null {
-  for (const part of cookieString.split(';')) {
-    const eq = part.indexOf('=');
-    if (eq < 0) {
-      continue;
-    }
-    const name = part.slice(0, eq).trim();
-    if ((PRE_SESSION_CSRF_COOKIES as readonly string[]).includes(name)) {
-      try {
-        return decodeURIComponent(part.slice(eq + 1).trim());
-      } catch {
-        return null;
-      }
-    }
-  }
-  return null;
 }
 
 export function buildQueryString(query: QueryParams | undefined): string {
@@ -139,7 +125,6 @@ export class ApiClient {
       onReauthRequired: null,
       onSessionRotated: () => undefined,
       onClockSample: recordClockSample,
-      getPreSessionCsrfToken: () => readPreSessionCsrfCookie(),
     };
   }
 
@@ -185,6 +170,33 @@ export class ApiClient {
     return this.request<T>(path, { ...options, method: 'DELETE' });
   }
 
+  /**
+   * Typed call bound to the OpenAPI contract: `client.call('post', '/api/v1/agents/{id}/keys', { path: { id },
+   * body: { public_key } })`. Path, parameters, body and the resolved type all come from `schema.gen.ts`.
+   */
+  call<M extends HttpVerb, P extends ApiPath<M>>(
+    method: M,
+    path: P,
+    ...[options]: CallOptions<P, M> extends { path: unknown } ? [CallOptions<P, M>] : [CallOptions<P, M>?]
+  ): Promise<ResponseOf<Operation<P, M>>> {
+    const {
+      path: params,
+      body,
+      query,
+      ...rest
+    } = (options ?? {}) as {
+      path?: Record<string, string | number>;
+      body?: unknown;
+      query?: QueryParams;
+    } & Omit<RequestOptions, 'method' | 'body' | 'query'>;
+    return this.request<ResponseOf<Operation<P, M>>>(buildApiPath(path, params), {
+      ...rest,
+      method: method.toUpperCase() as HttpMethod,
+      ...(body !== undefined ? { body } : {}),
+      ...(query !== undefined ? { query } : {}),
+    });
+  }
+
   /** `GET /me`; also refreshes the CSRF token. */
   async getMe(options: Pick<RequestOptions, 'signal' | 'authRedirect'> = {}): Promise<Me> {
     const me = await this.send<Me>('/me', { ...options, method: 'GET' }, false);
@@ -219,9 +231,9 @@ export class ApiClient {
     return this.csrfInflight;
   }
 
-  private runReauth(prompt: () => Promise<boolean>): Promise<boolean> {
+  private runReauth(prompt: (error: ApiError) => Promise<boolean>, error: ApiError): Promise<boolean> {
     // Concurrent requests that hit reauth_required share one prompt.
-    this.reauthInflight ??= prompt()
+    this.reauthInflight ??= prompt(error)
       .catch(() => false)
       .finally(() => {
         this.reauthInflight = null;
@@ -243,11 +255,6 @@ export class ApiClient {
     const csrfMode: CsrfMode = options.csrf ?? (isMutation ? 'session' : 'none');
     if (csrfMode === 'session') {
       headers.set('X-CSRF-Token', await this.ensureCsrfToken());
-    } else if (csrfMode === 'pre-session') {
-      const token = this.handlers.getPreSessionCsrfToken();
-      if (token) {
-        headers.set('X-CSRF-Token', token);
-      }
     }
     if (options.idempotencyKey !== undefined) {
       headers.set('Idempotency-Key', options.idempotencyKey);
@@ -282,8 +289,8 @@ export class ApiClient {
 
     const error = await this.readError(response);
 
-    if (error.isReauthRequired && options.reauth !== false && !isRetry && this.handlers.onReauthRequired) {
-      const accepted = await this.runReauth(this.handlers.onReauthRequired);
+    if (error.needsReauth && options.reauth !== false && !isRetry && this.handlers.onReauthRequired) {
+      const accepted = await this.runReauth(this.handlers.onReauthRequired, error);
       if (!accepted) {
         throw error;
       }

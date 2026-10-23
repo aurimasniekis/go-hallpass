@@ -2,3 +2,5 @@
 .tanstack/
 # Vitest/Playwright output (also covered by the root .gitignore)
 coverage/
+# E2E run state (generated credentials and storage state for a local test backend)
+.e2e-state/

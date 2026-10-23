@@ -1,46 +1,111 @@
 /**
- * Hand-written API types (WP19 foundation).
- *
- * These are a minimal stand-in until `api/openapi.yaml` exists and `openapi-typescript` generates
- * `web/src/api/schema.d.ts` (docs/PLAN.md §8.1). Types marked PROVISIONAL describe request/response
- * shapes the backend has not specified yet; they must be reconciled with the OpenAPI spec.
+ * API types, derived from the OpenAPI 3.1 contract (`api/openapi.yaml`) through the generated
+ * `schema.gen.ts` (openapi-typescript; regenerate with `make api`). Do not hand-write resource shapes
+ * here: add an alias to the generated schema instead, so drift fails the type check.
  */
+import type { components } from './schema.gen';
 
-export interface OidcProviderSummary {
-  id: string;
-  display_name: string;
-}
+type S = components['schemas'];
 
-/** `GET /api/v1/auth/config` (public). */
-export interface AuthConfig {
-  local_enabled: boolean;
-  oidc_providers: OidcProviderSummary[];
-}
+// auth and self
+export type AuthConfig = S['AuthConfig'];
+export type AuthProviderSummary = AuthConfig['providers'][number];
+export type LoginRequest = S['LoginRequest'];
+export type LoginResult = S['LoginResult'];
+export type CodeRequest = S['CodeRequest'];
+export type ReauthRequest = S['ReauthRequest'];
+export type BootstrapRequest = S['BootstrapRequest'];
+export type AcceptInvitationRequest = S['AcceptInvitationRequest'];
+export type PasswordRequest = S['PasswordRequest'];
+export type ChangePasswordRequest = S['ChangePasswordRequest'];
+export type LogoutResult = S['LogoutResult'];
+export type Me = S['Me'];
+export type MeSession = Me['session'];
+export type SessionMethod = MeSession['method'];
+export type TOTPEnrollment = S['TOTPEnrollment'];
+export type RecoveryCodes = S['RecoveryCodes'];
+export type OneTimeToken = S['OneTimeToken'];
+export type WebSession = S['WebSession'];
+export type Identity = S['Identity'];
+export type IdentityLink = S['IdentityLink'];
 
-/** `GET /api/v1/me`. */
-export interface Me {
-  operator_id: string;
-  display_name: string;
-  roles: string[];
-  permissions: string[];
-  /** Per-session CSRF token to send as `X-CSRF-Token` on mutations (docs/PLAN.md §12.3). */
-  csrf_token: string;
-  /** RFC 3339 time of the last primary authentication. */
-  auth_time: string;
-  /** RFC 3339 time of the last MFA verification. */
-  mfa_at?: string;
-}
+// operators
+export type Operator = S['Operator'];
+export type OperatorRole = Operator['roles'][number];
+export type OperatorCreate = S['OperatorCreate'];
+export type OperatorPatch = S['OperatorPatch'];
+export type InvitationCreate = S['InvitationCreate'];
 
-/** One entry of the RFC 9457 `errors[]` extension. PROVISIONAL: the field naming is not yet fixed. */
-export interface ProblemFieldError {
-  field?: string;
-  pointer?: string;
-  code?: string;
-  detail?: string;
-  message?: string;
-}
+// inventory
+export type Agent = S['Agent'];
+export type AgentDetail = S['AgentDetail'];
+export type AgentCreate = S['AgentCreate'];
+export type AgentPatch = S['AgentPatch'];
+export type AgentKey = S['AgentKey'];
+export type Group = S['Group'];
+export type Server = S['Server'];
+export type ServerInput = S['ServerInput'];
+export type Role = S['Role'];
+export type RoleInput = S['RoleInput'];
+export type HostIdentity = S['HostIdentity'];
+export type HostCA = S['HostCA'];
+export type LoginCredential = S['LoginCredential'];
+export type UserCA = S['UserCA'];
+export type GatewayHostKey = S['GatewayHostKey'];
 
-/** RFC 9457 problem details (`application/problem+json`), docs/PLAN.md §8.1. */
+// policy
+export type PolicyRule = S['PolicyRule'];
+export type ApproverRule = S['ApproverRule'];
+export type EffectiveAccess = S['EffectiveAccess'];
+export type EffectiveAccessItem = EffectiveAccess['items'][number];
+
+// access
+export type AccessRequest = S['AccessRequest'];
+export type RequestState = AccessRequest['state'];
+export type RequestPage = S['RequestPage'];
+export type Decision = S['Decision'];
+export type Grant = S['Grant'];
+export type GrantState = Grant['state'];
+export type GrantPage = S['GrantPage'];
+export type AccessSession = S['AccessSession'];
+export type AccessSessionState = AccessSession['state'];
+export type AccessSessionPage = S['AccessSessionPage'];
+export type TimelineEvent = S['TimelineEvent'];
+export type TimelinePage = S['TimelinePage'];
+export type Channel = S['Channel'];
+export type Segment = S['Segment'];
+export type RecordPage = S['RecordPage'];
+export type RecordEntry = RecordPage['records'][number];
+export type SessionExport = S['SessionExport'];
+/** Destination-reported exec record (WP25): never verified by Hallpass; exe/argv/cwd are untrusted text. */
+export type DestinationRecord = S['DestinationRecord'];
+export type DestinationCollector = S['DestinationCollector'];
+export type DestinationCollectorInput = S['DestinationCollectorInput'];
+
+// audit, SSO settings, system
+export type AuditEvent = S['AuditEvent'];
+export type AuditPage = S['AuditPage'];
+export type AuditVerify = S['AuditVerify'];
+export type OIDCProvider = S['OIDCProvider'];
+export type OIDCProviderInput = S['OIDCProviderInput'];
+export type OIDCMapping = S['OIDCMapping'];
+export type OIDCTestResult = S['OIDCTestResult'];
+export type AuthSettings = S['AuthSettings'];
+export type SystemStatus = S['SystemStatus'];
+export type StatsOverview = S['StatsOverview'];
+
+// approvals: integrations, routes, deliveries, chat identities (WP16)
+export type Integration = S['Integration'];
+export type IntegrationInput = S['IntegrationInput'];
+export type IntegrationProvider = Integration['provider'];
+export type NotificationRoute = S['NotificationRoute'];
+export type Delivery = S['Delivery'];
+export type ProviderLink = S['ProviderLink'];
+
+/**
+ * RFC 9457 problem details as received from the network. Unlike `components['schemas']['Problem']`,
+ * every field is optional: the body is untrusted and may be malformed or come from a proxy.
+ */
 export interface Problem {
   type?: string;
   title?: string;
@@ -51,48 +116,30 @@ export interface Problem {
   errors?: ProblemFieldError[];
 }
 
-/** Cursor page envelope used by list endpoints. */
-export interface Page<T> {
-  items: T[];
-  next_cursor?: string | null;
+/** One entry of the problem `errors[]` extension (`{field, message}` per the spec). */
+export interface ProblemFieldError {
+  field?: string;
+  message?: string;
+  /** Tolerated for robustness (RFC 9457 examples use JSON pointers); the spec uses `field`. */
+  pointer?: string;
+  detail?: string;
+  code?: string;
 }
 
-/** Live event payload (docs/PLAN.md §8.3). `summary` carries only non-sensitive fields. */
+/** Cursor page envelope used by list endpoints (`{items, next_cursor}`). */
+export interface Page<T> {
+  items: T[];
+  next_cursor: string | null;
+}
+
+/**
+ * Live event payload (docs/PLAN.md §8.3). The backend sends only `type`, `resource`, `resource_id`
+ * and `at`; reasons, addresses and secrets never travel over SSE.
+ */
 export interface LiveEvent {
   type: string;
   resource: string;
   resource_id?: string;
   version?: number;
   at?: string;
-  summary?: Record<string, unknown>;
-}
-
-/** PROVISIONAL `POST /auth/login` body. */
-export interface LoginRequest {
-  username: string;
-  password: string;
-}
-
-/** PROVISIONAL `POST /auth/login` success body. A `mfa_required` problem is also accepted. */
-export interface LoginResponse {
-  mfa_required?: boolean;
-}
-
-/** PROVISIONAL `POST /auth/mfa` body (TOTP code or recovery code). */
-export interface MfaRequest {
-  code: string;
-}
-
-/** PROVISIONAL `POST /auth/reauth` body. */
-export interface ReauthRequest {
-  password: string;
-  totp_code?: string;
-}
-
-/** PROVISIONAL `POST /auth/bootstrap` body. */
-export interface BootstrapRequest {
-  token: string;
-  username: string;
-  display_name: string;
-  password: string;
 }

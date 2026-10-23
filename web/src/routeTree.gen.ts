@@ -19,6 +19,8 @@ import { Route as AppAuditRouteImport } from './routes/_app/audit'
 import { Route as AppGroupsRouteImport } from './routes/_app/groups'
 import { Route as AppMeRouteImport } from './routes/_app/me'
 import { Route as AppPolicyRouteImport } from './routes/_app/policy'
+import { Route as InviteTokenRouteImport } from './routes/invite/$token'
+import { Route as ResetTokenRouteImport } from './routes/reset/$token'
 import { Route as AppAgentsIndexRouteImport } from './routes/_app/agents/index'
 import { Route as AppAgentsIdRouteImport } from './routes/_app/agents/$id'
 import { Route as AppOperatorsIndexRouteImport } from './routes/_app/operators/index'
@@ -83,6 +85,16 @@ const AppPolicyRoute = AppPolicyRouteImport.update({
   id: '/policy',
   path: '/policy',
   getParentRoute: () => AppRoute,
+} as any)
+const InviteTokenRoute = InviteTokenRouteImport.update({
+  id: '/invite/$token',
+  path: '/invite/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetTokenRoute = ResetTokenRouteImport.update({
+  id: '/reset/$token',
+  path: '/reset/$token',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AppAgentsIndexRoute = AppAgentsIndexRouteImport.update({
   id: '/agents/',
@@ -170,6 +182,8 @@ export interface FileRoutesByFullPath {
   '/groups': typeof AppGroupsRoute
   '/me': typeof AppMeRoute
   '/policy': typeof AppPolicyRoute
+  '/invite/$token': typeof InviteTokenRoute
+  '/reset/$token': typeof ResetTokenRoute
   '/agents/$id': typeof AppAgentsIdRoute
   '/operators/$id': typeof AppOperatorsIdRoute
   '/requests/$id': typeof AppRequestsIdRoute
@@ -195,6 +209,8 @@ export interface FileRoutesByTo {
   '/groups': typeof AppGroupsRoute
   '/me': typeof AppMeRoute
   '/policy': typeof AppPolicyRoute
+  '/invite/$token': typeof InviteTokenRoute
+  '/reset/$token': typeof ResetTokenRoute
   '/': typeof AppIndexRoute
   '/agents/$id': typeof AppAgentsIdRoute
   '/operators/$id': typeof AppOperatorsIdRoute
@@ -223,6 +239,8 @@ export interface FileRoutesById {
   '/_app/groups': typeof AppGroupsRoute
   '/_app/me': typeof AppMeRoute
   '/_app/policy': typeof AppPolicyRoute
+  '/invite/$token': typeof InviteTokenRoute
+  '/reset/$token': typeof ResetTokenRoute
   '/_app/': typeof AppIndexRoute
   '/_app/agents/$id': typeof AppAgentsIdRoute
   '/_app/operators/$id': typeof AppOperatorsIdRoute
@@ -252,6 +270,8 @@ export interface FileRouteTypes {
     | '/groups'
     | '/me'
     | '/policy'
+    | '/invite/$token'
+    | '/reset/$token'
     | '/agents/$id'
     | '/operators/$id'
     | '/requests/$id'
@@ -277,6 +297,8 @@ export interface FileRouteTypes {
     | '/groups'
     | '/me'
     | '/policy'
+    | '/invite/$token'
+    | '/reset/$token'
     | '/'
     | '/agents/$id'
     | '/operators/$id'
@@ -304,6 +326,8 @@ export interface FileRouteTypes {
     | '/_app/groups'
     | '/_app/me'
     | '/_app/policy'
+    | '/invite/$token'
+    | '/reset/$token'
     | '/_app/'
     | '/_app/agents/$id'
     | '/_app/operators/$id'
@@ -327,6 +351,8 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
   SetupRoute: typeof SetupRoute
+  InviteTokenRoute: typeof InviteTokenRoute
+  ResetTokenRoute: typeof ResetTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -400,6 +426,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/policy'
       preLoaderRoute: typeof AppPolicyRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/invite/$token': {
+      id: '/invite/$token'
+      path: '/invite/$token'
+      fullPath: '/invite/$token'
+      preLoaderRoute: typeof InviteTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset/$token': {
+      id: '/reset/$token'
+      path: '/reset/$token'
+      fullPath: '/reset/$token'
+      preLoaderRoute: typeof ResetTokenRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_app/agents/': {
       id: '/_app/agents/'
@@ -564,6 +604,8 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
   SetupRoute: SetupRoute,
+  InviteTokenRoute: InviteTokenRoute,
+  ResetTokenRoute: ResetTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
