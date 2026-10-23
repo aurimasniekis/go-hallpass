@@ -1170,7 +1170,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Decrypted export of every recording segment of a session (bounded to 64 MiB of payload). Audited (HP-REC-014). */
+        /** Export a session's recordings (HP-REC-014). The default format=bundle is a tar of the encrypted HPREC1 segment files plus manifest.json (hashes, states); nothing is decrypted. format=plaintext returns decrypted records as JSON (bounded to 64 MiB of payload). Both are audited. */
         get: operations["exportSessionRecordings"];
         put?: never;
         post?: never;
@@ -4739,7 +4739,9 @@ export interface operations {
     };
     exportSessionRecordings: {
         parameters: {
-            query?: never;
+            query?: {
+                format?: "bundle" | "plaintext";
+            };
             header?: never;
             path: {
                 id: components["parameters"]["ID"];
@@ -4754,6 +4756,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/x-tar": string;
                     "application/json": components["schemas"]["SessionExport"];
                 };
             };

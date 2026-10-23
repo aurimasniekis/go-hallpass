@@ -193,7 +193,7 @@ describe('<SessionDetailPage>', () => {
     // The always-false "verified" field is not displayed.
     expect(within(tl).queryByText('verified')).not.toBeInTheDocument();
     expect(screen.getByText('Replay needs the recording.play permission')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Export recordings/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Export/ })).not.toBeInTheDocument();
   });
 
   it('replays an exec channel on demand: captured command, separate stdout/stderr, incomplete banner', async () => {
@@ -211,7 +211,8 @@ describe('<SessionDetailPage>', () => {
     expect(screen.getByRole('region', { name: 'Standard output replay' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Standard error replay' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Play/ })).toBeEnabled();
-    expect(screen.getByRole('button', { name: /Export recordings/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Export encrypted bundle/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Export decrypted/ })).toBeInTheDocument();
     await waitFor(() => {
       expect(document.body.textContent).not.toMatch(/(?<!un)(?<!not )verified/i);
     });

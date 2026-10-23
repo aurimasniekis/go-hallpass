@@ -53,6 +53,24 @@ function fakeFetch(...responders: ((call: Call) => Response)[]) {
 }
 
 describe('ApiClient', () => {
+  it('returns binary downloads as a Blob and still parses problem errors', async () => {
+    const { fetch, calls } = fakeFetch(
+      () =>
+        new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/x-tar' },
+        }),
+      () => problem(403, 'forbidden'),
+    );
+    const client = new ApiClient({ fetch });
+    const blob = await client.get<Blob>('/export', { responseType: 'blob' });
+    expect(blob.size).toBe(3);
+    expect(calls[0]?.headers.get('Accept')).toBe('*/*');
+    await expect(client.get<Blob>('/export', { responseType: 'blob' })).rejects.toMatchObject({
+      code: 'forbidden',
+    });
+  });
+
   it('sends GETs same-origin without a CSRF header and parses JSON', async () => {
     const { fetch, calls } = fakeFetch(() => json(200, { ok: true }));
     const client = new ApiClient({ fetch });

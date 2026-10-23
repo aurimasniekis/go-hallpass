@@ -1800,7 +1800,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-REC-011` No silent event drops — WP12 — evidence: U, FI, S — ✅ tested: TestRecorderBackpressure (block then fail, never drop)
 - [ ] `HP-REC-012` Destination-side audit integration — WP25 — evidence: O, D — ◐ implemented + tested (unit/integration): signed collector batches, certificate/managed-key correlation, sealed details, provenance labels (internal/destaudit, cmd/hallpass-collector, httpapi TestAdministrationFlow); OpenSSH+auditd container test pending; ADR-0037
 - [ ] `HP-REC-013` Retention and deletion — WP12 — evidence: I, E — ◐ tested: per-role-class retention (recording.retention_classes) + tombstones (config + recording tests); UI display pending WP20
-- [ ] `HP-REC-014` Restricted, audited download — WP21 — evidence: E, I — ◐ tested: playback and export separate permissions, recent auth + MFA for export, both audited (internal/httpapi tests); UI pending WP21
+- [x] `HP-REC-014` Restricted, audited download — WP21 — evidence: E, I — ✅ tested: playback (recording.play) and export (recording.export, recent auth + MFA) separate and audited; default export is the ciphertext bundle, plaintext opt-in (httpapi TestAdministrationFlow checkBundle; ADR-0040); UI encrypted/decrypted export actions (ExportButton)
 
 #### HP-CRY — Cryptography and key management
 

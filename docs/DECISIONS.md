@@ -529,7 +529,7 @@
      `recording.retention_classes` entries (`class=duration`) that match a role's `retention_class`. Changes need host
      access and a restart, which is stricter than "administrator with recent authentication" (HP-RBAC-005). A retention
      API can be added later behind `retention.manage` with recent authentication.
-  2. **Recording export:** `GET /access-sessions/{id}/export` (`recording.export`, recent authentication and MFA)
+  2. *(Export format superseded by ADR-0040.)* **Recording export:** `GET /access-sessions/{id}/export` (`recording.export`, recent authentication and MFA)
      returns every segment's decrypted records as JSON, limited to 64 MiB of payload (marked `truncated` beyond that),
      and is audited as `recording.exported`. Playback paging is a separate permission (`recording.play`) and is audited
      as `recording.played` (HP-REC-014, HP-RBAC-004).
@@ -607,6 +607,17 @@
   3. Operators must run NTP with slewing (no large steps); `docs/operator/install.md` states the requirement.
 - **Consequences:** G-4 holds with the documented clock assumption; under a backward step, the 5 s revocation
   bound holds even when the in-process event is lost (TestFI21).
+
+### ADR-0040 — Recording export defaults to a ciphertext bundle (corrects ADR-0036 item 2)
+- **Status:** accepted. **Security-relevant:** it restores a requirement. ADR-0036 item 2 made the only export a
+  decrypted JSON download, which contradicted HP-REC-014 ("the default export is a ciphertext bundle") and was not
+  flagged as a weakening. The WP20 frontend review found the contradiction.
+- **Decision:** `GET /access-sessions/{id}/export` defaults to `format=bundle`: a tar with `manifest.json` (segment
+  states, file SHA-256, header hash, frames digest, key ID) and the stored HPREC1 files, never decrypted. Reading
+  them needs a Hallpass keyring. `format=plaintext` keeps the decrypted JSON. Both formats need `recording.export`,
+  recent authentication and MFA, and are audited as `recording.exported` with the format. The UI offers the bundle
+  first and the decrypted export as a separate, warned action.
+- **Consequences:** HP-REC-014 matches GOAL. ADR-0036 item 2 is superseded where it describes the export format.
 
 ## 2. Open review items (operator decisions required)
 

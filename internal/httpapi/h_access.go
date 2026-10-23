@@ -650,12 +650,20 @@ func (s *Server) AcknowledgeBreakGlass(c *gen.Call) (*gen.Result, error) {
 // exportLimit bounds a session export's decrypted payload.
 const exportLimit = 64 << 20
 
-// ExportSessionRecordings returns every segment's decrypted records (HP-REC-014). Requires recording.export with
-// recent authentication and MFA; the export is audited before the response is written.
+// ExportSessionRecordings exports a session's recordings (HP-REC-014). The default format is a ciphertext bundle
+// (exportBundle); format=plaintext returns decrypted records as JSON. Both require recording.export with recent
+// authentication and MFA and are audited before the response is written.
 func (s *Server) ExportSessionRecordings(c *gen.Call) (*gen.Result, error) {
 	ctx, id := c.R.Context(), c.R.PathValue("id")
 	if _, err := s.d.Store.R().GetSession(ctx, id); err != nil {
 		return nil, notFound(err, "session")
+	}
+	switch c.R.URL.Query().Get("format") {
+	case "", "bundle":
+		return s.exportBundle(c, id)
+	case "plaintext":
+	default:
+		return nil, apperr.New(apperr.CodeInvalid, "format must be bundle or plaintext")
 	}
 	segs, err := s.d.Store.R().SegmentsForSession(ctx, id)
 	if err != nil {
@@ -705,7 +713,7 @@ func (s *Server) ExportSessionRecordings(c *gen.Call) (*gen.Result, error) {
 	}
 	err = s.d.Store.W().TxNamed(ctx, "api.recording_exported", func(tx *store.Tx) error {
 		_, err := s.d.Audit.Append(ctx, tx, audit.Event{Actor: actor(c), Action: "recording.exported", Target: audit.Target{Type: "access_session", ID: id},
-			SourceIP: s.clientIP(c.R), Details: map[string]any{"segments": len(out.Segments), "truncated": out.Truncated}})
+			SourceIP: s.clientIP(c.R), Details: map[string]any{"format": "plaintext", "segments": len(out.Segments), "truncated": out.Truncated}})
 		return err
 	})
 	if err != nil {

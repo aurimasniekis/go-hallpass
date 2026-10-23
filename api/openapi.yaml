@@ -1021,10 +1021,19 @@ paths:
       x-permission: recording.export
       x-reauth: true
       x-mfa: true
-      summary: Decrypted export of every recording segment of a session (bounded to 64 MiB of payload). Audited (HP-REC-014).
-      parameters: [{$ref: "#/components/parameters/ID"}]
+      summary: >-
+        Export a session's recordings (HP-REC-014). The default format=bundle is a tar of the encrypted HPREC1 segment
+        files plus manifest.json (hashes, states); nothing is decrypted. format=plaintext returns decrypted records as
+        JSON (bounded to 64 MiB of payload). Both are audited.
+      parameters:
+        - {$ref: "#/components/parameters/ID"}
+        - {name: format, in: query, schema: {type: string, enum: [bundle, plaintext], default: bundle}}
       responses:
-        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/SessionExport"}}}}
+        "200":
+          description: ok
+          content:
+            application/x-tar: {schema: {type: string, format: binary}}
+            application/json: {schema: {$ref: "#/components/schemas/SessionExport"}}
         default: {$ref: "#/components/responses/Problem"}
   /api/v1/recordings/{id}/records:
     get:

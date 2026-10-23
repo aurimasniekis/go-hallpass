@@ -53,6 +53,8 @@ export interface RequestOptions {
   idempotencyKey?: string;
   /** Resource version for optimistic concurrency (`If-Match: "<version>"`). */
   ifMatch?: number;
+  /** `blob` returns the success body as a Blob (downloads); errors are still parsed as problem+json. */
+  responseType?: 'json' | 'blob';
 }
 
 export interface ApiClientHandlers {
@@ -244,7 +246,9 @@ export class ApiClient {
   private async send<T>(path: string, options: RequestOptions, isRetry: boolean): Promise<T> {
     const method = options.method ?? 'GET';
     const isMutation = method !== 'GET';
-    const headers = new Headers({ Accept: 'application/json, application/problem+json' });
+    const headers = new Headers({
+      Accept: options.responseType === 'blob' ? '*/*' : 'application/json, application/problem+json',
+    });
 
     let body: string | undefined;
     if (options.body !== undefined) {
@@ -284,6 +288,9 @@ export class ApiClient {
     this.recordDate(response, sentAt, this.now());
 
     if (response.ok) {
+      if (options.responseType === 'blob') {
+        return (await response.blob()) as T;
+      }
       return (await this.readSuccess(response)) as T;
     }
 

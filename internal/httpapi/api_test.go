@@ -1,12 +1,16 @@
 package httpapi_test
 
 import (
+	"archive/tar"
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base32"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -305,6 +309,12 @@ func (s *specIndex) check(opID string, r resp) error {
 			return fmt.Errorf("%s: undeclared body %s", opID, r.body)
 		}
 		return nil
+	}
+	if ct := r.header.Get("Content-Type"); ct != "" && !strings.HasPrefix(ct, "application/json") {
+		if _, declared := content[ct]; !declared {
+			return fmt.Errorf("%s: content type %s not declared in the spec", opID, ct)
+		}
+		return nil // binary download: the media type is the contract
 	}
 	appJSON, _ := content["application/json"].(map[string]any)
 	if appJSON == nil {
@@ -646,10 +656,13 @@ func TestAdministrationFlow(t *testing.T) {
 	if !strings.Contains(string(r.body), base64.StdEncoding.EncodeToString([]byte("up 3 days\n"))) || !strings.Contains(string(r.body), "stdout@1") {
 		t.Fatalf("records %s", r.body)
 	}
-	r = c.ok("exportSessionRecordings", 200, "GET", "/api/v1/access-sessions/"+dec.Grant.SessionID+"/export", nil)
+	r = c.ok("exportSessionRecordings", 200, "GET", "/api/v1/access-sessions/"+dec.Grant.SessionID+"/export?format=plaintext", nil)
 	if !strings.Contains(string(r.body), `"complete":true`) {
 		t.Fatalf("export %s", r.body)
 	}
+	// HP-REC-014: the default export is a ciphertext bundle: manifest plus the stored HPREC1 files, nothing decrypted.
+	r = c.ok("exportSessionRecordings", 200, "GET", "/api/v1/access-sessions/"+dec.Grant.SessionID+"/export", nil)
+	checkBundle(t, r, segs.Items[0].ID, "up 3 days")
 	// HP-REC-012: destination audit collectors and records.
 	ck := sshkeys.Ed25519(t)
 	r = c.ok("registerDestinationCollector", 201, "POST", "/api/v1/destination-collectors", map[string]any{"server_id": srv.ID, "name": "web1-auditd",
@@ -895,4 +908,49 @@ func TestOIDCBrowserFlow(t *testing.T) {
 		t.Fatalf("test login: %d %v", r.status, r.header)
 	}
 	admin.ok("getOIDCTestLogin", 200, "GET", "/api/v1/oidc-providers/"+prov.ID+"/test-login", nil)
+}
+
+// checkBundle verifies an export bundle: a tar with manifest.json first and each segment's file, whose bytes hash to
+// the manifest's ciphertext digest and contain no plaintext.
+func checkBundle(t *testing.T, r resp, segmentID, plaintext string) {
+	t.Helper()
+	if r.header.Get("Content-Type") != "application/x-tar" || !strings.Contains(r.header.Get("Content-Disposition"), "attachment") {
+		t.Fatalf("bundle headers %v", r.header)
+	}
+	tr := tar.NewReader(bytes.NewReader(r.body))
+	files := map[string][]byte{}
+	var order []string
+	for {
+		h, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		must(t, err)
+		b, err := io.ReadAll(tr)
+		must(t, err)
+		files[h.Name] = b
+		order = append(order, h.Name)
+	}
+	if len(order) == 0 || order[0] != "manifest.json" {
+		t.Fatalf("bundle entries %v", order)
+	}
+	var m struct {
+		Format   string
+		Segments []struct {
+			SegmentID  string `json:"segment_id"`
+			File       string
+			FileSHA256 string `json:"file_sha256"`
+		}
+	}
+	must(t, json.Unmarshal(files["manifest.json"], &m))
+	if m.Format != "hallpass-export-bundle/v1" || len(m.Segments) != 1 || m.Segments[0].SegmentID != segmentID {
+		t.Fatalf("manifest %s", files["manifest.json"])
+	}
+	data := files[m.Segments[0].File]
+	if sum := sha256.Sum256(data); len(data) == 0 || hex.EncodeToString(sum[:]) != m.Segments[0].FileSHA256 {
+		t.Fatalf("segment file %q (%d B) does not match the manifest hash", m.Segments[0].File, len(data))
+	}
+	if bytes.Contains(r.body, []byte(plaintext)) {
+		t.Fatal("bundle contains plaintext")
+	}
 }
