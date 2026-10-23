@@ -478,7 +478,7 @@ func TestIntegrationAdministration(t *testing.T) {
 		res, err := http.DefaultClient.Do(req)
 		must(t, err)
 		_ = res.Body.Close()
-		if res.StatusCode != 404 {
+		if res.StatusCode != http.StatusNotFound {
 			t.Errorf("%s: %d", p, res.StatusCode)
 		}
 	}
@@ -486,7 +486,7 @@ func TestIntegrationAdministration(t *testing.T) {
 	res, err := http.DefaultClient.Do(req)
 	must(t, err)
 	_ = res.Body.Close()
-	if res.StatusCode != 405 {
+	if res.StatusCode != http.StatusMethodNotAllowed {
 		t.Fatalf("GET webhook: %d", res.StatusCode)
 	}
 }

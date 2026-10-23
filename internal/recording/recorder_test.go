@@ -367,7 +367,7 @@ func TestRetention(t *testing.T) {
 	must(t, rec.Finalize("exit_status"))
 	must(t, f.access.CloseChannel(f.ctx, reg, access.CloseInfo{Reason: "exit_status"}))
 
-	n, err := svc.ApplyRetention(f.ctx, 24*time.Hour)
+	n, err := svc.ApplyRetention(f.ctx, func(string) time.Duration { return 24 * time.Hour })
 	must(t, err)
 	if n != 0 {
 		t.Fatal("deleted an active session's recording")
@@ -377,13 +377,13 @@ func TestRetention(t *testing.T) {
 	must(t, f.access.CloseConnection(f.ctx, f.conn, "client_closed"))
 	_, err = f.access.CloseFinishedSessions(f.ctx)
 	must(t, err)
-	n, err = svc.ApplyRetention(f.ctx, 24*time.Hour)
+	n, err = svc.ApplyRetention(f.ctx, func(string) time.Duration { return 24 * time.Hour })
 	must(t, err)
 	if n != 0 {
 		t.Fatal("deleted before retention elapsed")
 	}
 	f.clk.Advance(25 * time.Hour)
-	n, err = svc.ApplyRetention(f.ctx, 24*time.Hour)
+	n, err = svc.ApplyRetention(f.ctx, func(string) time.Duration { return 24 * time.Hour })
 	must(t, err)
 	seg := f.segments(reg.SessionID)[0]
 	if n != 1 || seg.State != "deleted" || exists(seg.Path) {

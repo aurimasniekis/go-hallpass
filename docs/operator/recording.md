@@ -15,6 +15,7 @@ format is HPREC1 ([formats/hprec1.md](../formats/hprec1.md)), with one encrypted
 | `segment_max_age` | `1h` | Roll over to a new segment at this age. |
 | `queue_records`, `queue_bytes` | 1024, 1 MiB | Bounded queue between the session and the writer. When full, the session is slowed (SSH window backpressure), never dropped. |
 | `block_timeout` | `10s` | How long a full queue may block before the recording is declared failed. |
+| `retention_classes` | – | Per-class overrides, `class=duration` entries matched to the role's `retention_class`, e.g. `["sensitive=8760h"]`. |
 | `default_retention` | `2160h` (90 days) | Time after a session closes before its recordings are deleted (tombstones remain). |
 
 Terminal input is not recorded unless a role enables `record_input`.
@@ -49,6 +50,13 @@ At startup, before accepting connections, Hallpass:
 
 Quarantined files are listed in the `quarantine_files` table with a reason. Review them and delete them manually.
 Hallpass never deletes quarantined data.
+
+## Export
+
+Operators with `recording.export` (Administrator by default) can export a session's decrypted recordings as JSON
+(`GET /api/v1/access-sessions/{id}/export`). This requires recent authentication and MFA, is limited to 64 MiB of payload,
+and is audited (`recording.exported`). Playback in the UI uses `recording.play` and is audited per page
+(`recording.played`).
 
 ## Retention
 

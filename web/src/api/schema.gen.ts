@@ -1163,6 +1163,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/access-sessions/{id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Decrypted export of every recording segment of a session (bounded to 64 MiB of payload). Audited (HP-REC-014). */
+        get: operations["exportSessionRecordings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/recordings/{id}/records": {
         parameters: {
             query?: never;
@@ -1500,6 +1517,23 @@ export interface paths {
         /** Emergency lockdown - every grant is suspended and no new access is possible. */
         post: operations["enableLockdown"];
         delete: operations["liftLockdown"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/breakglass-ack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Acknowledge recorded break-glass recoveries (clears the alert raised at start and in system status). */
+        post: operations["acknowledgeBreakGlass"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2106,6 +2140,19 @@ export interface components {
             complete: boolean;
             incomplete: boolean;
         };
+        SessionExport: {
+            session_id: string;
+            exported_at: components["schemas"]["Timestamp"];
+            truncated: boolean;
+            segments: {
+                segment_id: string;
+                channel_id: string;
+                ordinal: number;
+                state: string;
+                complete?: boolean;
+                records: components["schemas"]["RecordPage"]["records"];
+            }[];
+        };
         AuditEvent: {
             id: string;
             seq: number;
@@ -2265,6 +2312,9 @@ export interface components {
             live_channels: number;
             storage_ok: boolean;
             policy_version?: number;
+            /** @description an unacknowledged break-glass recovery was used */
+            breakglass_alert?: boolean;
+            breakglass_at?: components["schemas"]["NullableTimestamp"];
         };
         StatsOverview: {
             range: string;
@@ -4560,6 +4610,29 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    exportSessionRecordings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionExport"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     getRecordingRecords: {
         parameters: {
             query?: {
@@ -5356,6 +5429,27 @@ export interface operations {
         };
     };
     liftLockdown: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemStatus"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    acknowledgeBreakGlass: {
         parameters: {
             query?: never;
             header?: never;

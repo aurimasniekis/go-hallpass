@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"go.yaml.in/yaml/v3"
@@ -104,6 +105,9 @@ type HTTPConfig struct {
 type LogConfig struct {
 	Level  string `yaml:"level"`
 	Format string `yaml:"format"`
+	// AuditFile, if set, receives every committed audit record as one JSON line (mode 0600, append) for SIEM
+	// ingestion (HP-OBS-005). The database hash chain stays authoritative.
+	AuditFile string `yaml:"audit_file"`
 }
 
 // StorageConfig configures storage safety thresholds (HP-OPS-006, HP-DB-009).
@@ -128,6 +132,9 @@ type RecordingConfig struct {
 	QueueBytes       int      `yaml:"queue_bytes"`
 	BlockTimeout     Duration `yaml:"block_timeout"`
 	DefaultRetention Duration `yaml:"default_retention"`
+	// RetentionClasses overrides the retention per role retention class: entries "class=duration", e.g.
+	// "sensitive=8760h" (HP-REC-013). Classes without an entry use DefaultRetention.
+	RetentionClasses []string `yaml:"retention_classes"`
 }
 
 // EgressConfig configures the outbound destination guard (HP-SRV-009).
@@ -231,3 +238,16 @@ func decode(r io.Reader, cfg *Config) error {
 
 // IsProduction reports whether the configuration runs in production mode.
 func (c *Config) IsProduction() bool { return c.Mode != ModeDevelopment }
+
+// RetentionFor returns the retention of a role retention class (DefaultRetention when the class has no entry).
+func (r RecordingConfig) RetentionFor(class string) time.Duration {
+	for _, e := range r.RetentionClasses {
+		name, val, _ := strings.Cut(e, "=")
+		if strings.TrimSpace(name) == class {
+			if d, err := time.ParseDuration(strings.TrimSpace(val)); err == nil {
+				return d
+			}
+		}
+	}
+	return r.DefaultRetention.D()
+}

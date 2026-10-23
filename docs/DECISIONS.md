@@ -341,8 +341,9 @@
     removing it would leave no enabled administrator (HP-AUTH-015).
   - **JIT email conflicts:** a JIT login whose verified email belongs to another operator is refused with a conflict,
     never merged.
-  - **Deviation:** the Keycloak/Dex interop smoke tests (PLAN WP14 tests, nightly CI) are not implemented yet. They are
-    tracked as an open item and are not claimed as done.
+  - **Interop tests:** smoke tests against real Keycloak and Dex containers (`test/oidcinterop`, nightly CI) pass
+    locally. They found and fixed one bug: logout offered the first provider's end-session URL instead of the
+    session's provider (migration 0013 records `web_sessions.auth_provider`).
 
 ### ADR-0031 — REST API implementation: in-repo generator, conventions and UI embedding
 - **Status:** accepted (WP15). Not security-relevant: no requirement is relaxed.
@@ -520,6 +521,23 @@
      - Status updates do not re-render the original message context.
   6. **Not externally verified:** the adapters are tested against fake Slack and Telegram API servers only. Verification
      against a real workspace and bot is pending and will be recorded as *externally verified* evidence when done.
+
+### ADR-0036 — Retention, export and break-glass alert details
+- **Status:** accepted. Not security-relevant: no requirement is relaxed.
+- **Decision:**
+  1. **Retention is configured, not managed through the API.** It is set by `recording.default_retention` plus
+     `recording.retention_classes` entries (`class=duration`) that match a role's `retention_class`. Changes need host
+     access and a restart, which is stricter than "administrator with recent authentication" (HP-RBAC-005). A retention
+     API can be added later behind `retention.manage` with recent authentication.
+  2. **Recording export:** `GET /access-sessions/{id}/export` (`recording.export`, recent authentication and MFA)
+     returns every segment's decrypted records as JSON, limited to 64 MiB of payload (marked `truncated` beyond that),
+     and is audited as `recording.exported`. Playback paging is a separate permission (`recording.play`) and is audited
+     as `recording.played` (HP-REC-014, HP-RBAC-004).
+  3. **Break-glass alert:** a `breakglass.used` audit event newer than the acknowledged sequence is logged as an error
+     at every start and shown in the system status (`breakglass_alert`) until an administrator acknowledges it (`POST
+     /system/breakglass-ack`, recent authentication and MFA; audited) (PLAN §18.16, HP-AUTH-016).
+  4. **Audit sink:** `log.audit_file` appends every committed audit record as one JSON line (0600) for SIEM
+     ingestion. The database hash chain stays authoritative (HP-OBS-005).
 
 ## 2. Open review items (operator decisions required)
 

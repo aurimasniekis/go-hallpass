@@ -540,8 +540,17 @@ func (s *Server) systemStatus(ctx context.Context) (map[string]any, error) {
 		return nil, err
 	}
 	storageOK := s.d.Store.Health() == nil || s.d.Store.Health().AcceptsWrites()
+	bg, bgAt, err := s.d.Auth.BreakGlassAlert(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var bgTime *time.Time
+	if bg {
+		bgTime = &bgAt
+	}
 	return map[string]any{"lockdown": st.Lockdown == 1, "version": buildinfo.Get().Version, "boot_id": s.d.BootID, "pending_requests": pending,
-		"active_grants": active, "live_channels": len(live), "storage_ok": storageOK, "policy_version": st.Version}, nil
+		"active_grants": active, "live_channels": len(live), "storage_ok": storageOK, "policy_version": st.Version,
+		"breakglass_alert": bg, "breakglass_at": bgTime}, nil
 }
 
 func (s *Server) GetSystemStatus(c *gen.Call) (*gen.Result, error) {
@@ -630,3 +639,77 @@ func (s *Server) GetStatsOverview(c *gen.Call) (*gen.Result, error) {
 }
 
 var _ = policy.LevelVisible
+
+func (s *Server) AcknowledgeBreakGlass(c *gen.Call) (*gen.Result, error) {
+	if err := s.d.Auth.AcknowledgeBreakGlass(c.R.Context(), actor(c)); err != nil {
+		return nil, err
+	}
+	return s.GetSystemStatus(c)
+}
+
+// exportLimit bounds a session export's decrypted payload.
+const exportLimit = 64 << 20
+
+// ExportSessionRecordings returns every segment's decrypted records (HP-REC-014). Requires recording.export with
+// recent authentication and MFA; the export is audited before the response is written.
+func (s *Server) ExportSessionRecordings(c *gen.Call) (*gen.Result, error) {
+	ctx, id := c.R.Context(), c.R.PathValue("id")
+	if _, err := s.d.Store.R().GetSession(ctx, id); err != nil {
+		return nil, notFound(err, "session")
+	}
+	segs, err := s.d.Store.R().SegmentsForSession(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	type segExport struct {
+		SegmentID string      `json:"segment_id"`
+		ChannelID string      `json:"channel_id"`
+		Ordinal   int64       `json:"ordinal"`
+		State     string      `json:"state"`
+		Complete  bool        `json:"complete"`
+		Records   []recordDTO `json:"records"`
+	}
+	out := struct {
+		SessionID  string      `json:"session_id"`
+		ExportedAt time.Time   `json:"exported_at"`
+		Truncated  bool        `json:"truncated"`
+		Segments   []segExport `json:"segments"`
+	}{SessionID: id, ExportedAt: s.o.Clock.Now().UTC(), Segments: []segExport{}}
+	total := 0
+	for _, seg := range segs {
+		if seg.State == "deleted" || seg.State == "missing" || seg.State == "failed" {
+			continue
+		}
+		se := segExport{SegmentID: seg.ID, ChannelID: seg.ChannelID, Ordinal: seg.Ordinal, State: seg.State, Records: []recordDTO{}}
+		var from uint64
+		for !out.Truncated {
+			p, err := s.d.Recording.ReadPage(ctx, seg.ID, from, 256<<10)
+			if err != nil {
+				return nil, err
+			}
+			for _, r := range recordPage(seg.ID, p).Records {
+				total += len(r.Data)
+				if total > exportLimit {
+					out.Truncated = true
+					break
+				}
+				se.Records = append(se.Records, r)
+			}
+			se.Complete = p.Complete
+			if !p.More {
+				break
+			}
+			from = p.NextSeq
+		}
+		out.Segments = append(out.Segments, se)
+	}
+	err = s.d.Store.W().TxNamed(ctx, "api.recording_exported", func(tx *store.Tx) error {
+		_, err := s.d.Audit.Append(ctx, tx, audit.Event{Actor: actor(c), Action: "recording.exported", Target: audit.Target{Type: "access_session", ID: id},
+			SourceIP: s.clientIP(c.R), Details: map[string]any{"segments": len(out.Segments), "truncated": out.Truncated}})
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return ok(out)
+}

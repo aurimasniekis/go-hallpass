@@ -1014,6 +1014,18 @@ paths:
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Segment"}}}}}}}
         default: {$ref: "#/components/responses/Problem"}
+  /api/v1/access-sessions/{id}/export:
+    get:
+      operationId: exportSessionRecordings
+      tags: [sessions]
+      x-permission: recording.export
+      x-reauth: true
+      x-mfa: true
+      summary: Decrypted export of every recording segment of a session (bounded to 64 MiB of payload). Audited (HP-REC-014).
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/SessionExport"}}}}
+        default: {$ref: "#/components/responses/Problem"}
   /api/v1/recordings/{id}/records:
     get:
       operationId: getRecordingRecords
@@ -1365,6 +1377,17 @@ paths:
       x-permission: system.lockdown.lift
       x-reauth: true
       x-mfa: true
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/SystemStatus"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/system/breakglass-ack:
+    post:
+      operationId: acknowledgeBreakGlass
+      tags: [system]
+      x-permission: system.settings
+      x-reauth: true
+      x-mfa: true
+      summary: Acknowledge recorded break-glass recoveries (clears the alert raised at start and in system status).
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/SystemStatus"}}}}
         default: {$ref: "#/components/responses/Problem"}
@@ -1993,6 +2016,25 @@ components:
         more: {type: boolean}
         complete: {type: boolean}
         incomplete: {type: boolean}
+    SessionExport:
+      type: object
+      required: [session_id, exported_at, truncated, segments]
+      properties:
+        session_id: {type: string}
+        exported_at: {$ref: "#/components/schemas/Timestamp"}
+        truncated: {type: boolean}
+        segments:
+          type: array
+          items:
+            type: object
+            required: [segment_id, channel_id, ordinal, state, records]
+            properties:
+              segment_id: {type: string}
+              channel_id: {type: string}
+              ordinal: {type: integer}
+              state: {type: string}
+              complete: {type: boolean}
+              records: {$ref: "#/components/schemas/RecordPage/properties/records"}
     AuditEvent:
       type: object
       required: [id, seq, at, actor_type, action, outcome, details]
@@ -2165,6 +2207,8 @@ components:
         live_channels: {type: integer}
         storage_ok: {type: boolean}
         policy_version: {type: integer}
+        breakglass_alert: {type: boolean, description: an unacknowledged break-glass recovery was used}
+        breakglass_at: {$ref: "#/components/schemas/NullableTimestamp"}
     StatsOverview:
       type: object
       required: [range, bucket_seconds, requests, sessions]

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aurimasniekis/go-hallpass/internal/audit"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 )
 
@@ -54,5 +55,24 @@ func TestExternalSessionReauth(t *testing.T) {
 	}
 	if off, err := f.svc.LocalLoginDisabled(f.ctx); err != nil || off {
 		t.Fatalf("default local login: %v %v", off, err)
+	}
+}
+
+// HP-AUTH-016: a break-glass use raises an alert until acknowledged.
+func TestBreakGlassAlert(t *testing.T) {
+	f := newFx(t)
+	op := f.bootstrap()
+	if on, _, err := f.svc.BreakGlassAlert(f.ctx); err != nil || on {
+		t.Fatalf("fresh store alert=%v %v", on, err)
+	}
+	_, _, err := f.svc.IssueRecoveryLogin(f.ctx, op.ID, "")
+	must(t, err)
+	on, at, err := f.svc.BreakGlassAlert(f.ctx)
+	if err != nil || !on || at.IsZero() {
+		t.Fatalf("after break-glass alert=%v %v", on, err)
+	}
+	must(t, f.svc.AcknowledgeBreakGlass(f.ctx, audit.Actor{Type: audit.ActorOperator, ID: op.ID}))
+	if on, _, _ := f.svc.BreakGlassAlert(f.ctx); on {
+		t.Fatal("alert survived acknowledgement")
 	}
 }

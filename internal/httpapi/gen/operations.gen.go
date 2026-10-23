@@ -7,6 +7,7 @@ var Operations = []Operation{
 	{ID: "listAccessSessions", Method: "GET", Path: "/api/v1/access-sessions", Permission: "sessions.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"sessions"}},
 	{ID: "getAccessSession", Method: "GET", Path: "/api/v1/access-sessions/{id}", Permission: "sessions.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"sessions"}},
 	{ID: "listSessionChannels", Method: "GET", Path: "/api/v1/access-sessions/{id}/channels", Permission: "sessions.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"sessions"}},
+	{ID: "exportSessionRecordings", Method: "GET", Path: "/api/v1/access-sessions/{id}/export", Permission: "recording.export", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"sessions"}},
 	{ID: "listSessionSegments", Method: "GET", Path: "/api/v1/access-sessions/{id}/segments", Permission: "sessions.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"sessions"}},
 	{ID: "getSessionTimeline", Method: "GET", Path: "/api/v1/access-sessions/{id}/timeline", Permission: "sessions.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"sessions"}},
 	{ID: "listActivities", Method: "GET", Path: "/api/v1/activities", Permission: "sessions.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"sessions"}},
@@ -125,6 +126,7 @@ var Operations = []Operation{
 	{ID: "getAuthSettings", Method: "GET", Path: "/api/v1/settings/auth", Permission: "auth.settings", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"sso"}},
 	{ID: "putAuthSettings", Method: "PUT", Path: "/api/v1/settings/auth", Permission: "auth.settings", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"sso"}},
 	{ID: "getStatsOverview", Method: "GET", Path: "/api/v1/stats/overview", Permission: "dashboard.view", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"system"}},
+	{ID: "acknowledgeBreakGlass", Method: "POST", Path: "/api/v1/system/breakglass-ack", Permission: "system.settings", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"system"}},
 	{ID: "listGatewayHostKeys", Method: "GET", Path: "/api/v1/system/gateway-host-keys", Permission: "dashboard.view", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"system"}},
 	{ID: "enableLockdown", Method: "POST", Path: "/api/v1/system/lockdown", Permission: "system.lockdown.enable", Reauth: true, MFA: false, Idempotent: true, Stream: false, Redirect: false, Tags: []string{"system"}},
 	{ID: "liftLockdown", Method: "DELETE", Path: "/api/v1/system/lockdown", Permission: "system.lockdown.lift", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"system"}},
@@ -143,6 +145,8 @@ type Server interface {
 	GetAccessSession(c *Call) (*Result, error)
 	// ListSessionChannels GET /api/v1/access-sessions/{id}/channels (permission sessions.read)
 	ListSessionChannels(c *Call) (*Result, error)
+	// ExportSessionRecordings GET /api/v1/access-sessions/{id}/export (permission recording.export)
+	ExportSessionRecordings(c *Call) (*Result, error)
 	// ListSessionSegments GET /api/v1/access-sessions/{id}/segments (permission sessions.read)
 	ListSessionSegments(c *Call) (*Result, error)
 	// GetSessionTimeline GET /api/v1/access-sessions/{id}/timeline (permission sessions.read)
@@ -379,6 +383,8 @@ type Server interface {
 	PutAuthSettings(c *Call) (*Result, error)
 	// GetStatsOverview GET /api/v1/stats/overview (permission dashboard.view)
 	GetStatsOverview(c *Call) (*Result, error)
+	// AcknowledgeBreakGlass POST /api/v1/system/breakglass-ack (permission system.settings)
+	AcknowledgeBreakGlass(c *Call) (*Result, error)
 	// ListGatewayHostKeys GET /api/v1/system/gateway-host-keys (permission dashboard.view)
 	ListGatewayHostKeys(c *Call) (*Result, error)
 	// EnableLockdown POST /api/v1/system/lockdown (permission system.lockdown.enable)
@@ -403,6 +409,7 @@ func Handlers(s Server) map[string]Handler {
 		"listAccessSessions":         s.ListAccessSessions,
 		"getAccessSession":           s.GetAccessSession,
 		"listSessionChannels":        s.ListSessionChannels,
+		"exportSessionRecordings":    s.ExportSessionRecordings,
 		"listSessionSegments":        s.ListSessionSegments,
 		"getSessionTimeline":         s.GetSessionTimeline,
 		"listActivities":             s.ListActivities,
@@ -521,6 +528,7 @@ func Handlers(s Server) map[string]Handler {
 		"getAuthSettings":            s.GetAuthSettings,
 		"putAuthSettings":            s.PutAuthSettings,
 		"getStatsOverview":           s.GetStatsOverview,
+		"acknowledgeBreakGlass":      s.AcknowledgeBreakGlass,
 		"listGatewayHostKeys":        s.ListGatewayHostKeys,
 		"enableLockdown":             s.EnableLockdown,
 		"liftLockdown":               s.LiftLockdown,

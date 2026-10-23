@@ -38,3 +38,9 @@ is the authoritative record of security-relevant actions.
 - Tests plant a secret value under each sensitive key and assert it never appears in either log format.
 
 Redaction is defense in depth, not a guarantee for arbitrary free text. Code must not put secrets into messages or error strings.
+
+## Audit log export
+
+Set `log.audit_file` to append every committed audit record as one JSON line (file mode 0600) for SIEM ingestion. The
+database hash chain is authoritative: verify it with `GET /api/v1/audit-events/verify` or after a restore. The file is
+for forwarding only.

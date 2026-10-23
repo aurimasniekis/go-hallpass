@@ -721,3 +721,22 @@ func TestGatewayHealthAndMetrics(t *testing.T) {
 		t.Fatalf("readyz after shutdown %d", code)
 	}
 }
+
+// HP-AGT-007: an agent restricted to source CIDRs cannot authenticate from elsewhere (uniform rejection).
+func TestGatewaySourceCIDR(t *testing.T) {
+	g := startGateway(t)
+	ctx := context.Background()
+	ags, err := g.a.Agents.List(ctx)
+	must(t, err)
+	_, err = g.a.Agents.Update(ctx, admin, ags[0].ID, agents.UpdateInput{Version: ags[0].Version, SourceCIDRs: ptr([]string{"10.0.0.0/8"})})
+	must(t, err)
+	if c, err := g.client(g.key); err == nil {
+		_ = c.Close()
+		t.Fatal("agent authenticated from outside its source CIDRs")
+	}
+	_, err = g.a.Agents.Update(ctx, admin, ags[0].ID, agents.UpdateInput{Version: ags[0].Version + 1, SourceCIDRs: ptr([]string{"127.0.0.0/8"})})
+	must(t, err)
+	c, err := g.client(g.key)
+	must(t, err)
+	_ = c.Close()
+}

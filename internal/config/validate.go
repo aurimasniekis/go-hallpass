@@ -99,6 +99,13 @@ func (c *Config) Validate() error {
 	v.positive("recording.queue_bytes", c.Recording.QueueBytes)
 	v.durationRange("recording.block_timeout", c.Recording.BlockTimeout, time.Second, time.Minute)
 	v.durationRange("recording.default_retention", c.Recording.DefaultRetention, 24*time.Hour, 10*365*24*time.Hour)
+	for _, e := range c.Recording.RetentionClasses {
+		name, val, ok := strings.Cut(e, "=")
+		d, err := time.ParseDuration(strings.TrimSpace(val))
+		if !ok || strings.TrimSpace(name) == "" || err != nil || d < 24*time.Hour || d > 10*365*24*time.Hour {
+			v.add("recording.retention_classes: entries must be class=duration with 24h <= duration <= 10y (got %q)", e)
+		}
+	}
 
 	for _, p := range c.Egress.AllowCIDRs {
 		v.prefix("egress.allow_cidrs", p)

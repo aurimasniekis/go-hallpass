@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base32"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -36,6 +37,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/oidc/oidctest"
 	"github.com/aurimasniekis/go-hallpass/internal/opauth"
 	"github.com/aurimasniekis/go-hallpass/internal/rbac"
+	"github.com/aurimasniekis/go-hallpass/internal/sshproxy"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 	"github.com/aurimasniekis/go-hallpass/internal/testutil/sshkeys"
 )
@@ -622,6 +624,36 @@ func TestAdministrationFlow(t *testing.T) {
 	c.ok("listSessionChannels", 200, "GET", "/api/v1/access-sessions/"+dec.Grant.SessionID+"/channels", nil)
 	c.ok("listSessionSegments", 200, "GET", "/api/v1/access-sessions/"+dec.Grant.SessionID+"/segments", nil)
 	c.ok("listActivities", 200, "GET", "/api/v1/activities", nil)
+	// Record a real channel so replay and export have data.
+	connID, err := h.a.Access.OpenConnection(h.ctx, access.ConnectionInfo{AgentID: agent.ID, KeyID: keys[0].ID, ClientUser: "x", ClientVersion: "SSH-2.0-test",
+		SourceIP: "10.9.9.9"})
+	must(t, err)
+	reg, err := h.a.Access.RegisterChannel(h.ctx, access.RegisterInput{ConnectionID: connID, AgentID: agent.ID, KeyID: keys[0].ID, GrantID: dec.Grant.ID,
+		Kind: access.KindExec})
+	must(t, err)
+	rec, err := h.a.Recording.Open(h.ctx, reg, access.KindExec, false)
+	must(t, err)
+	must(t, rec.ExecRequested("uptime"))
+	must(t, rec.Output(sshproxy.StreamStdout, []byte("up 3 days\n")))
+	must(t, rec.Finalize("exit_status"))
+	r = c.ok("listSessionSegments", 200, "GET", "/api/v1/access-sessions/"+dec.Grant.SessionID+"/segments", nil)
+	var segs struct{ Items []struct{ ID string } }
+	r.json(t, &segs)
+	if len(segs.Items) != 1 {
+		t.Fatalf("segments %s", r.body)
+	}
+	r = c.ok("getRecordingRecords", 200, "GET", "/api/v1/recordings/"+segs.Items[0].ID+"/records", nil)
+	if !strings.Contains(string(r.body), base64.StdEncoding.EncodeToString([]byte("up 3 days\n"))) || !strings.Contains(string(r.body), "stdout@1") {
+		t.Fatalf("records %s", r.body)
+	}
+	r = c.ok("exportSessionRecordings", 200, "GET", "/api/v1/access-sessions/"+dec.Grant.SessionID+"/export", nil)
+	if !strings.Contains(string(r.body), `"complete":true`) {
+		t.Fatalf("export %s", r.body)
+	}
+	c.ok("acknowledgeBreakGlass", 200, "POST", "/api/v1/system/breakglass-ack", nil)
+	if r := viewer.do("GET", "/api/v1/access-sessions/"+dec.Grant.SessionID+"/export", nil); r.status != 403 {
+		t.Fatalf("viewer exported recordings: %d", r.status)
+	}
 	c.ok("revokeGrant", 200, "POST", "/api/v1/grants/"+dec.Grant.ID+"/revoke", map[string]string{"reason": "done"})
 	r = c.ok("listAuditEvents", 200, "GET", "/api/v1/audit-events?limit=5", nil)
 	var ap struct {

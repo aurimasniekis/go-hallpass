@@ -1706,7 +1706,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-AGT-004` Validated key parsing — WP06 — evidence: U, Z — ✅ tested (local) @ WP06: ParseAgentKey policy table + FuzzParseAgentKey (20 s local smoke)
 - [ ] `HP-AGT-005` Immediate key revocation — WP09 — evidence: O, I — ◐ WP09: key revoke → enforcer terminates that key's channels (tested); last key → grants revoked; OpenSSH interop WP10/11
 - [x] `HP-AGT-006` No agent private keys — WP06 — evidence: U — ✅ tested (local) @ WP06: private-key input rejected without echo; no private-key storage path exists
-- [ ] `HP-AGT-007` Source CIDR restriction — WP10 — evidence: O, D — ◐ WP06: source CIDR check in agents.Authenticate (incl. IPv4-mapped); SSH wiring + docs pending WP10
+- [x] `HP-AGT-007` Source CIDR restriction — WP10 — evidence: O, D — ✅ tested: source CIDR enforced at SSH auth (internal/app/e2e_test.go TestGatewaySourceCIDR); agents unit tests incl. IPv4-mapped
 - [ ] `HP-AGT-008` Agent disablement — WP09 — evidence: I, O — ◐ WP09: disable hook cancels requests, revokes grants (tested); enforcer termination tested in-process; OpenSSH WP11
 - [x] `HP-AGT-009` Agent audit history — WP06 — evidence: I — ✅ tested (local) @ WP06: audit events for create/update/enable/disable/key add/revoke (hash-chain verified)
 
@@ -1715,8 +1715,8 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-SRV-001` Server record — WP07 — evidence: U, I — ✅ tested (local) @ WP07: servers + groups/labels/metadata, alias rules, optimistic version
 - [x] `HP-SRV-002` Role record — WP07 — evidence: U, I — ✅ tested (local) @ WP07: roles with capabilities, durations, concurrency, recording mode, env allowlist, approval channels, labels
 - [ ] `HP-SRV-003` Descriptions are not enforcement — WP20 — evidence: E, D
-- [ ] `HP-SRV-004` Explicit host identity enrollment — WP07 — evidence: I, O — ◐ WP07: paste (active) and scan→pending→confirm enrollment, tested against in-process destination; real-sshd interop pending WP10/11 harness
-- [ ] `HP-SRV-005` Host key rotation — WP07 — evidence: I, O — ◐ WP07: pending/active/retired states, changed key → HostKeyError before auth (TestHostKeyMismatchBlocksLogin); alerting + exit 88 wiring WP11
+- [x] `HP-SRV-004` Explicit host identity enrollment — WP07 — evidence: I, O — ✅ tested: explicit enrollment against real sshd (test/openssh/gateway_test.go) and in-process; scan->confirm flow (inventory tests)
+- [x] `HP-SRV-005` Host key rotation — WP07 — evidence: I, O — ✅ tested: changed key refused before auth with exit 88 + audit alert (internal/app/e2e_test.go TestGatewayHostKeyMismatch, test/openssh/gateway_test.go TestOpenSSHHostKeyChanged)
 - [x] `HP-SRV-006` Duplicate host identity detection — WP07 — evidence: I — ✅ tested (local) @ WP07: duplicate active fingerprint rejected; justified, audited exception required
 - [ ] `HP-SRV-007` Host CA model — WP07 — evidence: U, O — ◐ WP07: host CA enrollment + principal binding, validity/CA/type checks (unit); real-sshd host-cert interop pending WP11
 - [ ] `HP-SRV-008` Server/role disablement — WP09 — evidence: I, O — ◐ WP09: server/role disable hooks cancel + revoke (tested); OpenSSH-level termination WP11
@@ -1727,8 +1727,8 @@ check · R recovery drill · SR security review · D documentation review.
 
 - [x] `HP-KEY-001` Managed login key default — WP07 — evidence: U, I — ✅ tested (local) @ WP07: per-role managed Ed25519, sealed with credential key, no export path
 - [ ] `HP-KEY-002` Public key installation aid — WP07 — evidence: E, I — ◐ WP07: AuthorizedKeysLine (restrict[,pty],from=egress.source_addresses) tested; UI copy action pending WP20
-- [ ] `HP-KEY-003` Login key rotation — WP07 — evidence: I, O — ◐ WP07: pending→probe→active→retiring→retired/revoked with overlap + RetireDue (tested vs in-process sshd); real-sshd probe interop pending WP11
-- [ ] `HP-KEY-004` OpenSSH user certificates — WP07 — evidence: U, O — ◐ WP07: per-connection user certs (TTL ≤ 3m default 2m, explicit principals, key ID, capability-limited extensions, source-address) verified by live login to test server; OpenSSH sshd interop pending WP11
+- [x] `HP-KEY-003` Login key rotation — WP07 — evidence: I, O — ✅ tested: probe/activate against real sshd (test/openssh/gateway_test.go), rotation with overlap (credentials tests)
+- [x] `HP-KEY-004` OpenSSH user certificates — WP07 — evidence: U, O — ✅ tested: short-lived user certificates accepted by real sshd (test/openssh/gateway_test.go TestOpenSSHCertificateLogin)
 - [x] `HP-KEY-005` Signer abstraction — WP07 — evidence: U — ✅ tested (local) @ WP07: credentials.Signer/SignerResolver + FromCryptoSigner adapter (ECDSA DER→SSH) test; no external backend shipped (R-03)
 - [ ] `HP-KEY-006` Distinct key types — WP07 — evidence: C, SR — ◐ WP07: separate types/tables (host_identities, host_cas, login_credentials, user_cas, gateway_host_keys) and packages; API/UI separation WP15/WP20; SR WP26
 - [ ] `HP-KEY-007` Credential isolation — WP07 — evidence: U, I, SR — ◐ WP07: DTOs carry no private material (JSON test), imported keys flagged/never exported, credentials never presented to untrusted hosts; API/log review WP15/WP26
@@ -1744,7 +1744,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-POL-007` Policy versioning — WP08 — evidence: I — ✅ tested (local) @ WP08: policy_version bumped in-tx by policy, agent, inventory changes; engine rebuilds snapshot on version change
 - [x] `HP-POL-008` Policy change effects — WP09 — evidence: I — ✅ tested (local) @ WP09: ReconcilePolicy cancels/revokes/clamps; run on policy.changed + every minute (TestBackgroundLoopAppliesPolicyAndExpiry)
 - [ ] `HP-POL-009` Effective-access preview — WP08 — evidence: U, E — ◐ WP08: PreviewAgent/PreviewServer with deciding rule + Engine.WhatIf tested; UI pending WP20
-- [ ] `HP-POL-010` Hidden-target non-disclosure — WP10 — evidence: U, O, I
+- [x] `HP-POL-010` Hidden-target non-disclosure — WP10 — evidence: U, O, I — ✅ tested: unknown and hidden targets indistinguishable (internal/app/e2e_test.go TestGatewayHiddenTarget, test/openssh/gateway_test.go TestOpenSSHHiddenTarget)
 - [x] `HP-POL-011` Approver authority rules — WP08 — evidence: U, I — ✅ tested (local) @ WP08: approver rules + internal role required; admins need rules too
 - [x] `HP-POL-012` Self-approval prohibition — WP08 — evidence: U, I — ✅ tested (local) @ WP08: agent owners + policy.prohibit_self_approval (default prohibited)
 - [x] `HP-POL-013` Auto-approval within limits — WP08 — evidence: U, I — ✅ tested (local) @ WP08: AutoApproves only ≤ auto max; longer requests need a human; decision recording in WP09
@@ -1754,24 +1754,24 @@ check · R recovery drill · SR security review · D documentation review.
 
 - [ ] `HP-REQ-001` Request state machine — WP09 — evidence: U, P — ◐ WP09: CAS transitions from pending only (TransitionRequest WHERE state='pending'); unit + concurrency tests; randomized op-sequence property test pending WP26
 - [x] `HP-REQ-002` Request record — WP09 — evidence: U, I — ✅ tested (local) @ WP09: request record incl. sealed reason, key, policy version, timestamps, actors
-- [ ] `HP-REQ-003` Deduplication and idempotency — WP09 — evidence: I, O — ◐ WP09: partial unique pending index + dedup return + idempotency key (tested); SSH-level interop pending WP10
+- [x] `HP-REQ-003` Deduplication and idempotency — WP09 — evidence: I, O — ✅ tested: dedup per agent/server/role over SSH (internal/app/e2e_test.go TestGatewayWaitTimeoutAndDisconnect) + idempotency keys (access tests)
 - [x] `HP-REQ-004` Pending expiry — WP09 — evidence: I — ✅ tested (local) @ WP09: 30m default pending expiry, sweep + time-authoritative decision check
-- [ ] `HP-REQ-005` Wait vs expiry vs duration — WP10 — evidence: O, D
-- [ ] `HP-REQ-006` Cancellation — WP09 — evidence: I, O — ◐ WP09: CancelByAgent (own only) / CancelByOperator (admin or in-scope approver), idempotent; SSH command WP10
+- [x] `HP-REQ-005` Wait vs expiry vs duration — WP10 — evidence: O, D — ✅ tested: wait timeout vs pending expiry vs grant duration over SSH (internal/app/e2e_test.go) + docs/agent/guide.md
+- [x] `HP-REQ-006` Cancellation — WP09 — evidence: I, O — ✅ tested: agent cancel over SSH (internal/app/e2e_test.go TestGatewayRequestLifecycle), operator cancel via API
 - [ ] `HP-REQ-007` Request rate limits — WP09 — evidence: I, S — ◐ WP09: per-agent hourly + pending caps (tested); load test pending WP26
 - [x] `HP-REQ-008` Bounded untrusted reason — WP09 — evidence: U, Z — ✅ tested (local) @ WP09: SanitizeReason strips C0/C1/Cf (bidi, zero-width), collapses whitespace, ≤1000 runes; FuzzSanitizeReason 15 s
-- [ ] `HP-REQ-009` Status polling — WP10 — evidence: O
+- [x] `HP-REQ-009` Status polling — WP10 — evidence: O — ✅ tested: status polling over SSH (internal/app/e2e_test.go TestGatewayRequestLifecycle)
 
 #### HP-GRT — Grants and enforcement
 
 - [ ] `HP-GRT-001` Transactional decision and grant — WP09 — evidence: I, FI — ◐ WP09: decision+grant+session in one writer tx, start = tx time (tested); crash fault injection FI-01 pending WP26
 - [x] `HP-GRT-002` Grant record — WP09 — evidence: U, I — ✅ tested (local) @ WP09: grant record with scope, capabilities, policy version
 - [x] `HP-GRT-003` No implicit extension — WP09 — evidence: U, I — ✅ tested (local) @ WP09: reuse never changes expiry; extensions only via new requests
-- [ ] `HP-GRT-004` Active grant reuse — WP09 — evidence: I, O — ◐ WP09: FindActiveGrant (tested); SSH connect reuse pending WP10
+- [x] `HP-GRT-004` Active grant reuse — WP09 — evidence: I, O — ✅ tested: second exec reuses the active grant (internal/app/e2e_test.go TestGatewayExecEndToEnd)
 - [ ] `HP-GRT-005` Deterministic overlap selection — WP09 — evidence: U, P — ◐ WP09: latest expiry then lowest ID (SQL ORDER BY) + min-remaining cutoff tested; property test pending WP26
 - [ ] `HP-GRT-006` Atomic concurrency limits — WP09 — evidence: I, S — ◐ WP09: counts + insert in one writer tx; 12 concurrent registrations vs limit 2 → exactly 2 (tested); load test WP26
 - [x] `HP-GRT-007` Race resolution — WP09 — evidence: U, I — ✅ tested (local) @ WP09: CAS + 20 concurrent deciders exactly one decision; replay idempotent; expiry/policy rechecked in-tx
-- [ ] `HP-GRT-008` Enforcement bound — WP09 — evidence: I, O, S — ◐ WP09: enforcer (events + 1 s ticker + DB reconciliation with overlap window); event path < 1 s and lost-event path within 5 s tested in-process; OpenSSH + load measurement pending WP11/WP26
+- [ ] `HP-GRT-008` Enforcement bound — WP09 — evidence: I, O, S — ◐ tested: revocation terminates real OpenSSH sessions in ms (test/openssh/gateway_test.go TestOpenSSHRevocation), lost-event path <5s (access tests); load test pending WP26
 - [ ] `HP-GRT-009` Operator revocation — WP09 — evidence: I, E — ◐ WP09: RevokeGrant (admin or in-scope approver, audited, sealed note, event) tested; UI WP20
 - [x] `HP-GRT-010` Approval after expiry — WP09 — evidence: I — ✅ tested (local) @ WP09: expired request not approvable; new approval → new grant + session
 - [ ] `HP-GRT-011` Emergency lockdown — WP09 — evidence: I, E — ◐ WP09: SetLockdown revokes all grants, cancels pending, blocks requests/channels (tested); UI/CLI WP20/WP23
@@ -1779,7 +1779,7 @@ check · R recovery drill · SR security review · D documentation review.
 #### HP-SES — Access sessions
 
 - [x] `HP-SES-001` Session per grant — WP09 — evidence: I — ✅ tested (local) @ WP09: 1:1 session created in approval tx
-- [ ] `HP-SES-002` Connections and channels — WP09 — evidence: I, O — ◐ WP09: ssh_connections/ssh_channels with states, close reasons, boot IDs (tested); OpenSSH-level WP11
+- [x] `HP-SES-002` Connections and channels — WP09 — evidence: I, O — ✅ tested: connections/channels recorded with states and close reasons over SSH (e2e)
 - [x] `HP-SES-003` Session closure — WP09 — evidence: I — ✅ tested (local) @ WP09: closing while channels live, closed with reason when grant ended and channels closed
 - [ ] `HP-SES-004` Detached processes — WP25 — evidence: D
 - [ ] `HP-SES-005` Live activity view — WP20 — evidence: E
@@ -1798,8 +1798,8 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-REC-010` Unified timeline, distinct streams — WP21 — evidence: E
 - [x] `HP-REC-011` No silent event drops — WP12 — evidence: U, FI, S — ✅ tested: TestRecorderBackpressure (block then fail, never drop)
 - [ ] `HP-REC-012` Destination-side audit integration — WP25 — evidence: O, D
-- [ ] `HP-REC-013` Retention and deletion — WP12 — evidence: I, E — ◐ partial: global default retention + tombstones tested (TestRetention); per server/role class not implemented
-- [ ] `HP-REC-014` Restricted, audited download — WP21 — evidence: E, I
+- [ ] `HP-REC-013` Retention and deletion — WP12 — evidence: I, E — ◐ tested: per-role-class retention (recording.retention_classes) + tombstones (config + recording tests); UI display pending WP20
+- [ ] `HP-REC-014` Restricted, audited download — WP21 — evidence: E, I — ◐ tested: playback and export separate permissions, recent auth + MFA for export, both audited (internal/httpapi tests); UI pending WP21
 
 #### HP-CRY — Cryptography and key management
 
@@ -1822,7 +1822,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-DB-005` Safe migrations — WP03 — evidence: I, FI — ✅ tested (local) @ WP03: goose embedded forward-only, under flock, pre-migration VACUUM INTO snapshot, failure rollback + newer-schema refusal tests
 - [x] `HP-DB-006` Single active instance — WP03 — evidence: I — ✅ tested (local) @ WP03: flock hallpass.lock (TestSecondOwnerRefused)
 - [x] `HP-DB-007` Unsupported storage refusal — WP03 — evidence: I — ✅ tested (local, Linux container) @ WP03: statfs magic check; `make test-netfs` verifies refusal on a FUSE mount
-- [ ] `HP-DB-008` Corruption checks — WP03 — evidence: I, FI — ◐ WP03: startup quick_check refuses corrupt DB (TestCorruptionRefused), IntegrityCheck method; scheduled job WP05, runtime readiness WP22
+- [x] `HP-DB-008` Corruption checks — WP03 — evidence: I, FI — ✅ tested: startup quick_check refusal, daily integrity_check job, readiness store health (store + obs/health tests)
 - [ ] `HP-DB-009` Disk-full and I/O failure — WP03 — evidence: FI — ◐ WP03: error classification + Health (degraded/failed, fail-closed AcceptsWrites); fault tests FI-06 and recording termination pending WP12/WP26
 - [x] `HP-DB-010` Filesystem permissions — WP03 — evidence: I — ✅ tested (local) @ WP03/WP04: data dir 0700 + owner, DB files 0600, KEK file mode/owner refusal
 - [ ] `HP-DB-011` Bounded growth — WP03 — evidence: I, S — ◐ WP03: incremental auto_vacuum, Checkpoint/IncrementalVacuum/Sizes; retention jobs + metrics pending WP05/WP12/WP22
@@ -1845,10 +1845,10 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-AUTH-011` Invitations — WP13 — evidence: I, E — ◐ WP13: single-use 72 h hashed invitations with preset roles (tested); UI pending WP20
 - [x] `HP-AUTH-012` Server-side sessions — WP13 — evidence: I, E — ✅ tested: server-side sessions, __Host- cookie (Secure) / hp_session in dev, idle+absolute expiry
 - [x] `HP-AUTH-013` CSRF protection — WP13 — evidence: I, E — ✅ tested: CSRF token + Origin/Sec-Fetch-Site on mutations (internal/httpapi/api_test.go)
-- [ ] `HP-AUTH-014` Recent authentication — WP13 — evidence: I, E — ◐ WP13: RequireRecentAuth (5 m, MFA when enrolled) + Reauth with rotation (tested); per-endpoint gating WP15
+- [x] `HP-AUTH-014` Recent authentication — WP13 — evidence: I, E — ✅ tested: per-operation x-reauth/x-mfa gating (internal/httpapi tests incl. stale-session refusal)
 - [x] `HP-AUTH-015` Lockout prevention — WP13 — evidence: I, E — ✅ tested: last admin guard (opauth) + SSO-only preconditions and protection (internal/oidc/oidc_test.go (mock IdP) TestTestLoginAndSSOOnly)
-- [ ] `HP-AUTH-016` Break-glass recovery — WP23 — evidence: I, R — ◐ partial: offline admin recover CLI tested; alert-on-next-start pending
-- [ ] `HP-AUTH-017` Dev auth isolation — WP13 — evidence: C, I
+- [x] `HP-AUTH-016` Break-glass recovery — WP23 — evidence: I, R — ✅ tested: offline admin recover CLI (backup/cmd tests) + alert at start and in system status until acknowledged (opauth TestBreakGlassAlert, API)
+- [x] `HP-AUTH-017` Dev auth isolation — WP13 — evidence: C, I — ✅ tested: no dev-auth code exists; production config rejects dev.* (config tests, fuzz)
 - [x] `HP-AUTH-018` Credential secrecy — WP13 — evidence: U, I — ✅ tested (local) @ WP13: no passwords/TOTP/codes in audit or plaintext storage; redaction layer from WP02
 
 #### HP-OIDC — Generic OpenID Connect SSO
@@ -1857,9 +1857,9 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-OIDC-002` Code flow with PKCE — WP14 — evidence: I — ✅ tested: PKCE S256, single-use 10 min state bound by cookie (internal/oidc/oidc_test.go (mock IdP) TestStateSafety)
 - [x] `HP-OIDC-003` ID token validation — WP14 — evidence: U, I — ✅ tested: alg none/HS256, iss/aud/azp, exp/iat/nbf skew, nonce (internal/oidc/oidc_test.go (mock IdP) TestIDTokenValidation)
 - [x] `HP-OIDC-004` JWKS caching and rotation — WP14 — evidence: I — ✅ tested: JWKS cache, rotation refetch, rate limit (internal/oidc/oidc_test.go (mock IdP) TestJWKSRotation)
-- [ ] `HP-OIDC-005` TLS and redirect safety — WP14 — evidence: U, I — ◐ tested: https issuer, dev localhost http, exact redirect URI, return_to allowlist; HTTP cookie layer pending WP15
+- [x] `HP-OIDC-005` TLS and redirect safety — WP14 — evidence: U, I — ✅ tested: https issuer, exact redirect URI, return_to allowlist, binding cookie over HTTP (oidc + httpapi TestOIDCBrowserFlow)
 - [x] `HP-OIDC-006` Endpoint validation — WP14 — evidence: U, I — ✅ tested: endpoint site check, private-network refusal, untrusted TLS refused
-- [ ] `HP-OIDC-007` Secret handling — WP14 — evidence: I, E — ◐ tested: secret encrypted at rest, write-only DTO (internal/oidc/oidc_test.go (mock IdP) TestClientSecretWriteOnly); API/UI pending WP15/WP20
+- [x] `HP-OIDC-007` Secret handling — WP14 — evidence: I, E — ✅ tested: encrypted at rest, write-only in API (oidc + httpapi tests); UI pending WP20
 - [ ] `HP-OIDC-008` Token minimization — WP14 — evidence: I — ◐ implemented: access/refresh tokens dropped after exchange, ID token not stored (code review; no persistence path)
 - [x] `HP-OIDC-009` Identity by issuer+subject — WP14 — evidence: I, E — ✅ tested: identity by iss+sub, no email merge, link via session/invite/admin (internal/oidc/oidc_test.go (mock IdP) TestNoEmailMerge, TestLinking)
 - [x] `HP-OIDC-010` Provisioning modes — WP14 — evidence: I — ✅ tested: preprovisioned default, JIT restrictions, no roles without mapping (internal/oidc/oidc_test.go (mock IdP) TestJITAndGroupSync)
@@ -1874,8 +1874,8 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-RBAC-001` Internal roles and matrix — WP15 — evidence: U, I — ✅ tested: matrix over every operation x role (internal/httpapi/api_test.go TestRBACMatrix) + SSE filtering (TestSSE)
 - [x] `HP-RBAC-002` Address visibility permission — WP15 — evidence: I — ✅ tested: address redaction and host-identity permission (internal/httpapi/api_test.go TestAdministrationFlow)
 - [x] `HP-RBAC-003` Approval requires role and scope — WP15 — evidence: I — ✅ tested: approve/deny need role + approver rule (access.Decide tests; API matrix)
-- [ ] `HP-RBAC-004` Recording permissions — WP15 — evidence: I, E — ◐ tested: play/export defaults (internal/rbac tests); export endpoint pending
-- [ ] `HP-RBAC-005` Retention and revocation permissions — WP15 — evidence: I — ◐ tested: revocation in scope (access tests, API matrix); retention endpoint pending
+- [x] `HP-RBAC-004` Recording permissions — WP15 — evidence: I, E — ✅ tested: play vs export permissions and defaults (rbac tests, API matrix, export endpoint)
+- [x] `HP-RBAC-005` Retention and revocation permissions — WP15 — evidence: I — ✅ tested: revocation admin or in-scope approver (API matrix, access tests); retention is configuration-only (no API), changed by administrators with host access (ADR-0036)
 - [x] `HP-RBAC-006` Auth-method-independent RBAC — WP15 — evidence: I — ✅ tested: identical local vs SSO decisions (internal/httpapi/api_test.go TestRBACMatrix)
 - [x] `HP-RBAC-007` No default privilege — WP15 — evidence: I — ✅ tested: no roles = no permissions (rbac tests, API matrix, JIT test)
 
@@ -1929,13 +1929,13 @@ check · R recovery drill · SR security review · D documentation review.
 #### HP-OPS — Operations and distribution
 
 - [x] `HP-OPS-001` Health and readiness — WP22 — evidence: I — ✅ tested: /healthz, /readyz lifecycle and checks (obs/health tests, app e2e)
-- [ ] `HP-OPS-002` Graceful shutdown — WP11 — evidence: I, O
+- [x] `HP-OPS-002` Graceful shutdown — WP11 — evidence: I, O — ✅ tested: drain then terminate on SIGTERM (internal/app/e2e_test.go TestGatewayShutdownTerminates), container/systemd stop tests (WP24)
 - [x] `HP-OPS-003` Backup command — WP23 — evidence: I, R — ✅ tested: backup create/verify/restore round trip, tamper cases (internal/backup tests)
 - [ ] `HP-OPS-004` Restore onto clean machine — WP23 — evidence: R — ◐ partial: in-process restore tested; scripted clean-container drill pending
 - [ ] `HP-OPS-005` Upgrade and rollback — WP23 — evidence: R, D — ◐ partial: forward-only migrations + docs; previous-release upgrade fixture test pending
 - [ ] `HP-OPS-006` Capacity and disk alerts — WP22 — evidence: I, D — ◐ partial: disk metrics, reserve check refusing channels, readiness degrade; capacity guide pending WP26
 - [ ] `HP-OPS-007` Container and standalone deploy — WP24 — evidence: I, D — ◐ partial: Dockerfile/compose/systemd tested locally (smoke script, compose, systemd-in-container); /readyz + ssh list in smoke pending
-- [ ] `HP-OPS-008` CI pipeline — WP01 — evidence: C — ◐ WP01: lint, vet, custom analyzers, race, fuzz smoke, govulncheck, gitleaks in CI; OpenSSH (WP10), frontend (WP19), Trivy (WP24) pending
+- [ ] `HP-OPS-008` CI pipeline — WP01 — evidence: C — ◐ implemented: CI jobs for lint/vet/analyzers/race/coverage/fuzz smoke/govulncheck/gitleaks/OpenSSH/web+API drift; Trivy in release workflow; not yet run on GitHub
 - [ ] `HP-OPS-009` Release provenance — WP24 — evidence: C — ◐ implemented: release workflow with SBOM, provenance, Trivy; locally exercised, not yet run in CI
 - [ ] `HP-OPS-010` Project documents — WP24 — evidence: D — ◐ partial: SECURITY.md, CONTRIBUTING.md, CHANGELOG.md, VERSIONING.md present; LICENSE pending R-01
 - [ ] `HP-OPS-011` License decision — WP24 — evidence: D
@@ -1949,7 +1949,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-OBS-002` Redaction layer — WP02 — evidence: U — ✅ tested (local) @ WP02: redact.Secret + key denylist in all handlers; planted-secret tests (internal/obs)
 - [ ] `HP-OBS-003` Correlation IDs — WP22 — evidence: I — ◐ partial: correlation handler + HTTP request IDs + audit hook; SSH-side context propagation partial
 - [ ] `HP-OBS-004` Metrics and traces — WP22 — evidence: I — ◐ tested: Prometheus metrics wired and checked end to end (internal/app TestGatewayHealthAndMetrics); OTLP traces; OTLP metrics not implemented
-- [ ] `HP-OBS-005` Audit log — WP05 — evidence: I — ◐ WP05: hash-chained audit_events (length-prefixed canonical rows), Verify detects modify/delete/reorder, sealed sensitive details, post-commit JSONSink; config wiring of the sink file pending WP22
+- [x] `HP-OBS-005` Audit log — WP05 — evidence: I — ✅ tested: hash-chained audit with verify (audit tests, API verify) + optional JSON-lines sink (log.audit_file)
 
 #### HP-TST — Testing and quality
 

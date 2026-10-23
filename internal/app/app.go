@@ -78,6 +78,7 @@ type App struct {
 	UI http.Handler
 
 	notifyOpts func(*notify.Options)
+	auditFile  *os.File
 }
 
 // Option customizes New.
@@ -125,6 +126,14 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 		return nil, err
 	}
 	a.Audit = audit.NewWriter(a.Keyring)
+	if cfg.Log.AuditFile != "" {
+		f, err := os.OpenFile(cfg.Log.AuditFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // operator-configured path
+		if err != nil {
+			return nil, fmt.Errorf("audit file: %w", err)
+		}
+		a.auditFile = f
+		a.Audit.SetSink(audit.NewJSONSink(f))
+	}
 	a.Bus = eventbus.New()
 	a.Jobs = jobs.NewRunner(a.Store, jobs.Options{Logger: log, Clock: a.Clock, Metrics: a.Metrics})
 	a.Outbox = outbox.New(a.Store, a.Keyring, outbox.Options{Logger: log, Clock: a.Clock, Metrics: a.Metrics})
@@ -186,6 +195,10 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	if res.Channels > 0 || res.Connections > 0 {
 		log.Warn("reconciled activity interrupted by the previous process", slog.Int64("connections", res.Connections), slog.Int("channels", res.Channels))
 	}
+	if on, at, err := a.Auth.BreakGlassAlert(ctx); err == nil && on {
+		log.Error("break-glass recovery was used and has not been acknowledged; review the audit log and acknowledge it in system settings",
+			slog.Time("used_at", at))
+	}
 	rr, err := a.Recording.ReconcileStartup(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("recording reconciliation: %w", err)
@@ -224,7 +237,7 @@ func (a *App) RunBackground(ctx context.Context) (wait func()) {
 	})
 	wg.Go(func() {
 		jobs.Periodic(ctx, log, "recording.retention", 10*time.Minute, false, func(ctx context.Context) error {
-			_, err := a.Recording.ApplyRetention(ctx, a.Cfg.Recording.DefaultRetention.D())
+			_, err := a.Recording.ApplyRetention(ctx, a.Cfg.Recording.RetentionFor)
 			return err
 		})
 	})
@@ -252,8 +265,13 @@ func (a *App) RunBackground(ctx context.Context) (wait func()) {
 	return wg.Wait
 }
 
-// Close releases storage.
-func (a *App) Close() error { return a.Store.Close() }
+// Close releases storage and the audit file.
+func (a *App) Close() error {
+	if a.auditFile != nil {
+		_ = a.auditFile.Close()
+	}
+	return a.Store.Close()
+}
 
 // Listen opens a TCP listener.
 func Listen(ctx context.Context, addr string) (net.Listener, error) {

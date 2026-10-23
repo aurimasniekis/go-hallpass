@@ -323,8 +323,8 @@ func (svc *Service) ChainHead(ctx context.Context) (int64, []byte, error) {
 }
 
 // ApplyRetention deletes recordings of closed sessions past their retention and keeps tombstones (HP-REC-013).
-// Sessions without a deletion time get one: closed_at + retention.
-func (svc *Service) ApplyRetention(ctx context.Context, retention time.Duration) (int, error) {
+// Sessions without a deletion time get one: closed_at + retention(class), where class is the role's retention class.
+func (svc *Service) ApplyRetention(ctx context.Context, retention func(class string) time.Duration) (int, error) {
 	pending, err := svc.s.R().ClosedSessionsWithoutRetention(ctx, 500)
 	if err != nil {
 		return 0, err
@@ -337,7 +337,7 @@ func (svc *Service) ApplyRetention(ctx context.Context, retention time.Duration)
 					closed = p.ClosedAt.Int64
 				}
 				if err := tx.Q.SetSessionDeleteAfter(ctx, db.SetSessionDeleteAfterParams{
-					DeleteAfter: sql.NullInt64{Int64: time.UnixMicro(closed).Add(retention).UnixMicro(), Valid: true}, ID: p.ID}); err != nil {
+					DeleteAfter: sql.NullInt64{Int64: time.UnixMicro(closed).Add(retention(p.RetentionClass)).UnixMicro(), Valid: true}, ID: p.ID}); err != nil {
 					return err
 				}
 			}
