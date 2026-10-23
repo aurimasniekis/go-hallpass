@@ -454,7 +454,7 @@ Test layers are abbreviated in `docs/PLAN.md` §21 and in `docs/TEST_STRATEGY.md
 | HP-TST-001 | **Race detector.** All Go tests run with `-race` in CI. |
 | HP-TST-002 | **Fuzzing.** Fuzz targets cover the grammar tokenizer, key parsing, recording reader, selector parser, webhook payload parsing and the reason sanitizer. Each gets ≥ 10 min per release and a 30 s smoke run in CI. |
 | HP-TST-003 | **Real OpenSSH integration.** Integration tests use real OpenSSH `ssh` clients and `sshd` destinations in containers. |
-| HP-TST-004 | **Browser E2E.** Playwright E2E tests cover all operator workflows in Chromium and Firefox. |
+| HP-TST-004 | **Browser E2E.** Playwright E2E tests cover all operator workflows in Chromium (Firefox dropped by operator decision, ADR-0038). |
 | HP-TST-005 | **Fault injection.** The fault-injection catalog in TEST_STRATEGY.md passes. |
 | HP-TST-006 | **Soak.** A 24-hour soak on the reference hardware shows no goroutine or file-descriptor growth beyond 5% and stable RSS. |
 | HP-TST-007 | **Measured performance.** The performance targets in TEST_STRATEGY.md are measured on the documented reference hardware, and the results are recorded in the release evidence. |

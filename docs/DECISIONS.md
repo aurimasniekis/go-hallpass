@@ -580,6 +580,17 @@
 - **Consequences:** HP-REC-012 is implemented and covered by unit and integration tests. The OpenSSH + auditd
   container test from PLAN WP25 does not exist yet, so the requirement stays partial.
 
+### ADR-0038 — Browser E2E runs in Chromium only
+- **Status:** accepted (operator decision, 2026-10-23). Changes HP-TST-004; not security-relevant (no security
+  control, guarantee or default changes; only cross-browser test coverage is reduced).
+- **Context:** HP-TST-004 required the Playwright E2E suite in Chromium and Firefox. The operator asked to use
+  Chromium only and not install Playwright's Firefox build.
+- **Decision:** the E2E suite (including axe accessibility checks) runs in Playwright's Chromium only, on every push.
+  The `firefox` Playwright project and the nightly Firefox run are removed.
+- **Consequences:** Firefox-specific rendering or behavior regressions in the operator UI are not caught by
+  automated tests. The UI uses standard React, Ant Design and xterm.js, which support Firefox, but Firefox support is
+  no longer verified. Reverting is adding the project back to `web/playwright.config.ts` and the nightly job.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

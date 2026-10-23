@@ -25,7 +25,7 @@
 | Z | Fuzz | Go native fuzzing | `Fuzz*` in grammar, agent key parsing, hprec reader, selectors, webhook parsing, sanitizer | 30 s smoke per target each push; ≥ 10 min per target nightly and per release |
 | I | Integration | `go test` with real SQLite + temp dirs + in-process SSH | `internal/**` `_integration_test.go` (build tag `integration`) | every push |
 | O | OpenSSH interop | Docker: `openssh-client` + `sshd` images (OpenSSH 8.9, 9.6, latest), Go test driver | `test/openssh` | every push (latest only), nightly (full matrix) |
-| E | Browser E2E | Playwright (Chromium, Firefox) against a real `hallpass serve` + OpenSSH fixtures | `web/e2e` | every push (Chromium), nightly (both) |
+| E | Browser E2E | Playwright (Chromium) against a real `hallpass serve` + OpenSSH fixtures | `web/e2e` | every push |
 | A | Accessibility | `@axe-core/playwright` on every route, both themes | `web/e2e/a11y` | every push |
 | V | Visual regression | Playwright screenshots (`/__ds` gallery + key pages, light/dark, fixed fonts) | `web/e2e/visual` | every push; baselines updated only in reviewed commits |
 | FI | Fault injection | Fault hooks (`internal/testhooks`, build tag `faults`), failing FS wrapper, `kill -9` harness, `dm-flakey`/VM reset nightly | `test/fault` | nightly + release |
@@ -536,7 +536,7 @@ metrics throughout. Latency is measured client-side with timestamps embedded in 
 | Trigger | Jobs |
 |---|---|
 | Every push / local pre-commit | lint, vet, analyzers, unit + integration (`-race`), fuzz smoke, OpenSSH (latest), Vitest, Playwright Chromium + axe + visual, OpenAPI/sqlc drift, govulncheck, gitleaks, coverage floor |
-| Nightly | full OpenSSH matrix, Playwright Firefox, fuzz ≥ 10 min/target, fault catalog (container-level), recovery drill (container), OIDC interop (Keycloak, Dex), Trivy on image |
+| Nightly | full OpenSSH matrix, fuzz ≥ 10 min/target, fault catalog (container-level), recovery drill (container), OIDC interop (Keycloak, Dex), Trivy on image |
 | Weekly | performance suite on RH-1 |
 | Release candidate | everything above + 24 h soak + FI-24 VM power loss + VM-based restore drill + security review + docs review |
 

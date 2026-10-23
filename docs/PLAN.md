@@ -1190,7 +1190,7 @@ React 19 + TypeScript (strict) + Vite. TanStack Router (file-based routes, type-
 column prefs, saved filters cache), and TanStack Devtools loaded via `import.meta.env.DEV` dynamic import (tree-shaken from prod).
 Ant Design v5 (tables, forms, layout, a11y-reviewed components), Apache ECharts via `echarts-for-react`-style thin wrapper
 with theme registration, xterm.js (+ fit addon) for replay. Package manager pnpm. Lint: ESLint (typescript-eslint strict,
-jsx-a11y), Prettier. Unit/component tests: Vitest + Testing Library. E2E: Playwright (Chromium, Firefox) + `@axe-core/playwright`.
+jsx-a11y), Prettier. Unit/component tests: Vitest + Testing Library. E2E: Playwright (Chromium; ADR-0038) + `@axe-core/playwright`.
 
 ### 14.2 Design system (`web/src/ds/`)
 
