@@ -8,6 +8,49 @@ import (
 	"database/sql"
 )
 
+type AuditEvent struct {
+	ID            string
+	Seq           int64
+	At            int64
+	ActorType     string
+	ActorID       sql.NullString
+	Action        string
+	TargetType    sql.NullString
+	TargetID      sql.NullString
+	Outcome       string
+	SourceIp      sql.NullString
+	CorrelationID sql.NullString
+	DetailsJson   string
+	DetailsEnc    []byte
+	PrevHash      []byte
+	Hash          []byte
+}
+
+type DeliveryAttempt struct {
+	ID         int64
+	OutboxID   string
+	At         int64
+	Outcome    string
+	HttpStatus sql.NullInt64
+	ErrorCode  sql.NullString
+	DurationMs int64
+}
+
+type Job struct {
+	ID          string
+	Kind        string
+	RunAt       int64
+	Attempts    int64
+	MaxAttempts int64
+	LeaseUntil  sql.NullInt64
+	State       string
+	PayloadJson string
+	LastError   sql.NullString
+	DedupKey    sql.NullString
+	CreatedAt   int64
+	UpdatedAt   int64
+}
+
 type KeyringKey struct {
 	ID        string
 	Purpose   string
@@ -17,6 +60,25 @@ type KeyringKey struct {
 	State     string
 	CreatedAt int64
 	UpdatedAt int64
+}
+
+type OutboxMessage struct {
+	ID          string
+	Provider    string
+	Destination string
+	Kind        string
+	SubjectType sql.NullString
+	SubjectID   sql.NullString
+	BodyEnc     []byte
+	State       string
+	Attempts    int64
+	MaxAttempts int64
+	NextAt      int64
+	LeaseUntil  sql.NullInt64
+	ProviderRef sql.NullString
+	LastError   sql.NullString
+	CreatedAt   int64
+	UpdatedAt   int64
 }
 
 type PolicyState struct {

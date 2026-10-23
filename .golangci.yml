@@ -64,7 +64,7 @@ linters:
       - path: cmd/
         linters: [forbidigo]
       - path: _test\.go
-        linters: [gosec, noctx, bodyclose]
+        linters: [gosec, noctx, bodyclose, contextcheck]
     paths:
       - tools/analyzers/.*/testdata
 
