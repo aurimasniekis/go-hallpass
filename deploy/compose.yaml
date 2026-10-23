@@ -1,0 +1,67 @@
+# Hallpass on Docker Compose (HP-OPS-007). Single instance: exactly one Hallpass per data volume, no replicas.
+# Read docs/operator/container.md first. Quick start from this directory:
+#
+#   1. Create the KEK on the Docker host, owned by the container user (UID 65532) and readable only by it:
+#        install -d -m 0700 secrets
+#        hallpass keys init-kek --out secrets/hallpass.kek       # or with the image, see container.md
+#        sudo chown 65532:65532 secrets/hallpass.kek && sudo chmod 0400 secrets/hallpass.kek
+#      Back it up offline, separately from data backups. Never put it inside the data volume.
+#   2. Copy examples/hallpass.container.yaml, replace the placeholders, and point HP_CONFIG_FILE at it.
+#   3. HP_VERSION=X.Y.Z docker compose up -d
+#
+# Interpolation variables use the HP_ prefix on purpose: the hallpass binary rejects unknown HALLPASS_* variables.
+#   HP_VERSION (required)  HP_IMAGE  HP_CONFIG_FILE  HP_KEK_FILE  HP_SSH_PORT  HP_HTTP_PORT
+#
+# The image runs as UID/GID 65532 with no shell. Compose `secrets:` with `file:` is a bind mount, so the host file's
+# owner and mode are what the container sees: Hallpass refuses a KEK readable by group/others or owned by another UID.
+
+name: hallpass
+
+services:
+  hallpass:
+    image: ${HP_IMAGE:-ghcr.io/aurimasniekis/go-hallpass}:${HP_VERSION:?set HP_VERSION to a release, e.g. 1.0.0}
+    command: ["serve"]
+    user: "65532:65532"
+    restart: unless-stopped
+    # Longer than shutdown.drain_timeout (30 s) so draining agents get their notice and recordings are finalized.
+    stop_grace_period: 45s
+    environment:
+      HALLPASS_CONFIG: /etc/hallpass/hallpass.yaml
+    ports:
+      - "${HP_SSH_PORT:-2222}:2222"                 # agent SSH front end
+      - "127.0.0.1:${HP_HTTP_PORT:-8080}:8080"       # web console/API (WP15): expose only via a TLS reverse proxy
+    volumes:
+      - type: volume
+        source: hallpass-data
+        target: /var/lib/hallpass
+      - type: bind
+        source: ${HP_CONFIG_FILE:-./examples/hallpass.container.yaml}
+        target: /etc/hallpass/hallpass.yaml
+        read_only: true
+    secrets:
+      - source: hallpass_kek
+        target: hallpass_kek   # -> /run/secrets/hallpass_kek (kek.file in the example config)
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    # No healthcheck: the image has no shell or curl, and /readyz arrives with WP22. Probe /readyz from outside.
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+volumes:
+  # Local named volume. Do not back it with NFS/SMB/FUSE: Hallpass refuses network filesystems (HP-DB-007).
+  hallpass-data: {}
+
+secrets:
+  hallpass_kek:
+    file: ${HP_KEK_FILE:-./secrets/hallpass.kek}

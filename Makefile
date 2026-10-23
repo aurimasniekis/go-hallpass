@@ -79,3 +79,21 @@ test-netfs:
 	docker run --rm -v "$(CURDIR)":/src -w /src -e GOTOOLCHAIN=auto -e GOFLAGS=-buildvcs=false \
 	  -e HALLPASS_TEST_NETFS_DIR=/src/.netfs-test golang:1.27 \
 	  sh -c 'mkdir -p /src/.netfs-test && go test -count=1 -run "Filesystem" -v ./internal/store/; rc=$$?; rm -rf /src/.netfs-test; exit $$rc'
+
+# ---- WP24: packaging and release (appended block; docs/operator/install.md, docs/operator/container.md) ----
+IMAGE ?= hallpass:local
+
+.PHONY: release-snapshot image image-smoke
+
+# Static release archives + SHA256SUMS for linux/amd64, linux/arm64, darwin/arm64 in dist/ (scripts/release-build.sh).
+release-snapshot:
+	VERSION=$(VERSION) ./scripts/release-build.sh -o dist
+
+# Local container image for the build platform (never pushed).
+image:
+	docker buildx build --load -t $(IMAGE) --build-arg VERSION=$(VERSION) .
+
+# Container smoke test against $(IMAGE): non-root, no shell, KEK checks, migrate, serve + SSH banner, clean SIGTERM.
+image-smoke:
+	./scripts/container-smoke.sh $(IMAGE)
+# ---- end WP24 ----

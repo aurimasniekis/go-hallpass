@@ -1,0 +1,378 @@
+name: release
+
+# Release pipeline (PLAN WP24, ADR-0022, HP-OPS-009). Runs only for pushed v* tags and manual dispatch; never on PRs.
+# Publishing (GHCR push, attestations, draft GitHub release) happens only when the run's ref is a v* tag.
+# A dispatch from a branch builds, scans and uploads workflow artifacts but publishes nothing.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GOTOOLCHAIN: local
+  NODE_VERSION: "24.22.0"
+  TRIVY_VERSION: v0.70.0
+  SYFT_VERSION: v1.54.0
+
+jobs:
+  meta:
+    name: release metadata
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      file_version: ${{ steps.meta.outputs.file_version }}
+      publish: ${{ steps.meta.outputs.publish }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      epoch: ${{ steps.meta.outputs.epoch }}
+      build_date: ${{ steps.meta.outputs.build_date }}
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: meta
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$'
+          if [[ "$REF_TYPE" == "tag" ]]; then
+            if [[ ! "$REF_NAME" =~ $semver ]]; then
+              echo "::error::tag '$REF_NAME' is not vMAJOR.MINOR.PATCH[-PRERELEASE] (docs/VERSIONING.md)"
+              exit 1
+            fi
+            version="$REF_NAME"
+            publish=true
+          else
+            version="v0.0.0-dev+${GITHUB_SHA:0:12}"
+            publish=false
+          fi
+          prerelease=false
+          [[ "$version" == *-* || "$version" == *+* ]] && prerelease=true
+          file_version="${version#v}"
+          file_version="${file_version//+/_}"
+          epoch="$(git log -1 --format=%ct)"
+          {
+            echo "version=$version"
+            echo "file_version=$file_version"
+            echo "publish=$publish"
+            echo "prerelease=$prerelease"
+            echo "epoch=$epoch"
+            echo "build_date=$(date -u -d "@$epoch" +%Y-%m-%dT%H:%M:%SZ)"
+            echo "image=ghcr.io/${REPOSITORY,,}"
+          } >>"$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
+
+  test:
+    name: race tests (release gate)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: vet and race tests
+        run: make vet race
+
+  web:
+    name: web UI (web/dist)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: install (frozen lockfile) and build
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: web-dist
+          path: web/dist
+          if-no-files-found: error
+          retention-days: 7
+
+  binaries:
+    name: static binaries, checksums, SBOM
+    needs: [meta, test, web]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      # Placed where the go:embed step of HP-UI-016 will read it (not embedded yet).
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: web-dist
+          path: web/dist
+      - name: build archives (CGO_ENABLED=0, -trimpath, -buildvcs)
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+          COMMIT: ${{ github.sha }}
+          SOURCE_DATE_EPOCH: ${{ needs.meta.outputs.epoch }}
+          BUILDVCS: "true"
+        run: ./scripts/release-build.sh -o dist linux/amd64 linux/arm64 darwin/arm64
+      - name: smoke-test the linux/amd64 binary
+        env:
+          FILE_VERSION: ${{ needs.meta.outputs.file_version }}
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/smoke"
+          tar -xzf "dist/hallpass_${FILE_VERSION}_linux_amd64.tar.gz" -C "$RUNNER_TEMP/smoke"
+          bin="$RUNNER_TEMP/smoke/hallpass_${FILE_VERSION}_linux_amd64/hallpass"
+          "$bin" version --json | tee "$RUNNER_TEMP/version.json"
+          grep -qF "\"version\":\"${VERSION}\"" "$RUNNER_TEMP/version.json"
+          if file "$bin" | grep -q 'dynamically linked'; then echo "::error::binary is not static"; exit 1; fi
+      - name: unpack binaries for the SBOM
+        env:
+          FILE_VERSION: ${{ needs.meta.outputs.file_version }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sbom-input"
+          for a in dist/*.tar.gz; do tar -xzf "$a" -C "$RUNNER_TEMP/sbom-input"; done
+          echo "SBOM_INPUT=$RUNNER_TEMP/sbom-input" >>"$GITHUB_ENV"
+      - name: SBOM of the shipped binaries (syft)
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          path: ${{ env.SBOM_INPUT }}
+          format: spdx-json
+          syft-version: ${{ env.SYFT_VERSION }}
+          output-file: dist/hallpass_${{ needs.meta.outputs.file_version }}_binaries.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: SBOM of the source tree incl. web dependencies (syft)
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          path: .
+          format: spdx-json
+          syft-version: ${{ env.SYFT_VERSION }}
+          output-file: ${{ runner.temp }}/source.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: checksums over archives and SBOMs
+        env:
+          FILE_VERSION: ${{ needs.meta.outputs.file_version }}
+        run: |
+          set -euo pipefail
+          mv "$RUNNER_TEMP/source.spdx.json" "dist/hallpass_${FILE_VERSION}_source.spdx.json"
+          test -s "dist/hallpass_${FILE_VERSION}_binaries.spdx.json"
+          test -s "dist/hallpass_${FILE_VERSION}_source.spdx.json"
+          cd dist
+          sha256sum -- *.tar.gz *.spdx.json >SHA256SUMS
+          sha256sum --check SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+
+  image-scan:
+    name: container image build + Trivy (no push)
+    needs: [meta, test]
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: true
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Cross-compiled on the build platform; the final stage has no RUN, so no QEMU is needed.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: build linux/${{ matrix.arch }} image to a local archive
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          push: false
+          outputs: type=docker,dest=${{ runner.temp }}/image-${{ matrix.arch }}.tar
+          tags: hallpass:scan-${{ matrix.arch }}
+          build-args: |
+            VERSION=${{ needs.meta.outputs.version }}
+            COMMIT=${{ github.sha }}
+            BUILD_DATE=${{ needs.meta.outputs.build_date }}
+          cache-from: type=gha,scope=image-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=image-${{ matrix.arch }}
+          provenance: false
+          sbom: false
+      - name: Trivy (fail on fixable HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          input: ${{ runner.temp }}/image-${{ matrix.arch }}.tar
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+      # RG-2: unfixed HIGH/CRITICAL findings do not fail the build but must be reviewed and waived in DECISIONS.md.
+      - name: Trivy report of unfixed HIGH/CRITICAL (non-blocking)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          input: ${{ runner.temp }}/image-${{ matrix.arch }}.tar
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: "0"
+          format: table
+          skip-setup-trivy: true
+      - name: container smoke test (amd64 only; runs the image)
+        if: matrix.arch == 'amd64'
+        env:
+          ARCHIVE: ${{ runner.temp }}/image-amd64.tar
+        run: |
+          set -euo pipefail
+          docker load --input "$ARCHIVE"
+          ./scripts/container-smoke.sh hallpass:scan-amd64
+
+  image-publish:
+    name: publish multi-arch image to GHCR
+    needs: [meta, image-scan, binaries]
+    if: needs.meta.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: image tags
+        id: tags
+        env:
+          IMAGE: ${{ needs.meta.outputs.image }}
+          FILE_VERSION: ${{ needs.meta.outputs.file_version }}
+          PRERELEASE: ${{ needs.meta.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          tags="${IMAGE}:${FILE_VERSION}"
+          if [[ "$PRERELEASE" != "true" ]]; then tags="${tags},${IMAGE}:latest"; fi
+          echo "tags=$tags" >>"$GITHUB_OUTPUT"
+      # Same Dockerfile, build args and per-arch layer cache as the scanned images.
+      - name: build and push linux/amd64,linux/arm64
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            VERSION=${{ needs.meta.outputs.version }}
+            COMMIT=${{ github.sha }}
+            BUILD_DATE=${{ needs.meta.outputs.build_date }}
+          cache-from: |
+            type=gha,scope=image-amd64
+            type=gha,scope=image-arm64
+          provenance: mode=max
+          sbom: true
+      - name: Trivy on the pushed digest
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          image-ref: ${{ needs.meta.outputs.image }}@${{ steps.push.outputs.digest }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: build provenance attestation (image)
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ needs.meta.outputs.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+  attest-binaries:
+    name: build provenance attestation (archives, SBOMs)
+    needs: [meta, binaries]
+    if: needs.meta.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-dist
+          path: dist
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: dist/SHA256SUMS
+
+  github-release:
+    name: draft GitHub release
+    needs: [meta, binaries, attest-binaries, image-publish]
+    if: needs.meta.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-dist
+          path: dist
+      # Created as a draft: a maintainer reviews the notes (changelog, RG-9 crypto-review label) and publishes it.
+      - name: create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.meta.outputs.version }}
+          PRERELEASE: ${{ needs.meta.outputs.prerelease }}
+          IMAGE: ${{ needs.meta.outputs.image }}
+          DIGEST: ${{ needs.image-publish.outputs.digest }}
+        run: |
+          set -euo pipefail
+          notes="$RUNNER_TEMP/notes.md"
+          {
+            echo "Container image: \`${IMAGE}@${DIGEST}\`"
+            echo
+            echo "Verify downloads: \`sha256sum --check SHA256SUMS\` and"
+            echo "\`gh attestation verify <file> --repo ${GH_REPO}\` (see docs/operator/install.md)."
+            echo
+            echo "See CHANGELOG.md for changes."
+          } >"$notes"
+          flags=(--draft --verify-tag --title "$TAG" --notes-file "$notes")
+          if [[ "$PRERELEASE" == "true" ]]; then flags+=(--prerelease); fi
+          gh release create "$TAG" "${flags[@]}" dist/*

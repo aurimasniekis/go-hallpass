@@ -1602,7 +1602,7 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP21 | Timeline and replay UI | WP20 | planned | |
 | WP22 | Observability | WP15 | planned | |
 | WP23 | Backup/restore/upgrade/break-glass | WP12, WP13 | implemented | |
-| WP24 | Packaging and release pipeline | WP22, WP23 | planned | |
+| WP24 | Packaging and release pipeline | WP22, WP23 | implemented | |
 | WP25 | Destination-side audit integration | WP12, WP21 | planned | |
 | WP26 | Hardening | WP01–WP25 | planned | |
 | WP27 | Release-gate validation and RC | WP26 | planned | |
@@ -1629,6 +1629,7 @@ local run of the same targets the workflow executes, and the entry says so. Chec
 - 2026-10-23 — WP19 (partial): web foundation: design system with light/dark tokens and a contrast test, API client (CSRF, problem+json, reauth), SSE client, login/setup/shell routes, security lint rules, CSP-safe build check. Unit tests: 232. Still open: Go embedding (HP-UI-016), WP20/21 pages, Playwright flows against a live backend (HP-TST-004), API shapes to reconcile with OpenAPI (WP15). ADR-0029.
 - 2026-10-23 — WP14: generic OIDC SSO (internal/oidc, migration 0010): PKCE code flow, rate-limited JWKS key set, strict ID-token checks, identity by iss+sub, preprovisioned/JIT, group→role sync with last-admin guard, upstream step-up with TOTP fallback, test login gating SSO-only mode, link invitations, RP logout URL; in-process mock IdP (oidctest). Status *implemented*: HTTP endpoints/cookies come with WP15; Keycloak/Dex interop tests not yet run (ADR-0030).
 - 2026-10-23 — WP23: backup/restore/anchors/break-glass CLI (internal/backup, cmd backup|restore|anchors|admin): read-only online snapshot, ciphertext-only segment copy, manifest with hashes and KEK ID, verify, restore with staging and KEK check, anchor export/verify, offline bootstrap/recover. Partial items: restore drill, RTO, upgrade fixture, break-glass alert. ADR-0032 (restore --force security-relevant, R-13).
+- 2026-10-23 — WP24: packaging (root Dockerfile, distroless nonroot, compose, systemd unit), scripted reproducible release builds, release workflow (SBOM, provenance, Trivy, draft release), install/container/upgrade docs, CHANGELOG, VERSIONING, SECURITY.md. Not run on GitHub yet; ADR-0033 (Trivy waiver gap security-relevant, R-14).
 <!-- progress-log-end -->
 
 ---
@@ -1931,10 +1932,10 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-OPS-004` Restore onto clean machine — WP23 — evidence: R — ◐ partial: in-process restore tested; scripted clean-container drill pending
 - [ ] `HP-OPS-005` Upgrade and rollback — WP23 — evidence: R, D — ◐ partial: forward-only migrations + docs; previous-release upgrade fixture test pending
 - [ ] `HP-OPS-006` Capacity and disk alerts — WP22 — evidence: I, D
-- [ ] `HP-OPS-007` Container and standalone deploy — WP24 — evidence: I, D
+- [ ] `HP-OPS-007` Container and standalone deploy — WP24 — evidence: I, D — ◐ partial: Dockerfile/compose/systemd tested locally (smoke script, compose, systemd-in-container); /readyz + ssh list in smoke pending
 - [ ] `HP-OPS-008` CI pipeline — WP01 — evidence: C — ◐ WP01: lint, vet, custom analyzers, race, fuzz smoke, govulncheck, gitleaks in CI; OpenSSH (WP10), frontend (WP19), Trivy (WP24) pending
-- [ ] `HP-OPS-009` Release provenance — WP24 — evidence: C
-- [ ] `HP-OPS-010` Project documents — WP24 — evidence: D
+- [ ] `HP-OPS-009` Release provenance — WP24 — evidence: C — ◐ implemented: release workflow with SBOM, provenance, Trivy; locally exercised, not yet run in CI
+- [ ] `HP-OPS-010` Project documents — WP24 — evidence: D — ◐ partial: SECURITY.md, CONTRIBUTING.md, CHANGELOG.md, VERSIONING.md present; LICENSE pending R-01
 - [ ] `HP-OPS-011` License decision — WP24 — evidence: D
 - [x] `HP-OPS-012` No secrets in repo — WP01 — evidence: C — ✅ tested (local) @ WP01: gitleaks v8.30.1 clean; CI job `security`; .gitignore excludes keys/DBs/recordings
 - [x] `HP-OPS-013` Config and runtime modes — WP02 — evidence: U, I — ✅ tested (local) @ WP02: internal/config (strict YAML, HALLPASS_* env, unknown-key/env rejection, production restrictions), `hallpass config check`
@@ -1962,12 +1963,12 @@ check · R recovery drill · SR security review · D documentation review.
 
 #### HP-DOC — Documentation
 
-- [ ] `HP-DOC-001` Operator guide — WP24 — evidence: D
+- [ ] `HP-DOC-001` Operator guide — WP24 — evidence: D — ◐ partial: install/container/upgrade/backup/observability/sso/recording guides; incident runbooks pending
 - [x] `HP-DOC-002` Agent guide — WP10 — evidence: D — ✅ done: docs/agent/{guide,exit-codes,json-schemas}.md
 - [ ] `HP-DOC-003` Destination hardening guide — WP25 — evidence: D
 - [ ] `HP-DOC-004` Guarantees and non-guarantees — WP27 — evidence: D
 - [x] `HP-DOC-005` Recording format spec — WP12 — evidence: D — ✅ done: docs/formats/hprec1.md + docs/operator/recording.md
-- [ ] `HP-DOC-006` Changelog and versioning — WP24 — evidence: D
+- [ ] `HP-DOC-006` Changelog and versioning — WP24 — evidence: D — ◐ done: CHANGELOG.md + docs/VERSIONING.md (policy commitments await operator review, R-15)
 
 
 ---

@@ -1,0 +1,86 @@
+# Upgrade and rollback
+
+Hallpass upgrades are a binary or image swap. The database schema is migrated at startup (PLAN §18.5, ADR-0023,
+HP-OPS-005). Versioning rules are in [../VERSIONING.md](../VERSIONING.md).
+
+> **Status.** Forward-only migrations, the automatic pre-migration snapshot and the newer-schema refusal are implemented
+> ([storage.md](storage.md)). `hallpass backup`, `hallpass restore` and `hallpass verify --sample` are **not implemented
+> yet** (WP23), and neither is `/readyz` (WP22). Until they land, use the manual steps below. The manual rollback has not
+> been exercised by an automated drill; the upgrade/rollback drill (RG-7) is WP23 work.
+
+## Rules
+
+- **Migrations are forward-only.** There are no down migrations. Each migration runs in its own transaction.
+- **A pre-migration snapshot is automatic.** Before applying migrations to an existing database, Hallpass writes a
+  consistent `VACUUM INTO` copy to `<data_dir>/backups/pre-migrate-<from>-<to>-<UTC>.db` and keeps the newest
+  `storage.pre_migration_snapshots` (default 3). A failed migration rolls back and the process exits, naming the snapshot.
+- **Never run an older binary on a newer schema.** It refuses to start with `database schema is newer than this binary`.
+  Do not work around this.
+- **Rollback = restore a snapshot or backup taken before the upgrade, with the previous binary.** Everything written after
+  that snapshot is lost: requests, grants, sessions, audit events and recording metadata. Recording files written after the
+  snapshot are not referenced by the restored database.
+- **The KEK does not change during an upgrade.** Keep it available; snapshots and backups are useless without it.
+
+## Before upgrading
+
+1. Read the release notes and the `CHANGELOG.md` entry, especially **Security** and any breaking-change notes.
+2. Verify the new artifacts (checksums and `gh attestation verify`, see [install.md](install.md#release-artifacts)).
+3. Take a full backup to a location outside the data directory and the host:
+   - *(pending, WP23)* `hallpass backup` (online, consistent).
+   - Until then: stop Hallpass and copy the entire data directory (database, `-wal`/`-shm` files, `recordings/`,
+     `backups/`) while it is stopped, preserving modes and ownership (`cp -a` or `tar --numeric-owner`).
+     Copying a live data directory is not safe.
+4. Confirm you have an offline copy of the KEK that matches `hallpass keys status` (KEK id).
+
+## Upgrade (systemd)
+
+```sh
+systemctl stop hallpass                       # SIGTERM: drains for up to shutdown.drain_timeout
+install -m 0755 -o root -g root hallpass_NEW_linux_amd64/hallpass /usr/local/bin/hallpass.new
+mv /usr/local/bin/hallpass /usr/local/bin/hallpass.prev   # keep the previous binary for rollback
+mv /usr/local/bin/hallpass.new /usr/local/bin/hallpass
+sudo -u hallpass hallpass config check --config /etc/hallpass/hallpass.yaml
+sudo -u hallpass hallpass migrate --config /etc/hallpass/hallpass.yaml   # optional: migrate now and see the result
+systemctl start hallpass
+journalctl -u hallpass -o cat | grep -E 'migration|serving|error'
+```
+
+Running `hallpass migrate` explicitly is optional: `serve` applies pending migrations at startup the same way. It prints
+`database schema at version N (binary supports N)`.
+
+Afterwards *(pending, WP22/WP23)*: check `GET /readyz` and run `hallpass verify --sample`. Until then, run
+`hallpass verify` offline on a maintenance window if you need recording verification.
+
+## Upgrade (container / Compose)
+
+```sh
+docker compose stop hallpass                  # stop_grace_period 45 s covers the 30 s drain
+HP_VERSION=NEW docker compose up -d
+docker compose logs -f hallpass
+```
+
+Pin images by version (or digest), never by `latest`, so a restart cannot upgrade implicitly.
+
+## Rollback
+
+Rollback restores state from before the upgrade. Data written after it is lost.
+
+1. Stop Hallpass.
+2. Choose the restore source:
+   - the full backup from "Before upgrading" (preferred), or
+   - the automatic snapshot `<data_dir>/backups/pre-migrate-<from>-<to>-<UTC>.db` for this upgrade.
+3. Restore *(pending, WP23: `hallpass restore` into an empty directory with manifest and KEK checks)*. Manual
+   procedure until then:
+   - **Full backup:** move the current data directory aside and copy the backup back with its modes and ownership.
+   - **Pre-migration snapshot:** move `hallpass.db`, `hallpass.db-wal` and `hallpass.db-shm` aside **together** (a stale
+     WAL must never be applied to a different database file), then copy the snapshot to `hallpass.db`, owned by the
+     service user with mode `0600`.
+4. Reinstall the previous binary or image (`/usr/local/bin/hallpass.prev`, or the previous `HP_VERSION`).
+5. Start it and check the logs. Startup reconciliation marks sessions that were open at the snapshot as interrupted.
+   Recording files that the restored database does not reference are moved to `quarantine/` by reconciliation.
+6. Keep the moved-aside newer database until you are sure it is not needed, then delete it securely.
+
+## Supported upgrade paths
+
+Upgrades are supported from the previous minor release of the same major version, in order. Skipping versions is
+supported only when the release notes say so. Downgrades are only possible by restoring a pre-upgrade backup, as above.

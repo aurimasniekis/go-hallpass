@@ -1,0 +1,76 @@
+# Hallpass standalone deployment (HP-OPS-007). Install: docs/operator/install.md.
+#
+#   /usr/local/bin/hallpass           binary, root-owned 0755
+#   /etc/hallpass/hallpass.yaml       configuration (secret-free), root:hallpass 0640
+#   /etc/hallpass/kek                 KEK, hallpass:hallpass 0400 (hallpass keys init-kek); never inside the data dir
+#   /var/lib/hallpass                 data dir, hallpass:hallpass 0700 (StateDirectory)
+#
+# Check the sandbox on the target host with: systemd-analyze security hallpass.service
+
+[Unit]
+Description=Hallpass SSH access gateway for AI agents
+Documentation=file:/usr/local/share/doc/hallpass/install.md
+After=network-online.target
+Wants=network-online.target
+# Refuse to start when the KEK is absent (Hallpass would refuse too; this gives a clearer status).
+AssertPathExists=/etc/hallpass/kek
+
+[Service]
+Type=simple
+User=hallpass
+Group=hallpass
+Environment=HALLPASS_CONFIG=/etc/hallpass/hallpass.yaml
+ExecStart=/usr/local/bin/hallpass serve
+# Pending database migrations run at startup after a pre-migration snapshot (docs/operator/upgrade.md).
+Restart=on-failure
+RestartSec=5s
+# SIGTERM starts the graceful drain (shutdown.drain_timeout, default 30 s); allow time to finalize recordings.
+KillSignal=SIGTERM
+KillMode=mixed
+TimeoutStopSec=45s
+TimeoutStartSec=120s
+LimitNOFILE=65536
+UMask=0077
+
+# Data directory: created as /var/lib/hallpass, owned by User=, mode 0700 (HP-DB-010).
+StateDirectory=hallpass
+StateDirectoryMode=0700
+
+# ---- Sandboxing -----------------------------------------------------------------------------------------------------
+NoNewPrivileges=yes
+# Listening on 2222 needs no capabilities. To bind port 22 directly, add
+#   AmbientCapabilities=CAP_NET_BIND_SERVICE
+#   CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+# or redirect 22 -> 2222 in the firewall instead (preferred).
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ReadWritePaths=/var/lib/hallpass
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateIPC=yes
+ProtectHostname=yes
+ProtectClock=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @mount @swap @reboot @raw-io @module @debug @cpu-emulation @obsolete
+SystemCallErrorNumber=EPERM
+DevicePolicy=closed
+KeyringMode=private
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,30 @@
+# Hallpass configuration for the container image (deploy/compose.yaml, docs/operator/container.md).
+# Secret-free: replace the placeholder values below. The KEK is mounted separately as a secret and never lives in
+# this file or in the data volume. Every key can be overridden with HALLPASS_<PATH> environment variables.
+
+mode: production
+data_dir: /var/lib/hallpass                 # the data volume; 0700, owned by UID 65532
+public_url: https://hallpass.example.com    # placeholder: the externally reachable https URL of the web console
+
+kek:
+  source: file
+  file: /run/secrets/hallpass_kek           # Compose secret; outside data_dir (enforced in production)
+
+ssh:
+  listen: ":2222"
+  env_allow: [TERM, LANG, "LC_*"]
+
+http:
+  listen: ":8080"                           # publish on loopback and terminate TLS at a reverse proxy
+  trusted_proxies: []                       # CIDRs of that proxy, e.g. the Compose network range
+
+log:
+  level: info
+  format: json                              # stdout; collect with `docker logs` or your log driver
+
+egress:
+  allow_cidrs:                              # placeholder: the networks your destination servers live in
+    - 10.0.0.0/8
+
+shutdown:
+  drain_timeout: 30s                        # keep below the Compose stop_grace_period (45s)

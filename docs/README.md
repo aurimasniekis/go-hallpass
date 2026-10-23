@@ -20,4 +20,10 @@ as the corresponding work packages land:
 | [destination/hardening.md](destination/hardening.md) | Destination setup: authorized_keys restrictions, certificates, sshd hardening (HP-DOC-003). |
 | [formats/hprec1.md](formats/hprec1.md) | HPREC1 encrypted recording segment format. |
 | [operator/recording.md](operator/recording.md) | Recording durability, verification, reconciliation and retention. |
+| [operator/install.md](operator/install.md) | Installation: binaries, container, Compose, systemd, KEK provisioning. |
+| [operator/container.md](operator/container.md) | Container image details and hardening. |
+| [operator/upgrade.md](operator/upgrade.md) | Upgrades, migrations and rollback. |
+| [operator/backup.md](operator/backup.md) | Backup, restore drill, integrity anchors, break-glass recovery. |
+| [operator/observability.md](operator/observability.md) | Logs, metrics, health/readiness, tracing, alerts. |
+| [VERSIONING.md](VERSIONING.md) | Versioning policy for the binary, API, schemas, recording format and database. |
 | [operator/sso.md](operator/sso.md) | OIDC single sign-on: providers, linking, group mapping, step-up, SSO-only mode. |
