@@ -1,0 +1,92 @@
+== list
+SERVER      ROLE      ACCESS       ACTIVE       DESCRIPTION
+foo-server                                      Primary web server
+            inspect   requestable  -            Read-only inspection
+            deploy    auto         29m13s left  Deploy releases
+db1
+            readonly  visible      -
+== list-empty
+No servers are visible to this agent.
+== roles
+Server: foo-server (Primary web server)
+
+ROLE     ACCESS       CAPABILITIES         DEFAULT  MAX    DURATIONS   ACTIVE   DESCRIPTION
+inspect  requestable  exec,pty,shell       30m      1h     15m,30m,1h  -        Read-only inspection
+deploy   auto         exec,env:DEPLOY_ENV  10m      1h30m  -           0s left
+== roles-empty
+Server: x
+
+No roles are visible on this server.
+== request
+request:   req_01jabcdefghjkmnpqrstvwxyz0
+server:    foo-server
+role:      inspect
+state:     pending
+duration:  30m
+created:   2026-10-23T14:02:11Z
+expires:   2026-10-23T14:32:11Z
+grant:     -
+== request-approved
+request:        req_01jabcdefghjkmnpqrstvwxyz0
+server:         foo-server
+role:           deploy
+state:          approved (existing request reused)
+duration:       1h30m
+created:        2026-10-23T14:02:11Z
+expires:        2026-10-23T14:32:11Z
+grant:          grt_01jabcdefghjkmnpqrstvwxyz1 (active)
+grant starts:   2026-10-23T13:57:11Z
+grant expires:  2026-10-23T14:27:11Z
+remaining:      25m
+== status
+request:   req_01jabcdefghjkmnpqrstvwxyz0
+server:    foo-server
+role:      inspect
+state:     pending
+duration:  30m
+created:   2026-10-23T14:02:11Z
+expires:   2026-10-23T14:32:11Z
+decided:   -
+grant:     -
+== status-approved
+request:        req_01jabcdefghjkmnpqrstvwxyz0
+server:         foo-server
+role:           inspect
+state:          approved
+duration:       30m
+created:        2026-10-23T13:56:11Z
+expires:        2026-10-23T14:32:11Z
+decided:        2026-10-23T13:57:11Z
+grant:          grt_01jabcdefghjkmnpqrstvwxyz1 (active)
+grant starts:   2026-10-23T13:57:11Z
+grant expires:  2026-10-23T14:27:11Z
+remaining:      25m
+== status-denied
+request:   req_01jabcdefghjkmnpqrstvwxyz0
+server:    foo-server
+role:      inspect
+state:     denied (not during the freeze)
+duration:  30m
+created:   2026-10-23T14:02:11Z
+expires:   2026-10-23T14:32:11Z
+decided:   2026-10-23T14:02:11Z
+grant:     -
+== sessions
+GRANT                           SERVER      ROLE      STATE               REMAINING  EXPIRES               CONNECTIONS
+grt_01jabcdefghjkmnpqrstvwxyz1  foo-server  deploy    active              25m        2026-10-23T14:27:11Z  1 active / 3 total
+grt_01jabcdefghjkmnpqrstvwxyz3  db1         readonly  revoked (operator)  -          2026-10-23T13:02:11Z  0 active / 0 total
+== sessions-empty
+No sessions.
+== whoami
+agent:        agt_01jabcdefghjkmnpqrstvwxyz4 (ci-bot)
+key:          key_01jabcdefghjkmnpqrstvwxyz5
+fingerprint:  SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+source:       192.0.2.10
+== version
+hallpass:  1.2.3 (abc1234)
+grammar:   1
+schemas:   hallpass.list/v1,hallpass.roles/v1,hallpass.request/v1,hallpass.status/v1,hallpass.sessions/v1,hallpass.whoami/v1,hallpass.version/v1,hallpass.error/v1
+== version-dev
+hallpass:  dev
+grammar:   1
+schemas:   hallpass.list/v1,hallpass.roles/v1,hallpass.request/v1,hallpass.status/v1,hallpass.sessions/v1,hallpass.whoami/v1,hallpass.version/v1,hallpass.error/v1

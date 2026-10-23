@@ -1,0 +1,1 @@
+{"schema":"hallpass.version/v1","version":"dev","commit":null,"grammar_version":"1","schemas":["hallpass.list/v1","hallpass.roles/v1","hallpass.request/v1","hallpass.status/v1","hallpass.sessions/v1","hallpass.whoami/v1","hallpass.version/v1","hallpass.error/v1"]}

@@ -1,26 +1,18 @@
 package inventory
 
-import (
-	"regexp"
-	"slices"
-	"strings"
-)
+import "github.com/aurimasniekis/go-hallpass/internal/inventory/alias"
 
-// ReservedWords can never be server or role aliases because they are SSH gateway commands (HP-SSH-017).
-var ReservedWords = []string{
-	"list", "ls", "roles", "request", "status", "cancel", "connect", "exec", "sessions", "help", "version", "whoami",
-	"admin", "api", "login", "logout", "shell", "ssh", "sftp", "scp", "hallpass",
-}
+// ReservedWords re-exports the reserved gateway words (HP-SSH-017).
+var ReservedWords = alias.ReservedWords
 
-var aliasRE = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
-
-// ValidAlias reports whether s is a usable server/role alias: the alias syntax and not reserved.
-func ValidAlias(s string) bool {
-	return aliasRE.MatchString(s) && !IsReserved(s) && !strings.HasSuffix(s, "-")
-}
+// ValidAlias reports whether s is a usable server/role alias.
+func ValidAlias(s string) bool { return alias.Valid(s) }
 
 // IsReserved reports whether s is a reserved gateway word.
-func IsReserved(s string) bool { return slices.Contains(ReservedWords, s) }
+func IsReserved(s string) bool { return alias.IsReserved(s) }
 
 // AliasRule describes the alias syntax for error messages.
-const AliasRule = "1-63 characters: lowercase letter first, then lowercase letters, digits or '-', not ending in '-', and not a reserved word"
+const AliasRule = alias.Rule
+
+// aliasRE is used for non-alias names (CA names) that share the syntax.
+var aliasRE = struct{ MatchString func(string) bool }{MatchString: alias.Syntax}

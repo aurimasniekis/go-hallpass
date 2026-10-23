@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hallpass:ssh-schema:error:v1",
+  "title": "hallpass.error/v1",
+  "description": "A gateway error: exactly one line on stderr.",
+  "type": "object",
+  "required": [
+    "schema",
+    "source",
+    "code",
+    "exit_code",
+    "message",
+    "request_id"
+  ],
+  "properties": {
+    "schema": {
+      "const": "hallpass.error/v1"
+    },
+    "source": {
+      "const": "gateway"
+    },
+    "code": {
+      "enum": [
+        "internal",
+        "usage",
+        "not_found_or_forbidden",
+        "denied",
+        "expired",
+        "canceled",
+        "wait_timeout",
+        "access_ended",
+        "destination_unavailable",
+        "limit_exceeded",
+        "input_required"
+      ]
+    },
+    "exit_code": {
+      "type": "integer",
+      "minimum": 80,
+      "maximum": 90
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1
+    },
+    "request_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^req_[0-9a-hjkmnp-tv-z]{26}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

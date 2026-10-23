@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hallpass:ssh-schema:version:v1",
+  "title": "hallpass.version/v1",
+  "description": "Gateway, grammar and schema versions (ssh <gateway> version --json).",
+  "type": "object",
+  "required": [
+    "schema",
+    "version",
+    "commit",
+    "grammar_version",
+    "schemas"
+  ],
+  "properties": {
+    "schema": {
+      "const": "hallpass.version/v1"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "commit": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "grammar_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schemas": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^hallpass\\.[a-z]+/v[0-9]+$"
+      }
+    }
+  }
+}

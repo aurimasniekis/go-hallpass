@@ -34,6 +34,22 @@ linters:
               desc: use crypto/rand; Hallpass is security-sensitive
             - pkg: math/rand/v2
               desc: use crypto/rand; Hallpass is security-sensitive
+        grammar-is-pure:
+          # PLAN §15: the agent command grammar does no I/O and depends on no storage or network packages.
+          files:
+            - "**/internal/sshfront/grammar/*.go"
+            - "!$test"
+          deny:
+            - pkg: github.com/aurimasniekis/go-hallpass/internal/store
+              desc: the grammar must not depend on storage
+            - pkg: github.com/aurimasniekis/go-hallpass/internal/inventory$
+              desc: use internal/inventory/alias (leaf package)
+            - pkg: database/sql
+              desc: the grammar does no I/O
+            - pkg: net
+              desc: the grammar does no I/O
+            - pkg: os
+              desc: the grammar does no I/O
         no-legacy-log:
           files:
             - "!**/cmd/**"

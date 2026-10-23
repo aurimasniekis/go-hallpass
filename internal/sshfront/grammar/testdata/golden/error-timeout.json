@@ -1,0 +1,1 @@
+{"schema":"hallpass.error/v1","source":"gateway","code":"wait_timeout","exit_code":86,"message":"request req_01jabcdefghjkmnpqrstvwxyz0 is still pending after 2m; it stays pending. Resume with: status req_01jabcdefghjkmnpqrstvwxyz0 --wait","request_id":"req_01jabcdefghjkmnpqrstvwxyz0"}

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hallpass:ssh-schema:whoami:v1",
+  "title": "hallpass.whoami/v1",
+  "description": "The authenticated agent (ssh <gateway> whoami --json).",
+  "type": "object",
+  "required": [
+    "schema",
+    "agent_id",
+    "agent_name",
+    "key_id",
+    "key_fingerprint",
+    "source_ip"
+  ],
+  "properties": {
+    "schema": {
+      "const": "hallpass.whoami/v1"
+    },
+    "agent_id": {
+      "type": "string",
+      "pattern": "^agt_[0-9a-hjkmnp-tv-z]{26}$"
+    },
+    "agent_name": {
+      "type": "string"
+    },
+    "key_id": {
+      "type": "string",
+      "pattern": "^key_[0-9a-hjkmnp-tv-z]{26}$"
+    },
+    "key_fingerprint": {
+      "type": "string",
+      "pattern": "^SHA256:[A-Za-z0-9+/]{43}$"
+    },
+    "source_ip": {
+      "type": "string"
+    }
+  }
+}

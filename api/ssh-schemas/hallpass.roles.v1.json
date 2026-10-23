@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hallpass:ssh-schema:roles:v1",
+  "title": "hallpass.roles/v1",
+  "description": "Roles of one visible server (ssh <gateway> roles <server> --json).",
+  "type": "object",
+  "required": [
+    "schema",
+    "server",
+    "roles"
+  ],
+  "properties": {
+    "schema": {
+      "const": "hallpass.roles/v1"
+    },
+    "server": {
+      "type": "object",
+      "required": [
+        "alias",
+        "description"
+      ],
+      "properties": {
+        "alias": {
+          "$ref": "#/$defs/alias"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "roles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "alias",
+          "description",
+          "level",
+          "capabilities",
+          "default_duration",
+          "max_duration",
+          "allowed_durations",
+          "active_grant"
+        ],
+        "properties": {
+          "alias": {
+            "$ref": "#/$defs/alias"
+          },
+          "description": {
+            "type": "string"
+          },
+          "level": {
+            "enum": [
+              "visible",
+              "requestable",
+              "auto"
+            ],
+            "description": "Agent's access level for the role."
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "default_duration": {
+            "$ref": "#/$defs/duration"
+          },
+          "max_duration": {
+            "$ref": "#/$defs/duration"
+          },
+          "allowed_durations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/duration"
+            }
+          },
+          "active_grant": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/active_grant"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "description": "RFC 3339 UTC timestamp, second precision."
+    },
+    "duration": {
+      "type": "string",
+      "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
+      "description": "Go duration string (time.ParseDuration)."
+    },
+    "alias": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,62}$"
+    },
+    "active_grant": {
+      "description": "The agent's active grant on this role.",
+      "type": "object",
+      "required": [
+        "grant_id",
+        "expires_at",
+        "remaining"
+      ],
+      "properties": {
+        "grant_id": {
+          "type": "string",
+          "pattern": "^grt_[0-9a-hjkmnp-tv-z]{26}$"
+        },
+        "expires_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "remaining": {
+          "$ref": "#/$defs/duration"
+        }
+      }
+    }
+  }
+}

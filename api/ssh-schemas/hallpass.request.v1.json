@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hallpass:ssh-schema:request:v1",
+  "title": "hallpass.request/v1",
+  "description": "A created or reused access request (ssh <gateway> request <server> --json).",
+  "type": "object",
+  "required": [
+    "schema",
+    "request"
+  ],
+  "properties": {
+    "schema": {
+      "const": "hallpass.request/v1"
+    },
+    "request": {
+      "type": "object",
+      "required": [
+        "id",
+        "server",
+        "role",
+        "state",
+        "deduplicated",
+        "created_at",
+        "expires_at",
+        "requested_duration",
+        "grant"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^req_[0-9a-hjkmnp-tv-z]{26}$"
+        },
+        "server": {
+          "$ref": "#/$defs/alias"
+        },
+        "role": {
+          "$ref": "#/$defs/alias"
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "approved",
+            "denied",
+            "expired",
+            "canceled"
+          ]
+        },
+        "deduplicated": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "expires_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "requested_duration": {
+          "$ref": "#/$defs/duration"
+        },
+        "grant": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/grant"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "description": "RFC 3339 UTC timestamp, second precision."
+    },
+    "duration": {
+      "type": "string",
+      "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
+      "description": "Go duration string (time.ParseDuration)."
+    },
+    "alias": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,62}$"
+    },
+    "grant": {
+      "description": "Grant created from the request.",
+      "type": "object",
+      "required": [
+        "id",
+        "state",
+        "starts_at",
+        "expires_at",
+        "remaining"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^grt_[0-9a-hjkmnp-tv-z]{26}$"
+        },
+        "state": {
+          "enum": [
+            "active",
+            "expired",
+            "revoked"
+          ]
+        },
+        "starts_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "expires_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "remaining": {
+          "$ref": "#/$defs/duration"
+        }
+      }
+    }
+  }
+}

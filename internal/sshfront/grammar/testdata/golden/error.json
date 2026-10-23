@@ -1,0 +1,1 @@
+{"schema":"hallpass.error/v1","source":"gateway","code":"not_found_or_forbidden","exit_code":82,"message":"server or role not found or not permitted","request_id":null}
