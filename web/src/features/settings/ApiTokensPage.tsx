@@ -87,7 +87,7 @@ export function ApiTokensPage() {
             A token acts for you, with one of your roles, until it expires or is revoked. It stops working if
             you lose that role or your account is disabled. It can read what the role allows and change
             configuration: agents, servers, git remotes, roles, keys, policy, single sign-on and chat
-            integrations. It can never approve or deny requests, revoke access, read recordings, manage
+            integrations. It can never approve or deny requests, revoke access, read recordings, change
             operators or tokens, or use lockdown. Its changes are recorded in the audit log under your name,
             marked with the token.
           </>
