@@ -69,10 +69,3 @@ html:not(.dark) .hp-shot .hp-dark {
   border-top: 0;
 }
 
-.hp-status {
-  border-left: 4px solid var(--vp-c-warning-1);
-  background: var(--vp-c-warning-soft);
-  padding: 12px 16px;
-  border-radius: 6px;
-  margin: 16px 0;
-}

@@ -50,13 +50,6 @@ features:
 
 <div class="hp-home">
 
-<div class="hp-status">
-
-**Version 0.1.0.** Read the [security model](/security/) and its known limitations before you run HallPass
-anywhere that matters.
-
-</div>
-
 ## How it works
 
 <Flow />
