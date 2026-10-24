@@ -318,3 +318,15 @@ func (q *Queries) OutboxBySubject(ctx context.Context, arg OutboxBySubjectParams
 	}
 	return items, nil
 }
+
+const purgeFinishedOutbox = `-- name: PurgeFinishedOutbox :execrows
+DELETE FROM outbox_messages WHERE state IN ('delivered', 'dead') AND updated_at < ?
+`
+
+func (q *Queries) PurgeFinishedOutbox(ctx context.Context, updatedAt int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, purgeFinishedOutbox, updatedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}

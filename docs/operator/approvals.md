@@ -38,7 +38,8 @@ canceled or expires, the messages are edited to show the outcome.
 
 Messages go through the durable outbox:
 - up to 8 attempts with exponential backoff, then a `dead` state;
-- delivery history under **Settings → Integrations → Deliveries** (`GET /api/v1/notification-deliveries`);
+- delivery history under **Settings → Integrations → Deliveries** (`GET /api/v1/notification-deliveries`), kept for
+  30 days after the last attempt, then deleted together with the encrypted message;
 - dead letters are counted in the `hallpass_outbox_dead` metric.
 
 A failed notification never approves anything. The request stays pending until it is decided, canceled or expires

@@ -172,3 +172,48 @@ func TestEnqueueValidation(t *testing.T) {
 		t.Fatal("invalid message accepted")
 	}
 }
+
+// HP-DB-011: finished messages and their attempts are purged after retention; pending ones never are.
+func TestPurgeFinished(t *testing.T) {
+	s, o, ctx := setup(t)
+	hold := make(chan struct{})
+	defer close(hold)
+	o.RegisterProvider("fake", &fakeProvider{fn: func(_ int32, d Delivery) (Result, error) {
+		if d.Destination == "C-slow" {
+			<-hold // stays in flight until the test ends
+		}
+		if d.Destination == "C-dead" {
+			return Result{HTTPStatus: 404}, fmt.Errorf("channel gone: %w", ErrPermanent)
+		}
+		return Result{ProviderRef: "ts", HTTPStatus: 200}, nil
+	}})
+	go o.Run(ctx, 2)
+	delivered := enqueue(t, s, o, msg())
+	deadMsg := msg()
+	deadMsg.Destination = "C-dead"
+	dead := enqueue(t, s, o, deadMsg)
+	pendingMsg := msg()
+	pendingMsg.Destination = "C-slow"
+	pending := enqueue(t, s, o, pendingMsg)
+	waitState(t, s, delivered, "delivered")
+	waitState(t, s, dead, "dead")
+	waitState(t, s, pending, "sending")
+
+	if n, err := o.Purge(context.Background(), time.Now().Add(-time.Hour)); err != nil || n != 0 {
+		t.Fatalf("purge before retention: n=%d err=%v", n, err)
+	}
+	if n, err := o.Purge(context.Background(), time.Now().Add(time.Second)); err != nil || n != 2 {
+		t.Fatalf("purge after retention: n=%d err=%v", n, err)
+	}
+	for _, id := range []string{delivered, dead} {
+		if _, err := s.R().GetOutboxMessage(context.Background(), id); err == nil {
+			t.Fatalf("%s survived the purge", id)
+		}
+		if atts, _ := s.R().ListDeliveryAttempts(context.Background(), id); len(atts) != 0 {
+			t.Fatalf("attempts of %s survived the purge", id)
+		}
+	}
+	if m, err := s.R().GetOutboxMessage(context.Background(), pending); err != nil || m.State != "sending" {
+		t.Fatalf("in-flight message purged or changed: %+v %v", m, err)
+	}
+}

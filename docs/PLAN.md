@@ -1824,7 +1824,7 @@ check · R recovery drill · SR security review · D documentation review.
 
 - [x] `HP-DB-001` Pure-Go driver — WP03 — evidence: C — ✅ tested (local) @ WP03: modernc.org/sqlite; `CGO_ENABLED=0` linux/amd64+arm64 builds
 - [x] `HP-DB-002` Per-connection pragmas — WP03 — evidence: I — ✅ tested (local) @ WP03: DSN pragmas; VerifyPragmas over every pooled conn at startup + TestPragmasEveryConnection
-- [ ] `HP-DB-003` Writer/reader split — WP03 — evidence: I, S — ◐ WP03: single writer (BEGIN IMMEDIATE via _txlock), query_only readers, 5 jittered retries (TestConcurrentWriters, TestBusyRetryAndGiveUp); queue/wait metrics export pending WP22
+- [x] `HP-DB-003` Writer/reader split — WP03 — evidence: I, S — ✅ tested: single writer (BEGIN IMMEDIATE), query_only readers, 5 jittered busy retries (TestConcurrentWriters, TestBusyRetryAndGiveUp); writer wait histogram and queue-depth gauge exported (TestWriterMetrics, TestWriterQueueDepth)
 - [x] `HP-DB-004` Short transactions — WP03 — evidence: I, C — ✅ tested (local) @ WP03: txscope analyzer + storetest fails tx > 100 ms
 - [x] `HP-DB-005` Safe migrations — WP03 — evidence: I, FI — ✅ tested (local) @ WP03: goose embedded forward-only, under flock, pre-migration VACUUM INTO snapshot, failure rollback + newer-schema refusal tests
 - [x] `HP-DB-006` Single active instance — WP03 — evidence: I — ✅ tested (local) @ WP03: flock hallpass.lock (TestSecondOwnerRefused)
@@ -1832,7 +1832,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-DB-008` Corruption checks — WP03 — evidence: I, FI — ✅ tested: startup quick_check refusal, daily integrity_check job, readiness store health (store + obs/health tests)
 - [x] `HP-DB-009` Disk-full and I/O failure — WP03 — evidence: FI — ✅ tested: disk-full degrade sticky until a page-allocating probe commits, I/O failure classes, reserve refusal (fault FI-05/06/07, store tests)
 - [x] `HP-DB-010` Filesystem permissions — WP03 — evidence: I — ✅ tested (local) @ WP03/WP04: data dir 0700 + owner, DB files 0600, KEK file mode/owner refusal
-- [ ] `HP-DB-011` Bounded growth — WP03 — evidence: I, S — ◐ WP03: incremental auto_vacuum, Checkpoint/IncrementalVacuum/Sizes; retention jobs + metrics pending WP05/WP12/WP22
+- [x] `HP-DB-011` Bounded growth — WP03 — evidence: I, S — ✅ tested: recording retention, outbox (30 d) and job (7 d) purges (TestPurgeFinished in outbox and jobs), 5-minute bounded incremental vacuum + WAL TRUNCATE checkpoint (TestIncrementalVacuumReturnsFreePages), DB/WAL size gauges (TestWriterMetrics)
 - [x] `HP-DB-012` Consistent backup primitive — WP03 — evidence: I, R — ✅ tested: snapshot + segment copy + manifest (backup package)
 - [x] `HP-DB-013` Crash reconciliation — WP09 — evidence: FI, I — ✅ tested: startup reconciliation after SIGKILL during requests, recording and finalize (fault FI-01..FI-04, FI-23)
 - [ ] `HP-DB-014` Recovery objectives — WP23 — evidence: R, D — ◐ partial: documented; RTO not measured

@@ -312,6 +312,22 @@ func (o *Outbox) deliver(parent context.Context, c claimed) {
 	o.m.NotificationDelivery(metrics.Provider(c.Provider), mo)
 }
 
+// Retention is how long delivered and dead-lettered messages, with their delivery attempts, are kept (HP-DB-011).
+// They are only needed until the request they announce is decided; the delivery history shows this window.
+const Retention = 30 * 24 * time.Hour
+
+// Purge deletes delivered and dead-lettered messages last updated before before. Queued and in-flight messages are
+// never removed. Delivery attempts go with their message.
+func (o *Outbox) Purge(ctx context.Context, before time.Time) (int64, error) {
+	var n int64
+	err := o.s.W().TxNamed(ctx, "outbox.purge", func(tx *store.Tx) error {
+		var err error
+		n, err = tx.Q.PurgeFinishedOutbox(ctx, before.UnixMicro())
+		return err
+	})
+	return n, err
+}
+
 // BacklogRefresh is how often Run re-reads the pending and dead-letter counts for metrics.
 const BacklogRefresh = 15 * time.Second
 

@@ -124,7 +124,9 @@ func TxResult(err error) metrics.TxResult {
 
 func (w *Writer) attempt(ctx context.Context, fn func(tx *Tx) error) (hooks []func(), err error) {
 	waitStart := time.Now()
+	w.metrics.StoreWriterQueue(1)
 	sqlTx, err := w.db.BeginTx(ctx, nil)
+	w.metrics.StoreWriterQueue(-1)
 	w.metrics.StoreWriterWait(time.Since(waitStart)) // pool wait + BEGIN IMMEDIATE lock acquisition (HP-DB-003)
 	if err != nil {
 		return nil, classify(fmt.Errorf("begin: %w", err))

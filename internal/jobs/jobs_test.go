@@ -169,3 +169,25 @@ func TestPeriodic(t *testing.T) {
 		t.Fatalf("ran %d times", n.Load())
 	}
 }
+
+// HP-DB-011: finished jobs are purged after retention; queued ones never are.
+func TestPurgeFinished(t *testing.T) {
+	s, r, ctx := newRunner(t)
+	r.Register("demo", 1, 0, func(context.Context, Job) error { return nil })
+	r.Register("broken", 1, 0, func(context.Context, Job) error { return errors.New("boom") })
+	go r.Run(ctx)
+	done := enqueue(t, s, r, "demo", EnqueueOptions{})
+	dead := enqueue(t, s, r, "broken", EnqueueOptions{})
+	queued := enqueue(t, s, r, "unregistered", EnqueueOptions{})
+	waitState(t, s, done, "done")
+	waitState(t, s, dead, "dead")
+	if n, err := r.Purge(context.Background(), time.Now().Add(-time.Hour)); err != nil || n != 0 {
+		t.Fatalf("purge before retention: n=%d err=%v", n, err)
+	}
+	if n, err := r.Purge(context.Background(), time.Now().Add(time.Second)); err != nil || n != 2 {
+		t.Fatalf("purge after retention: n=%d err=%v", n, err)
+	}
+	if j, err := s.R().GetJob(context.Background(), queued); err != nil || j.State != "queued" {
+		t.Fatalf("queued job purged or changed: %+v %v", j, err)
+	}
+}

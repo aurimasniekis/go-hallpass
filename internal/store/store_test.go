@@ -441,3 +441,62 @@ func TestTxObserverAndIncrementalVacuum(t *testing.T) {
 		t.Fatal("sizes not reported")
 	}
 }
+
+// HP-DB-011: deleted rows leave free pages; bounded incremental vacuum returns them in steps and the file shrinks
+// once the WAL is checkpointed.
+func TestIncrementalVacuumReturnsFreePages(t *testing.T) {
+	s := openTest(t, Options{})
+	ctx := context.Background()
+	big := strings.Repeat("x", 8<<10)
+	if err := s.W().Tx(ctx, func(tx *Tx) error {
+		for i := range 400 {
+			if err := tx.Q.UpsertSetting(ctx, db.UpsertSettingParams{Key: fmt.Sprintf("bulk.%d", i), Value: big, UpdatedAt: tx.NowMicros()}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Checkpoint(ctx, "TRUNCATE"); err != nil {
+		t.Fatal(err)
+	}
+	full, _ := s.Sizes()
+	if err := s.W().Tx(ctx, func(tx *Tx) error {
+		_, err := tx.SQL.ExecContext(ctx, `DELETE FROM settings WHERE key LIKE 'bulk.%'`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	freelist := func() int64 {
+		var n int64
+		if err := s.W().Tx(ctx, func(tx *Tx) error {
+			return tx.SQL.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&n)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	before := freelist()
+	if before < 200 {
+		t.Fatalf("freelist after delete = %d, want many free pages", before)
+	}
+	if err := s.IncrementalVacuum(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	if got := freelist(); got != before-100 {
+		t.Fatalf("bounded vacuum: freelist %d -> %d, want exactly 100 pages returned", before, got)
+	}
+	if err := s.IncrementalVacuum(ctx, 0); err != nil {
+		t.Fatal(err)
+	}
+	if got := freelist(); got != 0 {
+		t.Fatalf("freelist after full incremental vacuum = %d", got)
+	}
+	if err := s.Checkpoint(ctx, "TRUNCATE"); err != nil {
+		t.Fatal(err)
+	}
+	if after, _ := s.Sizes(); after >= full/2 {
+		t.Fatalf("database did not shrink: %d -> %d bytes", full, after)
+	}
+}

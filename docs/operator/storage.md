@@ -41,6 +41,20 @@ HallPass stores state in a single SQLite database and session content in encrypt
 - A database migrated by a newer HallPass is refused (`database schema is newer than this binary`). Downgrade by restoring
   a backup taken before the upgrade, together with the older binary. Data written after that backup is lost.
 
+## Keeping the database small
+
+The database holds metadata only; session content lives in the recordings directory. Background jobs keep it from
+growing without bound:
+
+| Job | Interval | What it does |
+|---|---|---|
+| `store.wal_checkpoint` | 5 minutes | Returns up to 2048 free pages (about 8 MiB) to the filesystem, then truncates the WAL. |
+| `store.purge_finished` | hourly | Deletes delivered and dead notifications after 30 days and finished background jobs after 7 days. |
+| `recording.retention` | 10 minutes | Deletes recordings past their retention class. |
+| `auth.purge_expired` | 15 minutes | Deletes expired sessions, tokens and login state. |
+
+`hallpass_store_db_bytes` and `hallpass_store_wal_bytes` report the file sizes; see [observability.md](observability.md).
+
 ## Failure behavior
 
 | Condition | Behavior |

@@ -102,6 +102,20 @@ func NewRunner(s *store.Store, opts Options) *Runner {
 	return &Runner{s: s, opts: opts, log: obs.Component(opts.Logger, "jobs"), kinds: map[string]kindConfig{}, wake: make(chan struct{}, 1)}
 }
 
+// Retention is how long finished (done or dead) jobs are kept for inspection (HP-DB-011).
+const Retention = 7 * 24 * time.Hour
+
+// Purge deletes finished jobs last updated before before. Queued and running jobs are never removed.
+func (r *Runner) Purge(ctx context.Context, before time.Time) (int64, error) {
+	var n int64
+	err := r.s.W().TxNamed(ctx, "jobs.purge", func(tx *store.Tx) error {
+		var err error
+		n, err = tx.Q.PurgeFinishedJobs(ctx, before.UnixMicro())
+		return err
+	})
+	return n, err
+}
+
 // Register installs the handler for kind. maxAttempts ≥ 1; timeout bounds each execution (≤ lease).
 func (r *Runner) Register(kind string, maxAttempts int, timeout time.Duration, h Handler) {
 	if maxAttempts < 1 {

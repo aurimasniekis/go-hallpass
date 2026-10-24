@@ -44,6 +44,7 @@ func exercise(m *Metrics) {
 	m.StoreTx("access.open_connection", 3*time.Millisecond, TxOK)
 	m.StoreTxBusyRetry()
 	m.StoreWriterWait(time.Millisecond)
+	m.StoreWriterQueue(1)
 	m.SetStoreSizes(4096, 1024)
 	m.SetOutboxBacklog(2, 1)
 	m.NotificationDelivery(ProviderTelegram, DeliveryRetry)
@@ -113,6 +114,7 @@ func TestCatalogGolden(t *testing.T) {
 		"hallpass_store_tx_total":                     "counter:name,result",
 		"hallpass_store_tx_busy_retries_total":        "counter:",
 		"hallpass_store_writer_wait_seconds":          "histogram:",
+		"hallpass_store_writer_queue_depth":           "gauge:",
 		"hallpass_store_db_bytes":                     "gauge:",
 		"hallpass_store_wal_bytes":                    "gauge:",
 		"hallpass_outbox_pending":                     "gauge:",

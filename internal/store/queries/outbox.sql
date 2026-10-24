@@ -37,3 +37,6 @@ FROM outbox_messages WHERE subject_type = ? AND subject_id = ? ORDER BY created_
 
 -- name: CountOutboxByState :many
 SELECT state, count(*) AS n FROM outbox_messages GROUP BY state;
+
+-- name: PurgeFinishedOutbox :execrows
+DELETE FROM outbox_messages WHERE state IN ('delivered', 'dead') AND updated_at < ?;

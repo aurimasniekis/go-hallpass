@@ -48,6 +48,31 @@ func TestWriterMetrics(t *testing.T) {
 	}
 }
 
+// HP-DB-003: write transactions waiting for the single writer connection are visible as queue depth.
+func TestWriterQueueDepth(t *testing.T) {
+	m := metrics.New()
+	s := openTest(t, Options{Metrics: m, BusyTimeout: 10 * time.Second})
+	ctx := context.Background()
+	// Another connection holds the database write lock for a second, so BEGIN IMMEDIATE has to wait.
+	released := holdWriteLock(t, s.Path(DBFile), time.Second)
+	done := make(chan error, 1)
+	go func() { done <- s.W().TxNamed(ctx, "test.wait", func(tx *Tx) error { return nil }) }()
+	deadline := time.Now().Add(5 * time.Second)
+	for metricstest.Value(t, m, "hallpass_store_writer_queue_depth") != 1 {
+		if time.Now().After(deadline) {
+			t.Fatal("queued writer not reported")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	<-released
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if v := metricstest.Value(t, m, "hallpass_store_writer_queue_depth"); v != 0 {
+		t.Fatalf("queue depth after the transaction = %v", v)
+	}
+}
+
 func TestTxResultClassification(t *testing.T) {
 	for err, want := range map[error]metrics.TxResult{
 		nil: metrics.TxOK, context.Canceled: metrics.TxCanceled, ErrBusy: metrics.TxBusy, ErrFull: metrics.TxFull, ErrIO: metrics.TxIO,

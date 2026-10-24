@@ -41,6 +41,10 @@ import (
 	webui "github.com/aurimasniekis/go-hallpass/web"
 )
 
+// vacuumPagesPerRun bounds each scheduled incremental vacuum (4 KiB pages, about 8 MiB) so it never holds the single
+// writer connection for long.
+const vacuumPagesPerRun = 2048
+
 // App holds every long-lived component.
 type App struct {
 	Cfg    *config.Config
@@ -280,8 +284,23 @@ func (a *App) RunBackground(ctx context.Context) (wait func()) {
 		})
 	})
 	wg.Go(func() {
+		// HP-DB-011: return free pages in bounded steps (short writer holds), then truncate the WAL they went through.
 		jobs.Periodic(ctx, log, "store.wal_checkpoint", 5*time.Minute, false, func(ctx context.Context) error {
+			if err := a.Store.IncrementalVacuum(ctx, vacuumPagesPerRun); err != nil {
+				return err
+			}
 			return a.Store.Checkpoint(ctx, "TRUNCATE")
+		})
+	})
+	wg.Go(func() {
+		// HP-DB-011: finished notifications and jobs do not accumulate forever.
+		jobs.Periodic(ctx, log, "store.purge_finished", time.Hour, false, func(ctx context.Context) error {
+			now := a.Clock.Now()
+			if _, err := a.Outbox.Purge(ctx, now.Add(-outbox.Retention)); err != nil {
+				return err
+			}
+			_, err := a.Jobs.Purge(ctx, now.Add(-jobs.Retention))
+			return err
 		})
 	})
 	wg.Go(func() {

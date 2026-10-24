@@ -69,6 +69,7 @@ type Metrics struct {
 	txTotal         *prometheus.CounterVec
 	txBusyRetries   prometheus.Counter
 	writerWait      prometheus.Histogram
+	writerQueue     prometheus.Gauge
 	outboxPending   prometheus.Gauge
 	outboxDead      prometheus.Gauge
 	deliveries      *prometheus.CounterVec
@@ -134,6 +135,7 @@ func New() *Metrics {
 	m.txTotal = f.counterVec("store_tx_total", "Write transactions by name and final result.", "name", "result")
 	m.txBusyRetries = f.counter("store_tx_busy_retries_total", "Write transaction attempts retried after SQLITE_BUSY.")
 	m.writerWait = f.histogram("store_writer_wait_seconds", "Time spent waiting to acquire the single writer connection.", LatencyBuckets)
+	m.writerQueue = f.gauge("store_writer_queue_depth", "Write transactions currently waiting for the single writer connection.")
 	m.storeDBBytes = f.gauge("store_db_bytes", "SQLite main database file size.")
 	m.storeWALBytes = f.gauge("store_wal_bytes", "SQLite WAL file size.")
 
@@ -437,6 +439,14 @@ func (m *Metrics) StoreWriterWait(d time.Duration) {
 		return
 	}
 	m.writerWait.Observe(d.Seconds())
+}
+
+// StoreWriterQueue adjusts the number of write transactions waiting for the writer connection (HP-DB-003).
+func (m *Metrics) StoreWriterQueue(delta int) {
+	if m == nil {
+		return
+	}
+	m.writerQueue.Add(float64(delta))
 }
 
 // SetStoreSizes sets the database and WAL size gauges (HP-DB-011), e.g. from store.Sizes after checkpoints.

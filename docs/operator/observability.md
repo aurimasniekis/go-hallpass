@@ -116,6 +116,7 @@ End reasons: `expired`, `operator`, `agent`, `policy_changed`, `agent_disabled`,
 | `hallpass_store_tx_total` | counter | `name`; `result` = `ok`, `busy`, `full`, `io`, `corrupt`, `constraint`, `conflict`, `not_found`, `canceled`, `error`, `other` | Write transactions by final result. |
 | `hallpass_store_tx_busy_retries_total` | counter | – | Attempts retried after `SQLITE_BUSY`. |
 | `hallpass_store_writer_wait_seconds` | histogram | – | Wait for the single writer connection. |
+| `hallpass_store_writer_queue_depth` | gauge | – | Write transactions currently waiting for the single writer connection. A value that stays above zero means writes are backing up. |
 | `hallpass_store_db_bytes`, `hallpass_store_wal_bytes` | gauge | – | SQLite database and WAL size. |
 | `hallpass_storage_filesystem_size_bytes` | gauge | `volume` = `data`, `recordings`, `backups` | Filesystem size, read at scrape time. Paths are never exported. |
 | `hallpass_storage_filesystem_avail_bytes` | gauge | `volume` | Space available to the process. |
