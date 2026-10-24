@@ -105,8 +105,8 @@ Without the KEK, encrypted data (login credentials, recordings, sealed fields) c
 ## Locked out of administration (§18.16)
 
 1. On the host, as the service account: stop Hallpass, then run
-   `hallpass admin recover --operator EMAIL` or `hallpass admin recover --new-admin`. This needs the data-directory
-   lock and the KEK.
+   `hallpass admin recover --email EMAIL` or `hallpass admin recover --email EMAIL --new-admin`. This needs the
+   data-directory lock and the KEK.
 2. Use the single-use recovery login within 30 minutes and fix the cause (re-enroll MFA, re-enable an account, repair
    SSO settings).
 3. Every start logs a break-glass alert until an administrator acknowledges it (`POST /system/breakglass-ack`).

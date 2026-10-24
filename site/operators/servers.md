@@ -1,0 +1,79 @@
+# Servers and roles
+
+A **server** is a destination host. A **role** is one way to use it: a remote account plus what the role allows. The
+easiest way to add a server is the guided wizard (**Servers → New server (guided)**), walked through in
+[First run](/guide/first-run#enroll-your-first-server). This page covers the pieces in more depth.
+
+<Shot name="servers" alt="Servers list with web1, db1 and ci-runner" />
+
+<Shot name="server" alt="Server detail page with overview, host identities, roles, effective access and destination audit tabs" />
+
+## Addresses and egress
+
+- Agents only ever see the **alias** and description. The address and port are shown only to operators with the
+  address permission (administrators, and auditors when `rbac.auditor_address_read` is set).
+- Hallpass dials only addresses inside `egress.allow_cidrs`. Loopback, link-local and cloud metadata ranges are denied
+  unless re-allowed with `egress.allow_special_cidrs`. An empty `allow_cidrs` means nothing is reachable.
+- Set `egress.source_addresses` to the address(es) your servers see Hallpass connect from. The suggested
+  `authorized_keys` lines and certificates use it for `from=` / `source-address`.
+
+## Host identities
+
+Hallpass pins each server's host key, or trusts a host CA bound to the server. On the **Host identities** tab:
+
+- **Scan host keys** fetches what the server offers; **Add key** accepts a pasted key.
+- **Confirm** only after comparing the fingerprint with the server itself (`ssh-keygen -lf
+  /etc/ssh/ssh_host_ed25519_key.pub` on the host, or your cloud console).
+- **Retire** old keys after a planned key change.
+
+If a server's key changes unexpectedly, connections fail with exit 88 and a host-key alert is recorded. Treat it as a
+possible attack until you have confirmed the change out of band. See
+[Troubleshooting](/help/troubleshooting#destination-host-key-changed).
+
+## Roles
+
+| Setting | Meaning |
+|---|---|
+| Alias, description | What agents see in `ssh center list`. Descriptions are informational. |
+| Remote user | The account Hallpass logs in as. Use a dedicated, least-privilege account per role. |
+| Capabilities | `shell`, `exec`, `pty`: which SSH channel types are allowed. They do not restrict commands. |
+| Default / maximum duration | Grant length when the agent does not ask, and the role's ceiling. |
+| Approval channels | Restrict decisions for a sensitive role to the web console only. |
+| Record input | Also record what the agent types (off by default; may capture typed secrets). |
+| Retention class | Which retention period applies to its recordings (`recording.retention_classes`). |
+
+A role name such as `readonly` enforces nothing. Enforce least privilege on the destination: see
+[destination hardening](/destinations/hardening).
+
+## Login credentials
+
+Each role needs a way for Hallpass to log in.
+
+### Managed login keys (recommended)
+
+1. **Generate login key**. Hallpass creates the key pair and keeps the private key encrypted with the KEK.
+2. Install the shown line in the remote user's `~/.ssh/authorized_keys`. It already carries `restrict` and
+   `from="<egress address>"`, plus `pty` only when the role has the `pty` capability.
+3. **Test login**, then **Activate**.
+
+To rotate: generate a new key, install it, test, activate, and after the overlap remove the old line and retire the
+old key. Importing an existing private key is possible, but generating in Hallpass is preferred.
+
+### User certificates
+
+Instead of installing keys, create a **user CA** in Hallpass and bind the role to it. On the destination, trust the CA
+and allow only the role's explicit principal:
+
+```
+# /etc/ssh/sshd_config
+TrustedUserCAKeys /etc/ssh/hallpass_user_ca.pub
+AuthorizedPrincipalsFile /etc/ssh/principals/%u
+```
+
+Put the principal shown on the role page in `/etc/ssh/principals/<account>`. Certificates are valid for about two
+minutes. They also make destination-side audit correlation exact; see [destination-side audit](/destinations/audit).
+
+## Disabling
+
+Disabling a server or role hides it from agents at once and ends its live sessions within 5 seconds. Every change to
+servers, roles, groups or labels bumps the policy version; grants that are no longer allowed are revoked.

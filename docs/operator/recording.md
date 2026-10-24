@@ -30,7 +30,8 @@ hallpass verify [--session ses_…] [--json] --config /etc/hallpass/config.yaml
 segment against the database (header hash, ciphertext hash and a final frame for finalized segments) and walks the
 integrity chain (hash links and HMACs). Exit 0 means everything verified. Exit 3 means at least one segment is
 `corrupt` or `missing`, or the chain is broken. The output ends with the chain head (`seq` and hash) to compare
-with exported anchors. A key holder can rewrite unanchored history (HP-CRY-008); anchor export arrives in WP23.
+with exported anchors. A key holder can rewrite unanchored history (HP-CRY-008); export anchors with `hallpass anchors export`
+([backup.md](backup.md)).
 
 Statuses: `ok`; `interrupted` (an authentic prefix without a final frame, from a crash or an operator abort);
 `corrupt` (authentication failed or does not match the database); `missing`; `skipped` (deleted, failed or still being

@@ -3,10 +3,9 @@
 Hallpass upgrades are a binary or image swap. The database schema is migrated at startup (PLAN §18.5, ADR-0023,
 HP-OPS-005). Versioning rules are in [../VERSIONING.md](../VERSIONING.md).
 
-> **Status.** Forward-only migrations, the automatic pre-migration snapshot and the newer-schema refusal are implemented
-> ([storage.md](storage.md)). `hallpass backup`, `hallpass restore` and `hallpass verify --sample` are **not implemented
-> yet** (WP23), and neither is `/readyz` (WP22). Until they land, use the manual steps below. The manual rollback has not
-> been exercised by an automated drill; the upgrade/rollback drill (RG-7) is WP23 work.
+> **Status.** Forward-only migrations, the automatic pre-migration snapshot, the newer-schema refusal
+> ([storage.md](storage.md)), `hallpass backup`/`restore` ([backup.md](backup.md)) and `/readyz` are implemented. No
+> version has been released yet, so an upgrade from a previous release has never been exercised (release gate RG-7).
 
 ## Rules
 
@@ -26,8 +25,9 @@ HP-OPS-005). Versioning rules are in [../VERSIONING.md](../VERSIONING.md).
 1. Read the release notes and the `CHANGELOG.md` entry, especially **Security** and any breaking-change notes.
 2. Verify the new artifacts (checksums and `gh attestation verify`, see [install.md](install.md#release-artifacts)).
 3. Take a full backup to a location outside the data directory and the host:
-   - *(pending, WP23)* `hallpass backup` (online, consistent).
-   - Until then: stop Hallpass and copy the entire data directory (database, `-wal`/`-shm` files, `recordings/`,
+   - `hallpass backup create --out DIR` (online and consistent, see [backup.md](backup.md)), then
+     `hallpass backup verify DIR`.
+   - Alternatively, stop Hallpass and copy the entire data directory (database, `-wal`/`-shm` files, `recordings/`,
      `backups/`) while it is stopped, preserving modes and ownership (`cp -a` or `tar --numeric-owner`).
      Copying a live data directory is not safe.
 4. Confirm you have an offline copy of the KEK that matches `hallpass keys status` (KEK id).
@@ -48,8 +48,8 @@ journalctl -u hallpass -o cat | grep -E 'migration|serving|error'
 Running `hallpass migrate` explicitly is optional: `serve` applies pending migrations at startup the same way. It prints
 `database schema at version N (binary supports N)`.
 
-Afterwards *(pending, WP22/WP23)*: check `GET /readyz` and run `hallpass verify --sample`. Until then, run
-`hallpass verify` offline on a maintenance window if you need recording verification.
+Afterwards, check `GET /readyz`. `hallpass verify` authenticates every recording segment; it takes the data-directory
+lock, so run it in a maintenance window or against a restored copy.
 
 ## Upgrade (container / Compose)
 
@@ -69,9 +69,10 @@ Rollback restores state from before the upgrade. Data written after it is lost.
 2. Choose the restore source:
    - the full backup from "Before upgrading" (preferred), or
    - the automatic snapshot `<data_dir>/backups/pre-migrate-<from>-<to>-<UTC>.db` for this upgrade.
-3. Restore *(pending, WP23: `hallpass restore` into an empty directory with manifest and KEK checks)*. Manual
-   procedure until then:
-   - **Full backup:** move the current data directory aside and copy the backup back with its modes and ownership.
+3. Restore:
+   - **`hallpass backup` backup:** `hallpass restore --force --config … DIR` moves the current data aside and restores
+     with manifest and KEK checks ([backup.md](backup.md)).
+   - **Copied data directory:** move the current data directory aside and copy the backup back with its modes and ownership.
    - **Pre-migration snapshot:** move `hallpass.db`, `hallpass.db-wal` and `hallpass.db-shm` aside **together** (a stale
      WAL must never be applied to a different database file), then copy the snapshot to `hallpass.db`, owned by the
      service user with mode `0600`.

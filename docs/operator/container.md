@@ -13,12 +13,12 @@ The image is built by the root [`Dockerfile`](../../Dockerfile) (PLAN WP24, ADR-
 | Configuration | `HALLPASS_CONFIG=/etc/hallpass/hallpass.yaml`. Mount the file read-only. |
 | Data | `VOLUME /var/lib/hallpass`, created `0700` and owned by `65532:65532`. |
 | KEK | Not in the image. Mount it from outside the data volume (below). |
-| Ports | `2222/tcp` (agent SSH), `8080/tcp` (web console/API, WP15; nothing listens there yet). |
+| Ports | `2222/tcp` (agent SSH), `8080/tcp` (web console, API and webhooks). |
 | Platforms | linux/amd64, linux/arm64. |
 
 Build stages: `web` (Node, `pnpm install --frozen-lockfile && pnpm build` → `web/dist`), `build` (Go, cross-compiled for
-the target platform), final (distroless). `web/dist` is placed in the Go build tree for the upcoming `go:embed` of the UI
-(HP-UI-016). Until that lands, the binary does not serve the UI.
+the target platform, with `-tags embedui` so the binary serves the web UI), final (distroless). `web/dist` is placed in
+the Go build tree and embedded with `go:embed` (HP-UI-016).
 
 Build locally (never pushes):
 
@@ -77,8 +77,8 @@ docker run -d --name hallpass \
 Offline commands (`migrate`, `keys status`, `hostkey show`, `verify`) take the data-directory lock: stop the serving
 container first and run them with the same mounts, e.g. `docker run --rm … IMAGE hostkey show`.
 
-The image has no health-check command and no shell. Once `/readyz` exists (WP22), probe it from the orchestrator or
-reverse proxy rather than from inside the container.
+The image has no health-check command and no shell. Probe `/readyz` from the orchestrator or reverse proxy rather
+than from inside the container.
 
 ## Docker Compose
 

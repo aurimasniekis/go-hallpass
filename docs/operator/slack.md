@@ -43,7 +43,7 @@ features:
     always_online: false
   slash_commands:
     - command: /hallpass
-      url: https://hallpass.example.com/hooks/slack/interactions
+      url: https://hallpass.example.com/hooks/slack/INTEGRATION_ID
       description: Link your Hallpass account or check a request
       usage_hint: "link <code> | status <request-id>"
       should_escape: false
@@ -55,7 +55,7 @@ oauth_config:
 settings:
   interactivity:
     is_enabled: true
-    request_url: https://hallpass.example.com/hooks/slack/interactions
+    request_url: https://hallpass.example.com/hooks/slack/INTEGRATION_ID
   org_deploy_enabled: false
   socket_mode_enabled: false
   token_rotation_enabled: false
@@ -65,6 +65,9 @@ settings:
   add other scopes. In particular, Hallpass does not need `chat:write.public`, so the bot can post only to channels it
   has been invited to.
 - **One URL.** Interactivity and the slash command use the same endpoint. The handler tells them apart by payload.
+  The path ends in the Hallpass integration ID, which exists only after step 3. Create the app with the placeholder,
+  then replace `INTEGRATION_ID` in both URLs (*Interactivity & Shortcuts* and *Slash Commands*) with the webhook URL
+  that Hallpass shows for the integration.
 - **Single workspace.** Do not distribute the app. Hallpass accepts requests from exactly one team ID and rejects all
   others with `403`.
 
@@ -99,7 +102,7 @@ Create a Slack integration in the web console (administrator, reauthentication r
 
 Network requirements:
 
-- **Inbound.** Slack must reach `https://<public_url host>/hooks/slack/interactions` over HTTPS with a publicly trusted
+- **Inbound.** Slack must reach `https://<public_url host>/hooks/slack/<integration_id>` over HTTPS with a publicly trusted
   certificate.
 - **Outbound.** Hallpass calls `https://slack.com/api/` and `https://hooks.slack.com/` and must be allowed to reach both.
 - **Clock.** The Hallpass host clock must be NTP-synchronized. Requests with timestamps more than 5 minutes away from the

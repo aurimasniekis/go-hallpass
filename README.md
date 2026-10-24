@@ -1,115 +1,193 @@
-# Hallpass
+<p align="center">
+  <img src="site/public/logo.svg" alt="" width="72" height="72">
+</p>
 
-Hallpass is a terminating SSH gateway for AI agents. Agents connect to Hallpass with their own key. Hallpass decides,
-from policy and human approvals, which servers and roles they may use, then opens the destination session itself
-with credentials the agent never sees. Every session is recorded and encrypted at rest.
+<h1 align="center">Hallpass</h1>
 
+<p align="center">
+  <strong>A terminating SSH gateway for AI agents.</strong><br>
+  Agents get time-bound, approved access to your servers, never the credentials, and every session is recorded.
+</p>
+
+<p align="center">
+  <a href="https://aurimasniekis.github.io/go-hallpass/">Documentation</a> ·
+  <a href="https://aurimasniekis.github.io/go-hallpass/guide/install-docker">Install</a> ·
+  <a href="https://aurimasniekis.github.io/go-hallpass/agents/">Agent guide</a> ·
+  <a href="docs/security-guarantees.md">Security guarantees</a>
+</p>
+
+> [!WARNING]
+> **Pre-release, not production-ready.** No version has been tagged and the release gates are not met: no 24-hour
+> soak, no external review of the recording format, CI not yet green on GitHub, and no license chosen. The current
+> evaluation is in [docs/evidence/unreleased/release-gates.md](docs/evidence/unreleased/release-gates.md), and
+> per-requirement status (implemented versus tested) in [docs/PLAN.md](docs/PLAN.md) §21.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="site/public/screenshots/dashboard-dark.png">
+  <img src="site/public/screenshots/dashboard-light.png" alt="Hallpass dashboard with a pending request, active grants and a live session">
+</picture>
+
+## Why
+
+The quickest way to let an AI agent work on a server is to put its key in `authorized_keys`. That key works forever,
+on every server it was copied to, for any task, without anyone's approval, and leaves little trace of what it did.
+Anything the agent can read can also end up in a prompt or a log.
+
+Hallpass sits in between. The agent keeps **only its own key** and talks to Hallpass with plain `ssh`. Policy and a
+human decide what it may use and for how long. Hallpass logs in to the destination with a credential the agent never
+sees, records the session, and cuts it off when the grant ends.
+
+## How it works
+
+```mermaid
+flowchart LR
+    A["AI agent<br/>(own SSH key)"] -- "ssh, agent key" --> H["Hallpass<br/>policy · grants · recording"]
+    H -- "ssh, managed key or<br/>short-lived certificate" --> D["Destination<br/>(pinned host key)"]
+    O["Operator<br/>web · Slack · Telegram"] -- "approve / deny / revoke" --> H
 ```
-agent ──ssh (agent key)──▶ Hallpass ──ssh (managed key or short-lived certificate)──▶ destination
-                              │
-                    policy · approvals (web, Slack, Telegram) · grants · encrypted recordings · audit chain
-```
 
-> **Status: pre-release, not production-ready.** No version has been tagged. The release gates in
-> [docs/GOAL.md](docs/GOAL.md) §8 are not yet met: no 24-hour soak, no external crypto review of the recording
-> format (R-02), no CI run on GitHub, and no license chosen (R-01). Per-requirement status, including what is only
-> implemented versus tested, is in [docs/PLAN.md](docs/PLAN.md) §21.
+1. You register the agent's public key and enroll servers, each with roles (a remote account plus what it allows).
+2. The agent runs `ssh center list`, `ssh center exec web1 -- uptime`, `ssh -t center connect web1`.
+3. Policy decides per agent, server and role: hidden, requestable (a human approves), or approved automatically up to
+   a limit.
+4. Hallpass opens the destination session itself, records it, and ends it when the grant ends.
 
-## What it does
+**Key features**
 
-- **Agent identity from keys:** agents authenticate with registered public keys. The SSH username is ignored. Unknown
-  and hidden servers are indistinguishable.
-- **Policy and approvals:** default-deny rules decide what each agent can see, request or get automatically. Requests
-  carry a reason. Operators approve or deny in the web console, Slack or Telegram. A chat button is never
-  authorization on its own: the approver is re-checked when the decision is made.
-- **Time-bound grants:** grants never extend implicitly. Expiry, revocation, key revocation, agent or server
-  disablement and lockdown end live sessions within 5 seconds.
-- **Credential isolation:** Hallpass generates and keeps the destination login keys (or signs short-lived OpenSSH
-  certificates). Destination host keys are verified strictly; there is no trust on first use.
-- **Recording:** recording is mandatory by default and fails closed. Recordings are encrypted per segment (HPREC1) and
-  integrity-chained, can be replayed in the browser, and can be exported as an encrypted bundle.
-- **Operators:** local accounts with Argon2id and TOTP, or generic OIDC SSO. Roles are administrator, approver,
-  auditor and viewer, and sensitive actions require recent authentication.
-- **Operations:** a single Go binary with an embedded web UI and SQLite storage. It provides backup/restore,
-  integrity anchors, Prometheus metrics, health endpoints and optional OpenTelemetry tracing.
+- **No credentials for agents.** Hallpass keeps destination login keys encrypted, or signs OpenSSH certificates that
+  live about two minutes. Destination host keys are pinned; there is no trust on first use.
+- **Default-deny policy** by agent, server and role groups or labels, with an effective-access preview.
+- **Human approval** in the web console, Slack or Telegram. A chat button is never authorization by itself: the
+  approver is re-checked when they click.
+- **Time-bound grants** that never extend. Expiry, revocation, a disabled agent or lockdown end live sessions within
+  5 seconds.
+- **Recording on by default, fail closed.** Encrypted per segment, integrity-chained, replayable in the browser next
+  to a session timeline, plus a hash-chained audit log.
+- **Hidden inventory.** Agents see aliases only. An unknown server and a forbidden one give the same answer.
+- **Operators** with Argon2id passwords and TOTP or OIDC single sign-on, and administrator, approver, auditor and
+  viewer roles.
+- **One Go binary** with the web UI embedded and SQLite storage. Backup and restore, integrity anchors, Prometheus
+  metrics, health checks and optional OpenTelemetry tracing.
 
-Read [docs/security-guarantees.md](docs/security-guarantees.md) before deploying: Hallpass can see every session in
-plaintext and must be run like a bastion host.
+Hallpass is **not a sandbox**: an approved shell can do what its remote account can do. Pair it with
+[destination hardening](docs/destination/hardening.md), and run it like a bastion host, because it sees every session
+in plaintext.
 
-## Quick look
+## Screenshots
 
-An agent's `~/.ssh/config` pins the gateway's host key and points at the gateway:
+| | |
+|---|---|
+| <img src="site/public/screenshots/request-pending-light.png" alt="A pending access request with the agent's untrusted reason"><br>**A request waiting for approval** | <img src="site/public/screenshots/request-approve-light.png" alt="Approve dialog with duration choices and a comment"><br>**Approving with a chosen duration** |
+| <img src="site/public/screenshots/session-replay-light.png" alt="Replay of a recorded interactive shell"><br>**Replay of a recorded shell** | <img src="site/public/screenshots/session-timeline-light.png" alt="Access session timeline"><br>**Session timeline** |
+| <img src="site/public/screenshots/wizard-credentials.png" alt="Onboarding wizard: install, test and activate a login key"><br>**Guided server onboarding** | <img src="site/public/screenshots/policy-light.png" alt="Policy rules: deny, auto-approve and requestable"><br>**Default-deny policy** |
 
-```
-Host center
-  HostName hallpass.example.net
-  Port 2222
-  IdentityFile ~/.ssh/agent_ed25519
-  IdentitiesOnly yes
-  StrictHostKeyChecking yes
-```
+**What the agent sees:**
+
+<img src="site/public/screenshots/agent-terminal.png" alt="Terminal: an agent lists servers, runs a command, waits for approval, and gets 'not found or not permitted' for a hidden server">
+
+All screenshots come from a throwaway instance with fictional data.
+
+## Quick start
+
+No release has been published yet, so both paths build from source. Full guides:
+[Docker Compose](https://aurimasniekis.github.io/go-hallpass/guide/install-docker),
+[binary with systemd](https://aurimasniekis.github.io/go-hallpass/guide/install-binary), or a
+[local trial in development mode](https://aurimasniekis.github.io/go-hallpass/guide/try-locally).
+
+### Docker Compose
 
 ```sh
-ssh center list                                              # servers and roles this agent may use
-ssh center request web1 --role inspect --reason "disk alert" --duration 30m
-ssh center exec web1 --role inspect -- df -h /var           # waits for approval if needed
-ssh -t center connect web1 --role inspect                   # interactive shell
+make image IMAGE=hallpass:local VERSION=v0.0.0-local
+cd deploy
+install -d -m 0700 secrets && sudo chown 65532:65532 secrets
+docker run --rm --user 65532:65532 -v "$PWD/secrets:/out" hallpass:local keys init-kek --out /out/hallpass.kek
+cp examples/hallpass.container.yaml hallpass.yaml && $EDITOR hallpass.yaml   # public_url, egress.allow_cidrs
+export HP_IMAGE=hallpass HP_VERSION=local HP_CONFIG_FILE=./hallpass.yaml
+docker compose run --rm hallpass migrate
+docker compose run --rm hallpass hostkey show --host center      # known_hosts line for agents
+docker compose run --rm hallpass admin bootstrap                  # one-time setup link
+docker compose up -d
 ```
 
-See the [agent guide](docs/agent/guide.md) for the full grammar, JSON output and exit codes.
+Back up `secrets/hallpass.kek` offline right away: without it, nothing can be decrypted. Put a TLS reverse proxy in
+front of `127.0.0.1:8080`, open the setup link, and follow
+[First run](https://aurimasniekis.github.io/go-hallpass/guide/first-run).
 
-## Running it
+### Binary
+
+Requirements: Go 1.27 or later, Node 24 and pnpm.
 
 ```sh
-hallpass keys init-kek --out /etc/hallpass/kek    # master key (0400); back it up separately from the data
-hallpass migrate --config /etc/hallpass/hallpass.yaml
-hallpass serve --config /etc/hallpass/hallpass.yaml
-hallpass admin bootstrap --config /etc/hallpass/hallpass.yaml   # one-time setup link for the first administrator
+(cd web && pnpm install --frozen-lockfile && pnpm build)          # web UI
+go build -tags embedui -o bin/hallpass ./cmd/hallpass              # binary with the UI embedded
+bin/hallpass keys init-kek --out /etc/hallpass/kek                 # master key: back it up offline
+cp deploy/examples/hallpass.example.yaml /etc/hallpass/hallpass.yaml   # set public_url, egress.allow_cidrs
+bin/hallpass migrate --config /etc/hallpass/hallpass.yaml
+bin/hallpass admin bootstrap --config /etc/hallpass/hallpass.yaml  # one-time setup link
+bin/hallpass serve --config /etc/hallpass/hallpass.yaml
 ```
 
-The [install guide](docs/operator/install.md) covers systemd, the container image and [Docker Compose](deploy/compose.yaml).
-The web console listens on port 8080 and must sit behind a TLS reverse proxy. Agents connect on port 2222.
+Run it as a dedicated service user with the [systemd unit](deploy/systemd/hallpass.service); the guide covers the
+user, file permissions and hardening. The web console listens on port 8080 and must sit behind TLS. Agents connect on
+port 2222.
 
-## Building from source
+## For agents
 
-Requirements: Go 1.27 or later. Node 24 and pnpm are needed only for the web UI.
+Point an SSH host alias at the gateway, pin its host key, and use plain `ssh`:
 
 ```sh
-make build                                      # bin/hallpass and bin/hallpass-collector (no embedded UI)
-(cd web && pnpm install && pnpm build)          # then build with the UI embedded:
-go build -tags embedui -o bin/hallpass ./cmd/hallpass
+ssh center list                                               # servers and roles you may use
+ssh center exec web1 --role inspect -- df -h /var             # auto-approved roles run at once
+ssh center 'exec web1 --role deploy --reason "Deploy 1.4.3" -- ls /srv/app'   # waits for approval
+ssh -t center connect web1 --role inspect                     # interactive shell
+ssh center status req_01… --wait                              # keep waiting on a pending request
 ```
 
-Checks used before every commit:
+Wrap the whole gateway command in single quotes when a value has spaces: ssh joins its arguments, so inner quotes
+must survive your local shell. Gateway errors use exit codes 80–90. See the
+[agent guide](docs/agent/guide.md).
 
-```sh
-make lint custom-vet race coverage sqlc-check api-check
-(cd web && pnpm lint && pnpm typecheck && pnpm test)
-make test-openssh        # real OpenSSH client and sshd (needs Docker)
-make test-fault          # fault-injection catalog
-make fuzz-smoke          # every fuzz target briefly
+**Agent skill.** [`integrations/skills/hallpass/`](integrations/skills/hallpass/) teaches Claude Code, Codex and
+similar agents to use the gateway properly: honest reasons, no request spamming, focused commands, no workarounds.
+
+```
+/plugin install hallpass --marketplace aurimasniekis/go-hallpass          # Claude Code
+mkdir -p ~/.codex/skills && cp -R integrations/skills/hallpass ~/.codex/skills/   # Codex
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and commit rules.
+The repository is currently private, so installing from GitHub needs access to it. Other options are in
+[integrations/README.md](integrations/README.md).
 
 ## Documentation
 
+The documentation website is **<https://aurimasniekis.github.io/go-hallpass/>** (built from [`site/`](site/)).
+
 | Topic | Where |
 |---|---|
-| Product contract, requirements, release gates | [docs/GOAL.md](docs/GOAL.md) |
-| Architecture, work packages, progress | [docs/PLAN.md](docs/PLAN.md) |
-| Decisions and open review items | [docs/DECISIONS.md](docs/DECISIONS.md) |
-| Threat model / guarantees | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md), [docs/security-guarantees.md](docs/security-guarantees.md) |
-| Operator guides (install, keys, backup, SSO, approvals, incidents) | [docs/operator/](docs/operator/) |
-| Agent guide | [docs/agent/guide.md](docs/agent/guide.md) |
+| Getting started, operator and agent guides | [Website](https://aurimasniekis.github.io/go-hallpass/) |
+| Operator reference (install, configuration, keys, backup, SSO, approvals, incidents) | [docs/operator/](docs/operator/) |
+| Agent guide, exit codes, JSON schemas | [docs/agent/](docs/agent/) |
 | Destination hardening, destination-side audit | [docs/destination/](docs/destination/) |
+| Security guarantees and threat model | [docs/security-guarantees.md](docs/security-guarantees.md), [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) |
+| REST API (OpenAPI 3.1) | [api/openapi.yaml](api/openapi.yaml) |
 | Recording format | [docs/formats/hprec1.md](docs/formats/hprec1.md) |
+| Product contract, plan, decisions | [docs/GOAL.md](docs/GOAL.md), [docs/PLAN.md](docs/PLAN.md), [docs/DECISIONS.md](docs/DECISIONS.md) |
 | Versioning, changelog | [docs/VERSIONING.md](docs/VERSIONING.md), [CHANGELOG.md](CHANGELOG.md) |
+
+To work on the website: `cd site && pnpm install && pnpm dev`.
 
 ## Security
 
-Report vulnerabilities privately; see [SECURITY.md](SECURITY.md).
+Read [docs/security-guarantees.md](docs/security-guarantees.md) before deploying. It lists what Hallpass guarantees,
+what it explicitly does not, and which guarantees are only implemented versus tested. None is externally verified
+yet. Report vulnerabilities privately; see [SECURITY.md](SECURITY.md).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, the checks run before every commit
+(`make lint custom-vet race coverage sqlc-check api-check`, the web checks, and the OpenSSH, fault-injection and fuzz
+suites), and commit rules.
 
 ## License
 
-No license has been chosen yet (review item R-01).
+Not yet chosen (review item R-01).

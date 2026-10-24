@@ -51,7 +51,7 @@ can decrypt everything (see `docs/THREAT_MODEL.md` §1). KMS/HSM-backed wrapping
 
 ## Background re-encryption after purpose-key rotation
 
-After `hallpass keys rotate <purpose>`, a background job (`keyring.reseal`, every 6 hours, 500 rows per column per
+After `hallpass keys rotate --purpose <purpose>`, a background job (`keyring.reseal`, every 6 hours, 500 rows per column per
 run) re-seals encrypted fields under the new active version:
 - request reasons, decision comments, key revocation reasons, TOTP secrets and outbox bodies (`field`);
 - integration secrets and private keys (`credential`);

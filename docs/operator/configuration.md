@@ -46,6 +46,7 @@ Example: [`deploy/examples/hallpass.example.yaml`](../../deploy/examples/hallpas
 | `http.trusted_proxies` | `[]` | CIDRs allowed to set `X-Forwarded-For`/`X-Forwarded-Proto`. |
 | `http.metrics_listen` | — | Optional separate listener for `/metrics`. |
 | `log.level` / `log.format` | `info` / `json` | `debug|info|warn|error`. `text` format is development-only. |
+| `log.audit_file` | — | Optional file that receives every committed audit record as one JSON line (mode `0600`, append), for SIEM ingestion. The database hash chain stays authoritative. |
 | `storage.min_free_bytes` / `storage.min_free_percent` | `2 GiB` / `5` | Free-space reserve. Below it, new sessions are refused (HP-OPS-006). |
 | `storage.alert_percent` | `80, 90` | Disk-usage alert thresholds. |
 | `storage.pre_migration_snapshots` | `3` | Pre-migration `VACUUM INTO` snapshots kept. |
@@ -56,6 +57,7 @@ Example: [`deploy/examples/hallpass.example.yaml`](../../deploy/examples/hallpas
 | `recording.queue_records` / `recording.queue_bytes` | `1024` / `1 MiB` | Bounded recorder queue per channel. |
 | `recording.block_timeout` | `10s` | A channel blocked on recording longer than this is terminated. |
 | `recording.default_retention` | `2160h` (90 days) | Default retention class. |
+| `recording.retention_classes` | `[]` | Per-class retention overrides as `class=duration` entries, e.g. `sensitive=8760h`. Roles name their retention class; classes without an entry use `default_retention`. |
 | `egress.allow_cidrs` | `[]` | Ranges destinations may resolve into. **Empty means no destination is reachable** (HP-SRV-009). |
 | `egress.allow_special_cidrs` | `[]` | Explicitly re-allow normally denied ranges (loopback, link-local, metadata). |
 | `egress.source_addresses` | `[]` | The gateway's own egress IPs/CIDRs as destinations see them. Used for the suggested `from="…"` in login-key authorized_keys lines and firewall guidance. |
@@ -69,7 +71,11 @@ Example: [`deploy/examples/hallpass.example.yaml`](../../deploy/examples/hallpas
 | `auth.session_idle_timeout` / `auth.session_absolute_timeout` | `30m` / `12h` | Operator web sessions. |
 | `auth.reauth_window` | `5m` | Recent-authentication window for sensitive actions. |
 | `auth.password_min_bytes` | `12` | Minimum password length (max is fixed at 1024 bytes). |
-| `telemetry.otlp_endpoint` | — | Optional OTLP/HTTP endpoint for traces and metrics. |
+| `telemetry.otlp_endpoint` | — | Optional OTLP/HTTP endpoint for traces. Metrics are exported only through Prometheus `/metrics`. |
 | `telemetry.prometheus` | `true` | Expose Prometheus `/metrics`. |
 | `shutdown.drain_timeout` | `30s` | Graceful drain before channels are closed. |
+| `rbac.auditor_address_read` | `false` | Auditors may read destination addresses. |
+| `rbac.approver_recording_play` | `false` | Approvers may replay recordings. |
+| `rbac.auditor_recording_export` | `false` | Auditors may export recordings. |
+| `rbac.approvers_can_lockdown` | `false` | Approvers may enable lockdown (lifting stays administrator-only). |
 | `dev.insecure_http`, `dev.auth`, `dev.seed_file` | off | Development-only features. Production rejects them. |

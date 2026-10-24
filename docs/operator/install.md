@@ -3,10 +3,9 @@
 This page covers the standalone (systemd) install, the container image, and Docker Compose (PLAN §18.1, HP-OPS-007).
 Container details are in [container.md](container.md). Upgrades and rollback are in [upgrade.md](upgrade.md).
 
-> **Status.** The SSH front end, data plane, recording and the offline CLI (`config`, `keys`, `hostkey`, `migrate`,
-> `verify`, `serve`) exist. The web console and REST API (WP15), `/readyz` and metrics (WP22), first-administrator
-> bootstrap (`hallpass admin bootstrap`, WP13/WP15) and `hallpass backup`/`restore` (WP23) are **not implemented yet**.
-> Steps that depend on them are marked *(pending)*.
+> **Status.** Pre-release. The SSH front end, data plane, recording, the web console and REST API, `/readyz` and
+> metrics, first-administrator bootstrap (`hallpass admin bootstrap`) and `hallpass backup`/`restore` are implemented.
+> No version has been tagged yet, so the release artifacts below do not exist yet; build from source until then.
 
 ## Release artifacts
 
@@ -125,10 +124,11 @@ systemctl start hallpass
 
 Distribute the `known_hosts` line to agents ([../agent/guide.md](../agent/guide.md)). Then:
 
-- *(pending, WP13/WP15)* `hallpass admin bootstrap` creates the first administrator and prints a one-time setup URL.
-- Register agents and enroll servers (PLAN §18.3, §18.4) once the console is available.
-- *(pending, WP22)* Monitor `GET /readyz` and the Prometheus metrics.
-- *(pending, WP23)* Schedule `hallpass backup` to a separate volume plus an off-host copy.
+- `hallpass admin bootstrap` (offline, like `hostkey show`) prints a one-time `/setup?token=…` link for the first
+  administrator (30 minutes, single use).
+- Register agents and enroll servers in the web console (PLAN §18.3, §18.4).
+- Monitor `GET /readyz` and the Prometheus metrics ([observability.md](observability.md)).
+- Schedule `hallpass backup create` to a separate volume plus an off-host copy ([backup.md](backup.md)).
 
 ## Container
 
