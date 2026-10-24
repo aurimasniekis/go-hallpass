@@ -5,7 +5,7 @@ HallPass is a security-sensitive terminating SSH gateway for AI agents. These ru
 ## Before working
 
 1. Read `docs/GOAL.md` (canonical product contract) and `docs/PLAN.md` (execution plan) before making changes.
-2. Check `docs/PLAN.md` §19.2 (work-package status) and `docs/DECISIONS.md` §2 (open review items) to find the next work package
+2. Check `docs/PLAN.md` §19.1 (work-package status) and `docs/DECISIONS.md` §2 (open review items) to find the next work package
    and any blockers.
 3. Consult `docs/THREAT_MODEL.md` and `docs/TEST_STRATEGY.md` for the work package's security and test obligations.
 
@@ -19,7 +19,7 @@ HallPass is a security-sensitive terminating SSH gateway for AI agents. These ru
 - **Record deviations** from PLAN.md or GOAL.md, with their justification, in `docs/DECISIONS.md` in the same commit as the deviation.
 - **Distinguish implemented, tested and externally verified behavior** in status tables, checklists, docs and reports. Never upgrade a status
   without evidence.
-- Keep `docs/PLAN.md` progress (§19.2 status table, §21 acceptance checklist) and `docs/DECISIONS.md` current as part of every work package.
+- Keep `docs/PLAN.md` progress (§19.1 status table, §21 acceptance checklist) and `docs/DECISIONS.md` current as part of every work package.
 - Requirement IDs (`HP-<AREA>-NNN`) are stable. Never renumber or reuse them. Withdraw with a DECISIONS.md reference instead of deleting.
 - Do not invent cryptography. Use only Go standard library and `golang.org/x/crypto` primitives as specified in PLAN.md §13.
 - Never use `ssh.InsecureIgnoreHostKey` or an equivalent permissive host-key callback.

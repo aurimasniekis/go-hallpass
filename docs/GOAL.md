@@ -3,7 +3,7 @@
 > **Status:** canonical product contract. Established at WP00 (planning) on 2026-10-23.
 > Changes to this file are contract changes: they must be recorded in `docs/DECISIONS.md` with justification,
 > and security requirements may never be weakened silently (see `AGENTS.md`).
-> Source brief: `docs/PROMPT.md`. Execution plan: `docs/PLAN.md`.
+> Design reference and requirement status: `docs/PLAN.md`.
 
 ## 1. Product statement
 

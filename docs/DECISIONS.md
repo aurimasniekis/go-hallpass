@@ -775,8 +775,9 @@
   - At the operator's request, history was rewritten (`git filter-branch --index-filter`) so that `LICENSE` exists
     in every commit from the first one. Trees, authors, author and committer dates and messages are otherwise
     unchanged.
-  - Docs that cite commit hashes were updated to the new hashes. The full old→new map is in
-    `docs/evidence/history-rewrite-2026-10-24.txt`.
+  - Docs that cite commit hashes were updated to the new hashes. The full old→new map was kept in
+    `docs/evidence/history-rewrite-2026-10-24.txt` until ADR-0050 removed it; it remains in git history
+    (`git show b298d76:docs/evidence/history-rewrite-2026-10-24.txt`).
   - The pre-rewrite history is kept locally as the branch `backup/pre-license-rewrite`.
 - **Deviation:** HP-OPS-011 says no license file is added before the decision. Backdating deliberately puts `LICENSE`
   into commits that predate the decision; the operator requested exactly that.
@@ -878,6 +879,18 @@
 - **Not provided:** HallPass does not restrict paths. The destination account decides what can be read or written;
   the docs recommend a dedicated account, optionally with `ForceCommand internal-sftp` and `ChrootDirectory`. No
   digest is recorded for non-sequential transfers (resumed or parallel).
+
+### ADR-0050 — Planning documents trimmed after delivery
+
+- **Status:** accepted (operator request, 2026-10-24). Not security-relevant: no requirement, guarantee or default
+  changes.
+- **Decision:** with all work packages delivered, the build-time material is removed from the working tree:
+  `docs/PROMPT.md` (the verbatim original brief), PLAN.md §19.1 (per-package plans) and §19.3 (progress log), the
+  stale review-item summary in PLAN.md §20.2 (DECISIONS.md §2 is the list) and the duplicated commit workflow in PLAN.md
+  §22.2 (AGENTS.md is the source), and the history-rewrite hash map. The status table is now PLAN.md §19.1. GOAL.md,
+  DECISIONS.md, THREAT_MODEL.md, TEST_STRATEGY.md, the acceptance checklist (PLAN.md §21) and the release evidence stay.
+- **Consequences:** the removed text is in git history (`git show b298d76:<path>`). GOAL.md no longer names a source
+  brief.
 
 ## 2. Open review items (operator decisions required)
 

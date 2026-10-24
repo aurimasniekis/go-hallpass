@@ -46,16 +46,14 @@ here are the detailed reference.
 
 ## Project planning (internal)
 
-Working documents from building HallPass. They use requirement IDs (`HP-*`) and will be removed; nothing above
-depends on them.
+Internal design and status documents. They use requirement IDs (`HP-*`); nothing above depends on them.
 
 | Document | Purpose |
 |---|---|
 | [GOAL.md](GOAL.md) | Product contract: requirements, guarantees, definition of done, release gates. |
-| [PLAN.md](PLAN.md) | Architecture and execution plan, work packages, progress and acceptance checklist. |
+| [PLAN.md](PLAN.md) | Architecture and design, work-package status and requirement acceptance checklist. |
 | [DECISIONS.md](DECISIONS.md) | Architectural decision records and open review items. |
 | [THREAT_MODEL.md](THREAT_MODEL.md) | Assets, trust boundaries, threats, mitigations, residual risks. |
 | [TEST_STRATEGY.md](TEST_STRATEGY.md) | Test layers, requirement→test matrix, fault catalog, performance method. |
 | [security/](security/) | Internal security review report and checklist. |
 | [evidence/](evidence/) | Release-gate evaluations and test evidence. |
-| [PROMPT.md](PROMPT.md) | Original project brief. |

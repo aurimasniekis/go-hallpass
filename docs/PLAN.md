@@ -1,9 +1,10 @@
 # HallPass — Implementation Plan
 
-> **Status:** active execution plan. Created at WP00 on 2026-10-23.
-> The product contract is `docs/GOAL.md`, and when the two disagree, GOAL.md wins. Fix this plan to match and record the change in DECISIONS.md.
-> Decisions: `docs/DECISIONS.md` · Threats: `docs/THREAT_MODEL.md` · Tests: `docs/TEST_STRATEGY.md` · Brief: `docs/PROMPT.md`.
-> Progress lives in §19.2 (work-package status) and §21 (acceptance checklist). Keep both current.
+> **Status:** design reference and requirement status. The product contract is `docs/GOAL.md`, and when the two
+> disagree, GOAL.md wins. Fix this plan to match and record the change in DECISIONS.md.
+> Decisions: `docs/DECISIONS.md` · Threats: `docs/THREAT_MODEL.md` · Tests: `docs/TEST_STRATEGY.md`.
+> Status lives in §19 (work packages) and §21 (acceptance checklist). Keep both current. Changes are listed in
+> `CHANGELOG.md`; the build-time per-package plans and progress log are in git history (see §19).
 
 Contents: 1 Summary · 2 Requirements · 3 Architecture · 4 SQLite · 5 Domain/state machines · 6 Schema · 7 SSH grammar ·
 8 API/SSE · 9 Policy · 10 Approvals · 11 Key lifecycle · 12 Operator auth/RBAC · 13 Recording format/consistency ·
@@ -20,14 +21,13 @@ database. High-volume session content lives in encrypted segment files. Exactly 
 directory at a time. The design is a **modular monolith**: internal packages with explicit interfaces, one process,
 no external infrastructure required beyond a filesystem and a KEK source.
 
-**Firm decisions** are recorded as ADRs in DECISIONS.md (ADR-0001 to ADR-0024). **Proposals needing review** are listed as
-R-01 to R-12 in DECISIONS.md §2 and summarized in §20 here.
+**Firm decisions** are recorded as ADRs in DECISIONS.md. **Open review items** (decisions that need the operator) are
+listed in DECISIONS.md §2.
 
 ### 1.1 Assumptions
 
 | # | Assumption | Consequence if false |
 |---|---|---|
-| A-1 | Repository `aurimasniekis/go-hallpass` was empty at WP00, so there are no existing conventions to preserve. | n/a (verified at WP00). |
 | A-2 | Latest stable Go (1.27.3 at WP01, per user instruction 2026-10-23). `go.mod` declares `go 1.27.3`, and the toolchain auto-downloads where older. Bump to new stable releases as they ship. | Older distro toolchains are not supported; use the official toolchain or the container build. |
 | A-3 | Node 24 LTS + pnpm (via corepack) for the frontend. | Adjust in WP19. |
 | A-4 | Destinations run OpenSSH `sshd` ≥ 8.2 on POSIX systems with a POSIX-compatible login shell. | Windows/other sshd are unsupported in v1. |
@@ -1336,243 +1336,13 @@ Graceful shutdown and draining are in §3.4. Destination firewalling: allow inbo
 
 ---
 
-## 19. Implementation work packages
+## 19. Work packages
 
-Ordering is dependency-driven. Each WP ends with a **local commit** (message via `/cc`, `git commit`, never push).
-"Owns" lists requirement IDs whose box in §21 is checked when the WP completes.
+HallPass was built in 28 dependency-ordered work packages (WP00–WP27). Their status is below; the requirement IDs each
+one owns are checked in §21. The per-package plans (goals, files, design notes) and the build-time progress log were
+removed once the packages were delivered; they remain in git history (`git show b298d76:docs/PLAN.md`, §19.1 and §19.3).
 
-### 19.1 Packages
-
-#### WP00 — Planning documents *(this phase)*
-- **Goal:** persist the product contract, plan, decisions, threat model, test strategy, brief and agent rules.
-- **Depends:** none. **Files:** `docs/{GOAL,PLAN,DECISIONS,THREAT_MODEL,TEST_STRATEGY,PROMPT}.md`, `AGENTS.md`.
-- **Acceptance:** all files present, requirement IDs consistent across GOAL/PLAN/TEST_STRATEGY, PROMPT.md identical to the brief.
-- **Commit:** `docs: add hallpass product contract, plan, and threat model`.
-
-#### WP01 — Repository scaffolding, CI and lint
-- **Goal:** buildable skeleton with quality gates from day one.
-- **Depends:** WP00.
-- **Files:** `go.mod`, `cmd/hallpass/main.go` (version only), `.golangci.yml`, `tools/analyzers/{txscope,nohostkeyignore}`, `Makefile`
-  (or `justfile`), `.github/workflows/ci.yaml`, `.gitignore`, `.editorconfig`, `.gitleaks.toml`, `docs/README.md` index.
-- **Design:** golangci-lint (govet, staticcheck, errcheck, gosec, depguard, forbidigo, revive, bodyclose, contextcheck),
-  `go test -race ./...`, `govulncheck`, gitleaks, coverage report with per-package floor script (HP-TST-009), fuzz-smoke job placeholder.
-  CI uses pinned action SHAs.
-- **Tests:** analyzer tests (`analysistest`) proving `InsecureIgnoreHostKey` and tx-scope violations are flagged.
-- **Acceptance:** CI green on skeleton. Owns: `HP-CRY-006`, `HP-OPS-008`, `HP-OPS-012`, `HP-TST-001`, `HP-TST-009`.
-- **Docs:** `CONTRIBUTING.md` draft (dev setup, commit rules). **Commit:** `build: scaffold go module, lint, and ci pipeline`.
-
-#### WP02 — Configuration, runtime modes, logging foundation
-- **Goal:** strict config and safe production/development modes; slog JSON with redaction.
-- **Depends:** WP01. **Files:** `internal/config`, `internal/obs/{log,redact}`, `deploy/examples/hallpass.example.yaml`.
-- **Design:** YAML file + `HALLPASS_*` env overrides (`knadh/koanf` or a minimal custom loader; pick in WP02 and record an ADR),
-  unknown keys rejected, durations typed, `mode: production|development`. Production rejects: HTTP public base URL (except
-  localhost), dev KEK, `devauth`, KEK inside data dir. Logger: `slog.JSONHandler` with ECS-aligned keys (`@timestamp`,
-  `log.level`, `message`, `event.action`, `event.outcome`, `trace.id`, `hallpass.*`). `redact.Secret[T]` type with `LogValue`, plus a key
-  denylist (`reason`, `command`, `password`, `token`, `secret`, `cookie`, `authorization`).
-- **Tests:** config validation table tests. Redaction tests that capture handler output and assert absence of planted secrets.
-- **Acceptance:** Owns: `HP-OPS-013`, `HP-OBS-001`, `HP-OBS-002`. **Docs:** `docs/operator/configuration.md` skeleton, `docs/operator/logging.md` (field schema).
-- **Commit:** `feat(config): add validated config, runtime modes, and redacted logging`.
-
-#### WP03 — SQLite storage, migrations, process lock, backup primitive
-- **Goal:** the storage layer of §4.
-- **Depends:** WP02. **Files:** `internal/store/*`, migrations `0001`, `sqlc.yaml`, `internal/ids`.
-- **Design:** §4. `Writer.Tx` with `BEGIN IMMEDIATE`, retry, duration histogram. Reader pool `query_only`. flock. statfs check
-  (Linux magic numbers for NFS, SMB/CIFS, SMB2, FUSE-sshfs, 9p). `quick_check`. Snapshot-before-migrate. `VACUUM INTO` backup primitive. Permission checks.
-- **Tests:** pragmas on every pooled connection; concurrent writers (100 goroutines) with no `SQLITE_BUSY` surfacing; tx-duration
-  guard; second process lock failure; migration failure rollback (injected bad migration); newer-schema refusal; snapshot restore round-trip; permissions refusal.
-- **Acceptance:** Owns: `HP-DB-001`, `HP-DB-002`, `HP-DB-003`, `HP-DB-004`, `HP-DB-005`, `HP-DB-006`, `HP-DB-007`, `HP-DB-008`, `HP-DB-009`, `HP-DB-010`, `HP-DB-011`, `HP-DB-012`. **Docs:** `docs/operator/storage.md`. **Commit:** `feat(store): add sqlite storage with migrations, locking, and snapshots`.
-
-#### WP04 — Keyring and field encryption
-- **Depends:** WP03. **Files:** `internal/keyring`, migration additions (keyring table in 0001), `cmd/hallpass keys init-kek|rotate-kek|status`.
-- **Design:** §13.1–13.2. KEK loaders, canary, purpose keys, `Seal/Open`, rotation job hooks.
-- **Tests:** round-trip, AAD mismatch rejection, wrong KEK detection, KEK rotation (offline), purpose-key rotation with re-seal, nonce
-  uniqueness property test, production refusal without KEK.
-- **Acceptance:** Owns: `HP-CRY-001`, `HP-CRY-002`, `HP-CRY-003`. **Docs:** `docs/operator/keys.md`. **Commit:** `feat(keyring): add kek-wrapped purpose keys and field encryption`.
-
-#### WP05 — Audit events, jobs and outbox framework
-- **Depends:** WP04. **Files:** `internal/audit`, `internal/jobs`, `internal/eventbus`, migration `0002`.
-- **Design:** audit append within the caller's tx (hash chain computed in tx, `seq` from `MAX+1` under the single writer). Job scheduler with leases,
-  exponential retry, dedup keys. Outbox worker framework (provider-agnostic). Bounded event bus with drop-to-reconcile semantics for
-  *latency-only* subscribers (security consumers also reconcile from DB).
-- **Tests:** chain verification and tamper detection, job lease expiry/requeue, retry bounds, outbox crash recovery.
-- **Acceptance:** Owns: `HP-OPS-014`, `HP-OBS-005`. **Commit:** `feat(audit): add hash-chained audit log, durable jobs, and outbox`.
-
-#### WP06 — Agents and agent keys
-- **Depends:** WP05. **Files:** `internal/agents`, migration `0003`.
-- **Design:** §11.1. Service API used later by HTTP. Uniqueness, tombstones, algorithm policy.
-- **Tests:** key parsing table (all algorithms, RSA sizes, options, certs, garbage) + fuzz; uniqueness across agents; revocation events.
-- **Acceptance:** Owns: `HP-AGT-001`, `HP-AGT-002`, `HP-AGT-003`, `HP-AGT-004`, `HP-AGT-006`, `HP-AGT-009`. **Commit:** `feat(agents): add agent registry with key lifecycle`.
-
-#### WP07 — Servers, host identities, roles, login credentials and CAs
-- **Depends:** WP06. **Files:** `internal/inventory`, `internal/credentials`, `internal/egress`, migrations `0004`, `0005`.
-- **Design:** §11.2–11.3, alias rules, egress guard (`netip` prefixes, metadata deny list, re-check after DNS, dial by IP), probe
-  (requires WP11 dialer core, so the probe uses a minimal `credentials.Probe` built on `x/crypto/ssh` client + `egress`), gateway host key generation.
-- **Tests:** alias/reserved validation; duplicate host detection + exceptions; host CA binding acceptance/rejection; egress guard
-  table (loopback, link-local, metadata v4/v6, IPv4-mapped IPv6, DNS rebinding simulation); credential generation/sealing; cert
-  issuance fields; signer conversion tests (ECDSA DER → SSH).
-- **Acceptance:** Owns: `HP-SRV-001`, `HP-SRV-002`, `HP-SRV-004`, `HP-SRV-005`, `HP-SRV-006`, `HP-SRV-007`, `HP-SRV-009`, `HP-KEY-001`, `HP-KEY-002`, `HP-KEY-003`, `HP-KEY-004`, `HP-KEY-005`, `HP-KEY-006`, `HP-KEY-007`. **Commit:** `feat(inventory): add servers, host identities, roles, and login credentials`.
-
-#### WP08 — Policy engine and effective access
-- **Depends:** WP07. **Files:** `internal/policy`, migration `0006`.
-- **Design:** §9. Compiled immutable snapshots per version, `Explain`, what-if evaluation, approver rules, self-approval.
-- **Tests:** table tests per semantic rule; property tests (deny dominance, monotonicity of adding allow rules, empty selector
-  matches nothing, `all` includes newly created objects); fuzz selector parser; benchmark evaluation (target ≤ 50 µs per (agent, server) pair at A-7 scale).
-- **Acceptance:** Owns: `HP-POL-001`, `HP-POL-002`, `HP-POL-003`, `HP-POL-004`, `HP-POL-005`, `HP-POL-006`, `HP-POL-007`, `HP-POL-009`, `HP-POL-011`, `HP-POL-012`, `HP-POL-013`, `HP-POL-014`. **Commit:** `feat(policy): add default-deny policy engine with effective-access preview`.
-
-#### WP09 — Requests, decisions, grants, sessions and the enforcer
-- **Depends:** WP08. **Files:** `internal/access`, migration `0007`.
-- **Design:** §5. CAS transitions, dedup, idempotency, decision tx, grant selection, channel registration, enforcer (events +
-  ticker + DB reconciliation), policy-change job, lockdown, disablement cascades, reconciliation (non-recording parts).
-- **Tests:** state-machine property tests (random op sequences preserve invariants), race tests (N concurrent deciders, decide vs
-  expire vs cancel, register vs revoke) under `-race`, enforcement bound timing test (≤ 5 s, p99 measured), restart reconciliation.
-- **Acceptance:** Owns: `HP-AGT-005`, `HP-AGT-008`, `HP-SRV-008`, `HP-POL-008`, `HP-REQ-001`, `HP-REQ-002`, `HP-REQ-003`, `HP-REQ-004`, `HP-REQ-006`, `HP-REQ-007`, `HP-REQ-008`, `HP-GRT-001`, `HP-GRT-002`, `HP-GRT-003`, `HP-GRT-004`, `HP-GRT-005`, `HP-GRT-006`, `HP-GRT-007`, `HP-GRT-008`, `HP-GRT-009`, `HP-GRT-010`, `HP-GRT-011`, `HP-SES-001`, `HP-SES-002`, `HP-SES-003`, `HP-DB-013`. **Commit:** `feat(access): add request, grant, and session lifecycle with enforcer`.
-
-#### WP10 — SSH front end: auth, limits, grammar, gateway commands
-- **Depends:** WP09. **Files:** `internal/sshfront`, `internal/sshfront/grammar`, `api/ssh-schemas`, `test/openssh` harness, `docs/agent/*`.
-- **Design:** §7, §11.1. `ssh.ServerConfig` with only PublicKeyCallback, restricted algorithms, `MaxAuthTries`, pre-auth semaphore,
-  per-IP limiter, handshake deadline. Global request and channel type rejection. Dispatcher for gateway commands. Waiting logic. JSON
-  output. Gateway host key management CLI (`hallpass hostkey show|rotate`).
-- **Tests:** grammar unit + fuzz + golden JSON; OpenSSH harness (real `ssh` client in container) covering: unknown/revoked keys, username
-  spoofing, list/roles visibility, hidden target byte equality, request dedup, wait/timeout/disconnect, exit codes, no-PTY reason → 90,
-  forwarding/subsystem denial.
-- **Acceptance:** Owns: `HP-SSH-001`, `HP-SSH-002`, `HP-SSH-003`, `HP-SSH-004`, `HP-SSH-005`, `HP-SSH-007`, `HP-SSH-009`, `HP-SSH-013`, `HP-SSH-016`, `HP-SSH-017`, `HP-SSH-018`, `HP-SSH-019`, `HP-SSH-020`, `HP-SSH-021`, `HP-SSH-022`, `HP-SSH-024`, `HP-AGT-007`, `HP-POL-010`, `HP-REQ-005`, `HP-REQ-009`, `HP-TST-003`, `HP-DOC-002`. **Docs:** `docs/agent/guide.md`, `docs/agent/json-schemas.md`, `docs/agent/exit-codes.md`.
-- **Commit:** `feat(ssh): add agent ssh front end with command grammar and request flow`.
-
-#### WP11 — SSH data plane
-- **Depends:** WP10. **Files:** `internal/sshproxy`, integration with `access` and `egress`.
-- **Design:** §5.6, §7.8, §11.2. Outbound client with strict host verification, PTY/env/signal/window-change, EOF/half-close,
-  exit-status/exit-signal, keepalive/idle, bounded copy buffers (32 KiB) respecting windows, enforcer registration, graceful shutdown.
-  Recording hooks are interfaces with a no-op recorder that **refuses** in mandatory mode until WP12 lands (so no unrecorded forwarding ever ships).
-- **Tests:** OpenSSH matrix (sshd 8.x/9.x containers): shell with `-t`, exec stdout/stderr separation, large output, stdin
-  streaming, EOF semantics (`ssh … exec -- cat` with closed stdin), exit codes and signals, resize, idle timeout, slow client
-  backpressure (bounded RSS), host key mismatch, egress denial, expiry mid-session (≤ 5 s), revocation mid-session, leak checks (goleak).
-- **Acceptance:** Owns: `HP-SSH-006`, `HP-SSH-008`, `HP-SSH-010`, `HP-SSH-011`, `HP-SSH-012`, `HP-SSH-014`, `HP-SSH-015`, `HP-SSH-023`, `HP-SSH-025`, `HP-OPS-002`. **Commit:** `feat(ssh): add destination data plane with strict host verification`.
-
-#### WP12 — Recording format, recorder and reconciliation
-- **Depends:** WP11, WP04. **Files:** `internal/recording`, `internal/recording/hprec`, migration `0008`, `docs/formats/hprec1.md`.
-- **Design:** §13.3–13.7, timeline event writer, sequence block reservation, bounded queue/backpressure, durability modes, retention job.
-- **Tests:** format round-trip; tamper tests (bit flip each region, reorder, truncate, drop final, swap segments between sessions → detected);
-  fuzz reader; crash tests (kill -9 at each protocol step via fault hooks) → reconciliation results; ENOSPC/EIO → fail closed;
-  backpressure under slow disk; verification CLI.
-- **Acceptance:** Owns: `HP-REC-001`, `HP-REC-002`, `HP-REC-003`, `HP-REC-004`, `HP-REC-005`, `HP-REC-007`, `HP-REC-008`, `HP-REC-009`, `HP-REC-011`, `HP-REC-013`, `HP-CRY-004`, `HP-CRY-005`, `HP-DOC-005`. **Commit:** `feat(recording): add encrypted hprec1 recorder with crash reconciliation`.
-
-> **Milestone M1, "Core gateway" (WP01–WP12):** agents can list, request (auto-approve policy), connect and exec through
-> real OpenSSH with mandatory encrypted recording, enforcement and reconciliation. There is no operator UI yet, and inventory is
-> configured through service-level test fixtures and admin CLI seed commands (`hallpass admin seed --file`, dev mode only).
-
-#### WP13 — Local operator authentication, sessions, MFA
-- **Depends:** WP05. **Files:** `internal/opauth`, `internal/httpapi` (router, middleware skeleton), `api/openapi.yaml` (auth paths), migration `0009`.
-- **Design:** §12.2–12.3, bootstrap via admin socket/CLI, throttling, CSRF, recent-auth middleware, `devauth` build tag.
-- **Tests:** Argon2id vectors and param upgrade; throttle progression and no permanent lockout; enumeration timing (statistical
-  check: unknown vs known user median within 10%); TOTP RFC vectors and step reuse; recovery codes single use; session rotation,
-  idle/absolute expiry, invalidation triggers; CSRF and Origin checks; lockout prevention; prod rejects devauth.
-- **Acceptance:** Owns: `HP-AUTH-001`, `HP-AUTH-002`, `HP-AUTH-003`, `HP-AUTH-004`, `HP-AUTH-005`, `HP-AUTH-006`, `HP-AUTH-007`, `HP-AUTH-008`, `HP-AUTH-009`, `HP-AUTH-010`, `HP-AUTH-011`, `HP-AUTH-012`, `HP-AUTH-013`, `HP-AUTH-014`, `HP-AUTH-015`, `HP-AUTH-017`, `HP-AUTH-018`. **Commit:** `feat(auth): add local operator authentication with mfa and sessions`.
-
-#### WP14 — OIDC SSO
-- **Depends:** WP13. **Files:** `internal/oidc`, migration `0010`, mock IdP in `internal/oidc/oidctest`.
-- **Design:** §12.4.
-- **Tests:** mock IdP (Go, in-process, with key rotation, malformed tokens, wrong iss/aud/azp/nonce, expired, alg confusion `none`/HS256,
-  missing `auth_time`) plus interop smoke tests against Keycloak and Dex containers in CI (nightly). State replay, open redirect
-  attempts, JIT restrictions, email-collision non-merge, group removal, outage.
-- **Acceptance:** Owns: `HP-OIDC-001`, `HP-OIDC-002`, `HP-OIDC-003`, `HP-OIDC-004`, `HP-OIDC-005`, `HP-OIDC-006`, `HP-OIDC-007`, `HP-OIDC-008`, `HP-OIDC-009`, `HP-OIDC-010`, `HP-OIDC-011`, `HP-OIDC-012`, `HP-OIDC-013`, `HP-OIDC-014`, `HP-OIDC-015`. **Commit:** `feat(auth): add generic oidc sso with pkce and group mapping`.
-
-#### WP15 — RBAC, REST API and SSE
-- **Depends:** WP14, WP12. **Files:** `internal/rbac`, `internal/httpapi` handlers, `api/openapi.yaml` (complete v1), SSE hub, codegen config.
-- **Design:** §8, §12.5. Every handler goes through `rbac.Authorize`, `x-permission` CI check, problem details, cursor pagination,
-  idempotency keys, rate limits, security headers.
-- **Tests:** RBAC matrix suite (local and SSO principals); address-field redaction for non-permitted roles; SSE resume/reset/authorization
-  filtering/limits; problem+json shapes; CSP headers.
-- **Acceptance:** Owns: `HP-SRV-010`, `HP-RBAC-001`, `HP-RBAC-002`, `HP-RBAC-003`, `HP-RBAC-004`, `HP-RBAC-005`, `HP-RBAC-006`, `HP-RBAC-007`, `HP-API-001`, `HP-API-002`, `HP-API-003`, `HP-API-004`, `HP-API-005`, `HP-API-006`, `HP-API-007`, `HP-API-008`. **Commit:** `feat(api): add rbac-enforced rest api v1 and sse live events`.
-
-#### WP16 — Web approvals and notification core
-- **Depends:** WP15. **Files:** `internal/notify`, `internal/notify/web`, migration `0011`.
-- **Design:** §10.1–10.3, §10.6–10.7.
-- **Tests:** decision authorization table (role, scope, self-approval, MFA, duration bounds); concurrent decisions; outbox retries
-  and dead letters with a failing fake provider; failure never approves; sanitization fuzz.
-- **Acceptance:** Owns: `HP-API-009`, `HP-NTF-001`, `HP-NTF-002`, `HP-NTF-003`, `HP-NTF-004`, `HP-NTF-007`, `HP-NTF-008`, `HP-NTF-009`, `HP-NTF-010`, `HP-NTF-011`, `HP-NTF-012`, `HP-NTF-013`. **Commit:** `feat(approvals): add decision service, outbox delivery, and web approvals`.
-
-#### WP17 — Slack approvals
-- **Depends:** WP16. **Files:** `internal/notify/slack`.
-- **Tests:** signature vectors (valid, wrong secret, skewed timestamp, replay), payload fuzz, link flow, unlinked user, message escaping
-  (mentions `<!channel>`, `<@U…>`, links), fake Slack API server for delivery/update. Manual verification against a real Slack
-  workspace is recorded as **externally verified** evidence.
-- **Acceptance:** Owns: `HP-NTF-005`. **Commit:** `feat(approvals): add slack interactive approvals`.
-
-#### WP18 — Telegram approvals
-- **Depends:** WP16. **Files:** `internal/notify/telegram`.
-- **Tests:** secret token check, chat/user allowlists, callback_data length, update_id replay, fake Bot API server, link flow.
-- **Acceptance:** Owns: `HP-NTF-006`. **Commit:** `feat(approvals): add telegram bot approvals`.
-
-> **Milestone M2, "Operable backend" (WP13–WP18):** full API with auth, RBAC and all approval channels.
-
-#### WP19 — Frontend foundation and design system
-- **Depends:** WP15. **Files:** `web/*` scaffold, `web/src/ds`, `web/src/api` (generated types), SSE manager, login/setup/MFA pages, Go embed.
-- **Design:** §14.
-- **Tests:** Vitest for ds components and countdown offset math; Playwright login flows for all three modes; axe on every page;
-  visual snapshots of `/__ds` in both themes.
-- **Acceptance:** Owns: `HP-UI-001`, `HP-UI-002`, `HP-UI-006`, `HP-UI-007`, `HP-UI-010`, `HP-UI-011`, `HP-UI-012`, `HP-UI-014`, `HP-UI-015`, `HP-UI-016`, `HP-TST-004`. **Commit:** `feat(web): add frontend foundation, design system, and login flows`.
-
-#### WP20 — Operational pages
-- **Depends:** WP19, WP16. **Files:** `web/src/routes/*`, `web/src/features/*` for dashboard, requests, sessions list, activities, agents, servers,
-  roles, groups, policy + preview, operators, auth settings (incl. test login), integrations, audit, storage/keys, system/lockdown.
-- **Tests:** Playwright workflows: register agent → enroll server → policy → agent requests (via the SSH harness) → approve in UI → session
-  shows live; revoke; auth settings SSO-only enforcement gating; destructive confirmations; denied states per role; saved filters.
-- **Acceptance:** Owns: `HP-SRV-003`, `HP-SES-005`, `HP-UI-003`, `HP-UI-005`, `HP-UI-008`, `HP-UI-009`. **Commit:** `feat(web): add operational console pages`.
-
-#### WP21 — Timeline and replay UI
-- **Depends:** WP20. **Files:** `web/src/features/sessions/{timeline,replay}`, records API usage.
-- **Tests:** malicious-escape corpus replay (OSC 8/52, title, hyperlinks, huge lines, invalid UTF-8) without side effects; concurrent streams
-  separated; exec stdout/stderr panes; provenance badges; export permission/reauth; visual snapshots.
-- **Acceptance:** Owns: `HP-REC-006`, `HP-REC-010`, `HP-REC-014`, `HP-UI-004`, `HP-UI-013`. **Commit:** `feat(web): add session timeline and safe terminal replay`.
-
-> **Milestone M3, "Complete console" (WP19–WP21).**
-
-#### WP22 — Observability
-- **Depends:** WP15. **Files:** `internal/obs/{otel,metrics,health}`, `docs/operator/observability.md` (metric catalog, log schema, alert rules).
-- **Design:** OTel SDK with OTLP exporter (optional) and Prometheus exporter. Spans for HTTP, SSH auth, authorization, dial, decision tx. Readiness
-  checks (§4.5). Disk alerts. Correlation IDs propagated through context.
-- **Tests:** metrics presence/names golden test, readiness transitions under injected faults, log correlation fields.
-- **Acceptance:** Owns: `HP-OPS-001`, `HP-OPS-006`, `HP-OBS-003`, `HP-OBS-004`. **Commit:** `feat(obs): add opentelemetry traces, metrics, and readiness checks`.
-
-#### WP23 — Backup, restore, upgrade, break-glass
-- **Depends:** WP12, WP13. **Files:** `internal/backup`, `cmd/hallpass {backup,restore,verify,anchors,admin recover}`, `test/recovery`, `docs/operator/*`.
-- **Design:** §13.10, §18.5–18.16.
-- **Tests:** scripted drill (create data → backup during active sessions → restore on clean container → verify → sessions reconciled);
-  upgrade test from previous release DB fixture (generated, secret-free); break-glass requires lock + KEK and writes audit; anchor export/verify.
-- **Acceptance:** Owns: `HP-CRY-007`, `HP-CRY-008`, `HP-CRY-009`, `HP-DB-014`, `HP-AUTH-016`, `HP-OPS-003`, `HP-OPS-004`, `HP-OPS-005`. **Commit:** `feat(ops): add backup, restore, verify, and break-glass recovery`.
-
-#### WP24 — Packaging and release pipeline
-- **Depends:** WP22, WP23. **Files:** `deploy/Dockerfile` (multi-stage, `gcr.io/distroless/static-debian12:nonroot`), `deploy/compose.yaml`,
-  `deploy/systemd/hallpass.service` (hardening: `ProtectSystem=strict`, `NoNewPrivileges`, etc.), `.github/workflows/release.yaml`
-  (goreleaser or scripted: multi-arch binaries, image, syft SBOM, `actions/attest-build-provenance`, checksums), `SECURITY.md`, `CONTRIBUTING.md`, `CHANGELOG.md`.
-- **Tests:** container smoke test (start, readyz, ssh list against fixture), Trivy scan, SBOM presence.
-- **Acceptance:** Owns: `HP-OPS-007`, `HP-OPS-009`, `HP-OPS-010`, `HP-OPS-011`, `HP-DOC-001`, `HP-DOC-006`. License: Apache-2.0 (R-01 resolved, ADR-0045). **Commit:** `build(release): add container image, compose, and release pipeline`.
-
-#### WP25 — Optional destination-side audit integration
-- **Depends:** WP12, WP21. **Files:** `internal/destaudit`, `docs/destination/*`.
-- **Design:** a small collector mode (`hallpass collector`, separate binary target) on destinations reads auditd `EXECVE` records (or
-  journald), tags them with `auid`/`ses` and the HallPass key ID from the SSH certificate or the login key comment, signs batches with a
-  per-destination Ed25519 key enrolled in HallPass, and posts to `/api/v1/destaudit/ingest`. HallPass correlates by remote user + time window +
-  session markers (`HALLPASS_SESSION` env var allowlisted on destination `AcceptEnv`), and labels results `destination-audit` provenance with
-  confidence. Docs explain limits: shell built-ins aren't exec'd, history files are user-writable, kernel audit sees exec but not intent,
-  a root user can tamper with destination logs.
-- **Tests:** correlation unit tests, signature verification, OpenSSH + auditd container test.
-- **Acceptance:** Owns: `HP-SES-004`, `HP-REC-012`, `HP-DOC-003`. **Commit:** `feat(destaudit): add optional destination-side exec audit integration`.
-
-#### WP26 — Hardening
-- **Depends:** WP01–WP25. **Files:** `test/fault`, `test/soak`, fuzz corpora, `docs/evidence/<rc>/`.
-- **Design:** run long fuzzing, the full fault catalog, the 24 h soak and the performance suite on the reference hardware. Do an internal security review
-  (checklist in TEST_STRATEGY.md §6) with findings tracked in DECISIONS.md or issues.
-- **Acceptance:** Owns: `HP-TST-002`, `HP-TST-005`, `HP-TST-006`, `HP-TST-007`, `HP-TST-008`. **Commit(s):** `test: add fault injection, soak, and fuzz hardening` (+ fix commits per finding).
-
-#### WP27 — Release-gate validation and RC
-- **Depends:** WP26. **Files:** `docs/evidence/<version>/*`, `docs/security-guarantees.md`, release notes.
-- **Design:** evaluate RG-1..RG-11, assemble evidence, tag RC **locally only** (no push without instruction).
-- **Acceptance:** Owns: `HP-DOC-004`. All gates documented as pass/fail. **Commit:** `chore(release): record release-gate evidence for vX.Y.Z-rc.N`.
-
-> **Milestone M4, "Release candidate" (WP22–WP27).**
-
-### 19.2 Status table
+### 19.1 Status table
 
 Update this table at every WP commit. Status values: `planned`, `in-progress`, `implemented`, `tested`, `externally-verified`, `blocked`.
 
@@ -1607,39 +1377,6 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP26 | Hardening | WP01–WP25 | implemented | 3b246c0, ffeae3b, 6b62a86, ed5c39e, 7bf9c69, 2ddb598, 41b1db6 |
 | WP27 | Release-gate validation and RC | WP26 | in-progress | |
 
-### 19.3 Progress log
-
-Newest last. Each entry states what is **implemented**, what is **tested** (and where: local `make check` vs GitHub CI), and what is
-**externally verified**, plus deviations. Until the repository is pushed (only on explicit user instruction), "CI" evidence means a
-local run of the same targets the workflow executes, and the entry says so. Checklist marks in §21: `✅` = done (box checked),
-`◐` = partial progress (box stays unchecked).
-
-- **WP00** (2026-10-23): planning documents committed (`b562d97`).
-- **WP01** (2026-10-23): Go module (`go 1.27.3`, latest stable per user instruction; A-2 updated), `hallpass version`, golangci-lint v2 config (depguard: no math/rand, no log; forbidigo), custom analyzers `nohostkeyignore` and `txscope` with analysistest suites (tools module), Makefile, coverage-floor script, CI workflow (actions pinned by SHA, actionlint-clean), gitleaks config, CONTRIBUTING.md, docs index. Tested locally: `make vet custom-vet lint race tools-test coverage` green, gitleaks clean. Not yet run on GitHub (not pushed).
-- **WP02** (2026-10-23): `internal/config` (YAML via go.yaml.in/yaml/v3 with KnownFields, reflective HALLPASS_* overrides, aggregated validation, production vs development rules incl. KEK location and dev-feature rejection), `internal/obs` (ECS-aligned slog JSON, LevelVar) and `internal/obs/redact` (Secret[T], sensitive-key redaction), `hallpass config check|env`, example config, docs/operator/{configuration,logging}.md. Config loader is hand-rolled (no koanf), recorded as ADR-0025. Tested locally (race, lint, vet).
-- **WP03** (2026-10-23): `internal/store` (modernc SQLite, writer/reader pools with per-connection pragma verification, BEGIN IMMEDIATE Tx with jittered busy retry and after-commit hooks, error classification and Health tracking, flock process lock, Linux/macOS network-FS refusal, data-dir permission checks, goose migrations with pre-migration snapshots, quick/integrity checks, VACUUM INTO snapshot), sqlc (pinned v1.31.1 binary with checksum, drift check in CI), `internal/ids` (prefixed monotonic UUIDv7), `internal/clock`, `internal/store/storetest`, `hallpass migrate`, docs/operator/storage.md. Tested locally on macOS and in a Linux container (incl. FUSE refusal via `make test-netfs`).
-- **WP04** (2026-10-23): `internal/keyring` (LocalKEK AES-256-GCM KeyWrapper, KEK file/env/dev loading with permission checks, purpose keys field/credential/recording/manifest/token, Seal/Open with location-binding AAD, MAC/MACAll/VerifyMAC, purpose rotation with canary reseal, retire, offline KEK rotation), `hallpass keys init-kek|status|rotate|rotate-kek`, docs/operator/keys.md. Found and fixed during testing: retiring a rotated field key orphaned the canary; rotation now reseals it in the same transaction. Coverage 80.6%. Tested locally.
-- **WP05** (2026-10-23): migration 0002 (audit_events, jobs, outbox_messages, delivery_attempts), `internal/audit` (hash chain, Verify, sealed sensitive details, sinks), `internal/jobs` (leased durable queue, retries, dedup, Periodic), `internal/outbox` (encrypted bodies, provider registry, leased delivery, bounded retries, dead-letter, attempt history), `internal/eventbus` (bounded, drop-counting), `internal/keyring/keyringtest`. Tested locally under -race.
-- **WP06** (2026-10-23): migration 0003 (groups, labels, agents, agent_keys, agent_groups), `internal/agents` (strict key parsing/algorithm policy, global key uniqueness with tombstones, revocation with sealed reasons, enable/disable, in-transaction hooks for WP09 cascades, Authenticate with failure reasons and source CIDRs, policy-version bumps, audit), `internal/groups` (group/label validation and persistence), `internal/apperr`, `internal/testutil/sshkeys`, audit request metadata. Tested locally (-race), FuzzParseAgentKey 20 s.
-- **WP07** (2026-10-23): migrations 0004/0005, `internal/inventory` (servers, roles, aliases/reserved words, host identities with paste/scan/confirm/retire, duplicate detection + audited exceptions, host CAs with principal binding, strict Verifier), `internal/credentials` (managed/imported login keys sealed with the credential key, authorized_keys suggestion, probe/activate/overlap/retire/revoke, user CAs + per-connection certificates, Signer/SignerResolver abstraction, gateway host keys with staged rotation), `internal/egress` (anti-SSRF guard), `internal/destssh` (sole outbound dialer, verifier mandatory), `internal/sshalg`, `internal/testutil/sshtest` (in-process destination), config `egress.source_addresses`. txscope analyzer refined (SSH I/O only; AfterCommit callbacks exempt). Tested locally (-race); real-OpenSSH interop deferred to WP10/WP11 harness.
-- **WP08** (2026-10-23): migration 0006 (policy_rules, approver_rules, agent_owners), `internal/policy` (selectors with Kubernetes-style label expressions and empty-matches-nothing semantics, immutable compiled Snapshot: Evaluate/Visible/ResolveServer/ResolveRole with single ErrNotFoundOrForbidden, durations/presets/auto-approve, CanApprove with self-approval prohibition; Engine with per-version cache, consistent ReadTx loading, WhatIf; CRUD service with in-tx version bump + audit + policy.changed), `store.ReadTx`, docs/operator/policy.md. Evaluate ≈1.2 µs, Visible over 2,000 servers × 3 roles × 100 rules ≈8.5 ms (M-series laptop, not RH-1). Coverage 81.8%. Tested locally (-race), FuzzRuleJSON 20 s.
-- **WP09** (2026-10-23): migration 0007 (requests, decisions, grants, sessions, connections, channels, timeline), `internal/access` (CreateRequest with dedup/idempotency/rate limits/sealed sanitized reasons/auto-approval; Decide via one transactional path with authority, self-approval, channel, policy and duration rechecks; grants with time-authoritative expiry; lockdown; disable/key-revoke/target cascades; ReconcilePolicy (cancel/revoke/clamp); channel registration with atomic concurrency limits and full revalidation; per-session Sequencer with DB-reserved blocks; timeline events with idempotency keys; Enforcer (events + ticker + DB reconciliation, registration-race guard); startup reconciliation; background loop). Decide no longer writes state on its rejection paths (would roll back). Tests: 30+ cases incl. concurrency races, enforcement bound (in-process), lost-event path; coverage 80.8%; FuzzSanitizeReason 15 s. Frontend foundation, HPREC1 format and SSH grammar started in parallel by sub-agents (separate directories; committed separately after review).
-- **WP13 (service layer)** (2026-10-23): migration 0009 (operators, local credentials, roles, operator groups, TOTP, recovery codes, one-time tokens, web sessions, throttle), `internal/opauth` (Argon2id with versioned params, NFKC passwords, TOTP RFC 6238, recovery codes, setup/invite/reset/recovery-login tokens, login with throttling and enumeration resistance, MFA verification, reauth, server-side sessions with rotation/idle/absolute expiry and CSRF tokens, last-admin protection, break-glass). HTTP endpoints, cookies and Origin/CSRF middleware are delivered with the API in WP15 (deviation from PLAN WP13 file list: avoids building the router twice). Bug found by the new timing test and fixed: the unknown-account dummy hash was computed once at init and could diverge from current parameters (35× timing difference in tests). Coverage 81.0%.
-- 2026-10-23 — WP10–WP12: SSH front end (auth, limits, grammar, list/roles/request/status/cancel/sessions/whoami/version/help), data plane (exec/shell/PTY, env allowlist, signals, exit propagation, strict host verification, enforcer termination, idle timeout, graceful drain, `hallpass serve`) and mandatory recording (HPREC1, recorder with backpressure, rollover, integrity chain, startup reconciliation, retention, `hallpass verify`). In-process e2e and real-OpenSSH tests (`make test-openssh`). Status *implemented*, not *tested*, because of open partial items: HP-SSH-012 keepalive tests, HP-SSH-013 load test, HP-REC-003 idempotency keys, HP-REC-013 per-class retention, HP-CRY-004 external review. Found and fixed during WP: out-of-order recording appends under concurrent streams (ADR-0028), implicit role selection deviating from HP-SSH-022, x/crypto CloseWrite/Write race on termination notices. ADR-0026..0028.
-- 2026-10-23 — WP19 (partial): web foundation: design system with light/dark tokens and a contrast test, API client (CSRF, problem+json, reauth), SSE client, login/setup/shell routes, security lint rules, CSP-safe build check. Unit tests: 232. Still open: Go embedding (HP-UI-016), WP20/21 pages, Playwright flows against a live backend (HP-TST-004), API shapes to reconcile with OpenAPI (WP15). ADR-0029.
-- 2026-10-23 — WP14: generic OIDC SSO (internal/oidc, migration 0010): PKCE code flow, rate-limited JWKS key set, strict ID-token checks, identity by iss+sub, preprovisioned/JIT, group→role sync with last-admin guard, upstream step-up with TOTP fallback, test login gating SSO-only mode, link invitations, RP logout URL; in-process mock IdP (oidctest). Status *implemented*: HTTP endpoints/cookies come with WP15; Keycloak/Dex interop tests not yet run (ADR-0030).
-- 2026-10-23 — WP23: backup/restore/anchors/break-glass CLI (internal/backup, cmd backup|restore|anchors|admin): read-only online snapshot, ciphertext-only segment copy, manifest with hashes and KEK ID, verify, restore with staging and KEK check, anchor export/verify, offline bootstrap/recover. Partial items: restore drill, RTO, upgrade fixture, break-glass alert. ADR-0032 (restore --force security-relevant, R-13).
-- 2026-10-23 — WP24: packaging (root Dockerfile, distroless nonroot, compose, systemd unit), scripted reproducible release builds, release workflow (SBOM, provenance, Trivy, draft release), install/container/upgrade docs, CHANGELOG, VERSIONING, SECURITY.md. Not run on GitHub yet; ADR-0033 (Trivy waiver gap security-relevant, R-14).
-- 2026-10-23 — WP15 + WP22: REST API v1 (spec-first OpenAPI 3.1, in-repo generator, RBAC matrix, problem details, pagination, idempotency, SSE hub, OIDC browser endpoints, embedded UI) and observability (metrics registry, readiness checks, tracing, correlation, call-site instrumentation, serve wiring). Remaining API resources (integrations, retention, recording export) arrive with WP16-18/WP23 follow-ups. ADR-0031, ADR-0034.
-- 2026-10-23 — WP16-WP18: notification core (internal/notify, migration 0012): integrations and routes with sealed write-only secrets, action tokens, provider identity links and link codes, durable replay cache, outbox delivery through the Slack/Telegram adapters with delivery-time rendering, message updates, webhook routing under /hooks, chat MFA requirement and rate limits; API endpoints for integrations, routes, deliveries and links. THREAT_MODEL T-05 corrected (ADR-0035, security-relevant). Real Slack/Telegram verification pending (WP17/WP18 status implemented, not externally verified).
-WP25 (2026-10-23): destination-side audit integration (internal/destaudit, cmd/hallpass-collector, migration 0014, /hooks/destaudit/{collector_id}, collector and record API). Deviations in ADR-0037 (route, separate binary, no HALLPASS_SESSION marker). Fixed unbounded webhook rate-limiter key table. OpenSSH+auditd container test pending.
-- **WP19–WP21** (2026-10-23, fbce845): all operational pages, session detail with timeline, destination records and per-channel replay; typed API client from the OpenAPI schema; reauth gate with SSO step-up; Chromium E2E (9 specs incl. axe in both themes) against a real gateway. Known gaps: no visual snapshots (HP-UI-015), no /system/time sampling, Storage & keys page is a placeholder (no API). API gaps found by the UI (tracked for follow-up): approver identity on grants/sessions, policy what-if endpoint, storage/keys/retention/backup endpoints, recovery-token redemption endpoint, OperatorPatch If-Match, host-CA list, route PATCH, delivery pagination, records page limit, typed free-form objects.
-- **WP26** (2026-10-23, 3b246c0 + fixes): 28 fuzz targets, fault suite (test/fault, make test-fault), soak harness (make soak-smoke), security review checklist. The fault suite found 11 product defects; all were fixed (ffeae3b destination keepalives; 6b62a86/41b1db6 unrecorded forwarding, late termination on stalled storage, agent disconnect and stalled agent; ed5c39e/7bf9c69 sticky disk-full and corruption guidance; 2ddb598 return_to dot segments, egress NAT64/Teredo, enforcer cursor after clock steps, ADR-0039). Also fixed: unbounded webhook rate-limiter key table (000903f) and the export default contradicting HP-REC-014 (6c86e47, ADR-0040). Pending for RG-3/5/6/8: long fuzz runs, 24 h soak and benchmarks on reference hardware, the security review itself.
-- **WP27** (2026-10-24): release gates evaluated in docs/evidence/v0.1.0/release-gates.md. Not releasable: RG-2/3/5/6/8/9/11 fail or were not run (no CI remote, no reference hardware, no external review, no license), RG-4/7/10 partial. No tag created; nothing pushed.
-- **Demo feedback round** (2026-10-24): non-PTY shell hint (e717581); classified channel close detail + gateway exit code, recently-ended activities, fail2ban-style SSH source bans HP-SSH-026/ADR-0041 (4e9986d); remote networks guide and R-16 connector review item (5bfa098); UI timeline redesign, non-PTY replay fix, responsive panels, CA setup tips, onboarding wizard, bans card, screenshot layout pass (801e2dd); anonymous-vs-session API rate limits and 429 backoff (76cdab8); unredacted close reasons in logs (a1a8f5e).
-- **RG-8 internal review** (2026-10-24, docs/security/review-2026-10-24.md, AI-agent internal review of 394f897): 0 CRITICAL, 2 HIGH, 20 MEDIUM, 26 LOW, 17 INFO. Status downgrades applied: HP-POL-012, HP-AUTH-016, HP-CRY-002, HP-CRY-005 (and pre-review items P-2, P-10 are only partially fixed: SR-21, SR-24). Fixes in progress.
-<!-- progress-log-end -->
-
 ---
 
 ## 20. Risks, trade-offs and review decisions
@@ -1659,13 +1396,9 @@ WP25 (2026-10-23): destination-side audit integration (internal/destaudit, cmd/h
 | K-9 | Chat-based approvals have weaker assurance than web+MFA | Approval via a compromised Slack/Telegram account | Explicit linking, scope checks, optional per-role "web-only approval" flag (`approval_channels` on role), R-10. |
 | K-10 | Clock skew on host | Expiry accuracy | Monotonic timers for in-process deadlines, wall-clock UTC for persisted times, NTP required (documented), and a skew check against the HTTP Date of IdP/Slack responses logged as a warning. |
 
-### 20.2 Review items (decisions deferred to operator; details in DECISIONS.md §2)
+### 20.2 Review items
 
-R-01 license · R-02 external crypto review of HPREC1/keyring · R-03 KMS/Vault/HSM backend in v1 · R-04 Litestream optional
-streaming backup · R-05 default global grant-duration ceiling (proposed 24h; presets up to 24h) · R-06 SFTP/SCP as separately
-authorized capability (resolved: ADR-0049) · R-07 ECS vs custom log schema · R-08 trademark/name/domain check · R-09 self-approval default
-(proposed: prohibited) · R-10 chat approvals for privileged roles (proposed: allowed; per-role `web_only` flag) · R-11 CSP for
-CSS-in-JS styles · R-12 offline breached-password list.
+Open review items (decisions that need the operator) are tracked in DECISIONS.md §2.
 
 ---
 
@@ -1986,22 +1719,14 @@ check · R recovery drill · SR security review · D documentation review.
 
 ### 22.1 Documentation duties
 
-- Before starting a WP: read `AGENTS.md`, `docs/GOAL.md` and this plan, then check §19.2 status and open review items.
+- Before starting a WP: read `AGENTS.md`, `docs/GOAL.md` and this plan, then check §19.1 status and open review items.
 - During a WP: record any design change as an ADR (new or superseding) in DECISIONS.md. Update the affected sections here.
   Never weaken a GOAL.md requirement without an ADR explicitly marked **security-relevant change** plus operator review.
-- At WP completion: update §19.2 status and the commit column (hash after commit, in the next commit or the same WP's follow-up), check
+- At WP completion: update §19.1 status and the commit column (hash after commit, in the next commit or the same WP's follow-up), check
   the owned boxes in §21 with evidence, and update operator/agent/API docs named by the WP.
 - Status words follow GOAL.md §7 (`implemented` vs `tested` vs `externally verified`) and must not be inflated.
 
-### 22.2 Commit workflow (local only)
+### 22.2 Commit workflow
 
-1. `git status` and inspect the diff. Identify only the WP's files and make sure no unrelated user work or secrets are included.
-2. `git add <explicit paths>` (never `git add -A` blindly in a dirty tree).
-3. Run the `/cc` skill to generate a Conventional Commits message from the staged diff. `/cc` only prints a message and does
-   not commit or push (verified at WP00: `~/.claude/skills/cc/SKILL.md` forbids running `git commit`).
-4. `git commit` with that message (plus any attribution trailer the environment requires).
-5. Report the commit hash. **Never `git push`**, and never create remotes, tags pushed to remotes, or PRs without an explicit user
-   instruction for that specific action.
-6. Do not amend, rebase, force-switch branches or discard changes. If work on `main` is blocked by unrelated changes,
-   preserve them and report the blocker.
-7. If `/cc` is unavailable, leave changes uncommitted, report that the required workflow is unavailable, and do not invent its output.
+See `AGENTS.md` (Git workflow): stage explicit paths, generate the message with `/cc`, commit locally, and push only on
+an explicit user instruction.
