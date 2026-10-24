@@ -228,7 +228,8 @@ func TestGatewayRejectsUnknownKey(t *testing.T) {
 	}
 }
 
-// HP-SSH-007: port forwarding and non-session channels are refused.
+// HP-SSH-007: port forwarding, non-session channels and subsystems other than sftp are refused; sftp itself fails
+// unless the SSH user names a server with a file-transfer role.
 func TestGatewayDeniesForwarding(t *testing.T) {
 	g := startGateway(t)
 	c, err := g.client(g.key)
@@ -242,10 +243,19 @@ func TestGatewayDeniesForwarding(t *testing.T) {
 	}
 	s, err := c.NewSession()
 	must(t, err)
-	if err := s.RequestSubsystem("sftp"); err == nil {
-		t.Fatal("sftp subsystem allowed")
+	if err := s.RequestSubsystem("netconf"); err == nil {
+		t.Fatal("netconf subsystem allowed")
 	}
 	_ = s.Close()
+	s, err = c.NewSession()
+	must(t, err)
+	stderr, err := s.StderrPipe()
+	must(t, err)
+	must(t, s.RequestSubsystem("sftp"))
+	// ssh.Session cannot Wait after RequestSubsystem; the gateway's refusal on stderr ends with the channel.
+	if msg, _ := io.ReadAll(stderr); !strings.Contains(string(msg), "not found or not permitted") {
+		t.Fatalf("sftp with an SSH user that is not a server: %q", msg)
+	}
 }
 
 // HP-GRT-009, HP-SES-004: revoking a grant terminates the running channel within the enforcement bound.

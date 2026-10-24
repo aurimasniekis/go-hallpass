@@ -1942,7 +1942,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-OPS-005` Upgrade and rollback — WP23 — evidence: R, D — ◐ partial: forward-only migrations + docs; previous-release upgrade fixture test pending
 - [ ] `HP-OPS-006` Capacity and disk alerts — WP22 — evidence: I, D — ◐ partial: disk metrics, reserve check refusing channels, readiness degrade; capacity guide pending WP26
 - [ ] `HP-OPS-007` Container and standalone deploy — WP24 — evidence: I, D — ◐ partial: Dockerfile/compose/systemd tested locally (smoke script, compose, systemd-in-container); /readyz + ssh list in smoke pending
-- [ ] `HP-OPS-008` CI pipeline — WP01 — evidence: C — ◐ implemented: CI jobs for lint/vet/analyzers/race/coverage/fuzz smoke/govulncheck/gitleaks/OpenSSH/web+API drift; Trivy in release workflow; not yet run on GitHub
+- [ ] `HP-OPS-008` CI pipeline — WP01 — evidence: C — ◐ CI on GitHub Actions green (run 40087832615): lint/vet/analyzers/race/coverage/fuzz smoke, OpenSSH, browser E2E, web + API drift, govulncheck, gitleaks; Trivy is in the release workflow only and has not run yet (no tag)
 - [ ] `HP-OPS-009` Release provenance — WP24 — evidence: C — ◐ implemented: release workflow with SBOM, provenance, Trivy; locally exercised, not yet run in CI
 - [x] `HP-OPS-010` Project documents — WP24 — evidence: D — ✅ done: LICENSE (Apache-2.0, canonical text), NOTICE, SECURITY.md, CONTRIBUTING.md, CHANGELOG.md, docs/VERSIONING.md
 - [x] `HP-OPS-011` License decision — WP24 — evidence: D — ✅ done: operator decision 2026-10-24, Apache-2.0 (DECISIONS R-01, ADR-0045)
@@ -1962,8 +1962,8 @@ check · R recovery drill · SR security review · D documentation review.
 
 - [x] `HP-TST-001` Race detector — WP01 — evidence: C — ✅ tested (local) @ WP01: `make race` runs `go test -race -count=1 ./...`; CI job `go` configured
 - [x] `HP-TST-002` Fuzzing — WP26 — evidence: Z — ✅ tested: all 41 fuzz targets ran 10 min each with no crashers; sampled corpora committed (docs/evidence/v0.1.0/fuzz-campaign.txt)
-- [ ] `HP-TST-003` Real OpenSSH integration — WP10 — evidence: O — ◐ tested locally: make test-openssh (11 tests: exec, PTY, forwarding refusal, hidden target, host-key change, revocation, key revocation, agent/server disable, certificates, unknown key); not yet run in CI
-- [ ] `HP-TST-004` Browser E2E — WP19 — evidence: E — ◐ Chromium E2E (ADR-0038) passes locally against a fresh backend via scripts/e2e.sh (9 specs incl. axe, agent SSH request + approval, policy what-if); CI job added, not yet green on GitHub; SSO, replay, chat linking and invite flows not covered
+- [x] `HP-TST-003` Real OpenSSH integration — WP10 — evidence: O — ✅ tested in CI: make test-openssh (real ssh, scp, sftp and git clients against OpenSSH sshd containers: exec, PTY, forwarding and subsystem refusal, file transfer, git, hidden target, host-key change, revocation, certificates) green on GitHub Actions, run 40089733694 (617c8005edce)
+- [ ] `HP-TST-004` Browser E2E — WP19 — evidence: E — ◐ Chromium E2E (ADR-0038) green on GitHub Actions (run 40087832615) and locally via scripts/e2e.sh (9 specs incl. axe, agent SSH request + approval, policy what-if); SSO, replay, chat linking and invite flows not covered
 - [ ] `HP-TST-005` Fault injection — WP26 — evidence: FI — ◐ make test-fault: catalog FI-01..FI-23 passes (all 9 findings fixed); FI-19 covered by oidc tests; FI-24 power loss needs a VM hard reset (not done)
 - [ ] `HP-TST-006` Soak — WP26 — evidence: S — ◐ soak harness (test/soak, make soak-smoke); 30 s smoke: 1,386 sessions, 0 failures, no goroutine/FD growth; 24 h run on reference hardware pending
 - [ ] `HP-TST-007` Measured performance — WP26 — evidence: S — ◐ smoke numbers only (M1 Max, all in one process): exec p95 437 ms, revoke→closed max 155 ms; reference-hardware benchmarks pending
