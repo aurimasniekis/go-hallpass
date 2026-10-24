@@ -447,3 +447,50 @@ func actorRef(a audit.Actor) string {
 	}
 	return a.Type + ":" + a.ID
 }
+
+// PreviewChange compiles a what-if snapshot of the current state with one rule change applied, without saving it
+// (HP-POL-009): proposed replaces the rule with the same ID, or is added when its ID is empty or unknown;
+// removeID drops a rule. The proposed rule is normalized and validated like a saved one.
+func (svc *Service) PreviewChange(ctx context.Context, proposed *Rule, removeID string) (*Snapshot, error) {
+	rules, err := svc.ListRules(ctx)
+	if err != nil {
+		return nil, err
+	}
+	approvers, err := svc.ListApproverRules(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Rule, 0, len(rules)+1)
+	replaced := false
+	for _, r := range rules {
+		switch {
+		case removeID != "" && r.ID == removeID:
+			continue
+		case proposed != nil && proposed.ID != "" && r.ID == proposed.ID:
+			replaced = true
+			out = append(out, *proposed)
+			continue
+		}
+		out = append(out, r)
+	}
+	if proposed != nil {
+		normalizeRule(proposed)
+		if err := proposed.Validate(svc.engine.globalMax); err != nil {
+			return nil, err
+		}
+		if !replaced {
+			p := *proposed
+			if p.ID == "" {
+				p.ID = "pol_preview"
+			}
+			out = append(out, p)
+		} else {
+			for i := range out {
+				if out[i].ID == proposed.ID {
+					out[i] = *proposed
+				}
+			}
+		}
+	}
+	return svc.engine.WhatIf(ctx, Override{Rules: out, Approvers: approvers})
+}

@@ -21,6 +21,7 @@ import {
   type RuleFormValues,
   type RuleLevel,
 } from './ruleForm';
+import { PolicyChangePreview } from './PolicyChangePreview';
 import { SelectorEditor } from './selectors/SelectorEditor';
 
 function FormProblems({ errors, apiError }: { errors: string[]; apiError: unknown }) {
@@ -213,6 +214,15 @@ export function RuleDrawer({
         <Form.Item name="enabled" valuePropName="checked">
           <Checkbox>Enabled</Checkbox>
         </Form.Item>
+        <PolicyChangePreview
+          ruleId={rule?.id}
+          build={() => {
+            const values = { ...newRuleForm(), ...form.getFieldsValue(true) } as RuleFormValues;
+            const { body, errors } = formToRuleBody(values);
+            state.setErrors(errors);
+            return body ?? null;
+          }}
+        />
         <FormProblems errors={state.errors} apiError={state.apiError} />
       </Form>
     </Drawer>

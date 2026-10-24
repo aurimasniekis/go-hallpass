@@ -530,3 +530,57 @@ func (s *Server) UnbindRoleCert(c *gen.Call) (*gen.Result, error) {
 	}
 	return noContent()
 }
+
+// PreviewPolicyChange evaluates an unsaved rule change for one agent or server (HP-POL-009). Nothing is saved.
+func (s *Server) PreviewPolicyChange(c *gen.Call) (*gen.Result, error) {
+	var in struct {
+		Rule         *ruleInputDTO `json:"rule"`
+		RemoveRuleID string        `json:"remove_rule_id"`
+		AgentID      string        `json:"agent_id"`
+		ServerID     string        `json:"server_id"`
+	}
+	if err := decode(c, &in, false); err != nil {
+		return nil, err
+	}
+	if (in.AgentID == "") == (in.ServerID == "") {
+		return nil, apperr.New(apperr.CodeInvalid, "give exactly one of agent_id or server_id")
+	}
+	if in.Rule == nil && in.RemoveRuleID == "" {
+		return nil, apperr.New(apperr.CodeInvalid, "give a rule or remove_rule_id")
+	}
+	ctx := c.R.Context()
+	before, err := s.d.Engine.Current(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var proposed *policy.Rule
+	if in.Rule != nil {
+		r := in.Rule.rule()
+		proposed = &r
+	}
+	after, err := s.d.Policy.PreviewChange(ctx, proposed, in.RemoveRuleID)
+	if err != nil {
+		return nil, err
+	}
+	preview := func(snap *policy.Snapshot) (effectiveDTO, error) {
+		if in.AgentID != "" {
+			if snap.Agent(in.AgentID) == nil {
+				return effectiveDTO{}, apperr.New(apperr.CodeNotFound, "agent not found")
+			}
+			return effective(snap.Version, policy.PreviewAgent(snap, in.AgentID)), nil
+		}
+		if snap.Server(in.ServerID) == nil {
+			return effectiveDTO{}, apperr.New(apperr.CodeNotFound, "server not found")
+		}
+		return effective(snap.Version, policy.PreviewServer(snap, in.ServerID)), nil
+	}
+	b, err := preview(before)
+	if err != nil {
+		return nil, err
+	}
+	a, err := preview(after)
+	if err != nil {
+		return nil, err
+	}
+	return ok(map[string]any{"before": b, "after": a})
+}

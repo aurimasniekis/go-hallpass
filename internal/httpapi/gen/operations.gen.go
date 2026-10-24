@@ -104,6 +104,7 @@ var Operations = []Operation{
 	{ID: "createApproverRule", Method: "POST", Path: "/api/v1/policy/approver-rules", Permission: "policy.write", Reauth: true, MFA: false, Idempotent: true, Stream: false, Redirect: false, Tags: []string{"policy"}},
 	{ID: "updateApproverRule", Method: "PATCH", Path: "/api/v1/policy/approver-rules/{id}", Permission: "policy.write", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"policy"}},
 	{ID: "deleteApproverRule", Method: "DELETE", Path: "/api/v1/policy/approver-rules/{id}", Permission: "policy.write", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"policy"}},
+	{ID: "previewPolicyChange", Method: "POST", Path: "/api/v1/policy/preview", Permission: "policy.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"policy"}},
 	{ID: "listPolicyRules", Method: "GET", Path: "/api/v1/policy/rules", Permission: "policy.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"policy"}},
 	{ID: "createPolicyRule", Method: "POST", Path: "/api/v1/policy/rules", Permission: "policy.write", Reauth: false, MFA: false, Idempotent: true, Stream: false, Redirect: false, Tags: []string{"policy"}},
 	{ID: "getPolicyRule", Method: "GET", Path: "/api/v1/policy/rules/{id}", Permission: "policy.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"policy"}},
@@ -354,6 +355,8 @@ type Server interface {
 	UpdateApproverRule(c *Call) (*Result, error)
 	// DeleteApproverRule DELETE /api/v1/policy/approver-rules/{id} (permission policy.write)
 	DeleteApproverRule(c *Call) (*Result, error)
+	// PreviewPolicyChange POST /api/v1/policy/preview (permission policy.read)
+	PreviewPolicyChange(c *Call) (*Result, error)
 	// ListPolicyRules GET /api/v1/policy/rules (permission policy.read)
 	ListPolicyRules(c *Call) (*Result, error)
 	// CreatePolicyRule POST /api/v1/policy/rules (permission policy.write)
@@ -551,6 +554,7 @@ func Handlers(s Server) map[string]Handler {
 		"createApproverRule":            s.CreateApproverRule,
 		"updateApproverRule":            s.UpdateApproverRule,
 		"deleteApproverRule":            s.DeleteApproverRule,
+		"previewPolicyChange":           s.PreviewPolicyChange,
 		"listPolicyRules":               s.ListPolicyRules,
 		"createPolicyRule":              s.CreatePolicyRule,
 		"getPolicyRule":                 s.GetPolicyRule,

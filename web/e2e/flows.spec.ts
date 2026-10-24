@@ -38,7 +38,7 @@ test('register agent, enroll server and role, allow by policy, approve an SSH re
 
   await test.step('create server and role', async () => {
     await page.goto('/servers');
-    await page.getByRole('button', { name: 'New server' }).click();
+    await page.getByRole('button', { name: /New server$/ }).click();
     const dialog = page.getByRole('dialog', { name: 'New server' });
     await dialog.getByLabel('Alias').fill(serverAlias);
     await dialog.getByLabel('Address').fill('127.0.0.1');
@@ -64,6 +64,16 @@ test('register agent, enroll server and role, allow by policy, approve an SSH re
     await drawer.getByRole('checkbox', { name: /All agents/ }).check();
     await drawer.getByRole('checkbox', { name: /All servers/ }).check();
     await drawer.getByRole('checkbox', { name: /All roles/ }).check();
+    // What-if preview of the unsaved rule (HP-POL-009): the new agent gains the new server's role.
+    await drawer.getByRole('combobox', { name: 'Preview agent' }).click();
+    // antd renders a hidden a11y listbox; the clickable item is the visible dropdown row.
+    await page
+      .locator('.ant-select-dropdown:visible .ant-select-item-option')
+      .filter({ hasText: agentName })
+      .click();
+    await drawer.getByRole('button', { name: 'Preview' }).click();
+    const changes = drawer.getByRole('table', { name: 'Access changes' });
+    await expect(changes.getByRole('row').filter({ hasText: serverAlias })).toContainText('Requestable');
     await drawer.getByRole('button', { name: 'Create rule' }).click();
     await expect(page.getByRole('cell', { name: `e2e-${suffix}` }).first()).toBeVisible();
   });

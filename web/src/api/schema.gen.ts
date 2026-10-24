@@ -1042,6 +1042,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/policy/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What-if evaluation of an unsaved rule change for one agent or one server (HP-POL-009): effective access before and after, with the deciding rules. Nothing is saved. */
+        post: operations["previewPolicyChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/policy/version": {
         parameters: {
             query?: never;
@@ -2247,6 +2264,18 @@ export interface components {
         };
         SelfApprovalSetting: {
             prohibit_self_approval: boolean;
+        };
+        PolicyPreviewInput: {
+            /** @description Proposed rule: replaces the rule with the same id, or is added when id is empty. */
+            rule?: components["schemas"]["PolicyRule"];
+            /** @description Preview the removal of this rule. */
+            remove_rule_id?: string;
+            agent_id?: string;
+            server_id?: string;
+        };
+        PolicyPreview: {
+            before: components["schemas"]["EffectiveAccess"];
+            after: components["schemas"]["EffectiveAccess"];
         };
         PolicyRule: {
             readonly id?: string;
@@ -4727,6 +4756,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SelfApprovalSetting"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    previewPolicyChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PolicyPreviewInput"];
+            };
+        };
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PolicyPreview"];
                 };
             };
             default: components["responses"]["Problem"];

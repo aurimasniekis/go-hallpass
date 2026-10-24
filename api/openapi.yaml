@@ -956,6 +956,20 @@ paths:
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/SelfApprovalSetting"}}}}
         default: {$ref: "#/components/responses/Problem"}
+  /api/v1/policy/preview:
+    post:
+      operationId: previewPolicyChange
+      tags: [policy]
+      x-permission: policy.read
+      summary: >-
+        What-if evaluation of an unsaved rule change for one agent or one server (HP-POL-009): effective access before
+        and after, with the deciding rules. Nothing is saved.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/PolicyPreviewInput"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/PolicyPreview"}}}}
+        default: {$ref: "#/components/responses/Problem"}
   /api/v1/policy/version:
     get:
       operationId: getPolicyVersion
@@ -2092,6 +2106,20 @@ components:
       required: [prohibit_self_approval]
       additionalProperties: false
       properties: {prohibit_self_approval: {type: boolean}}
+    PolicyPreviewInput:
+      type: object
+      additionalProperties: false
+      properties:
+        rule: {$ref: "#/components/schemas/PolicyRule", description: "Proposed rule: replaces the rule with the same id, or is added when id is empty."}
+        remove_rule_id: {type: string, description: Preview the removal of this rule.}
+        agent_id: {type: string}
+        server_id: {type: string}
+    PolicyPreview:
+      type: object
+      required: [before, after]
+      properties:
+        before: {$ref: "#/components/schemas/EffectiveAccess"}
+        after: {$ref: "#/components/schemas/EffectiveAccess"}
     PolicyRule:
       type: object
       required: [name, effect, subjects, targets, roles, enabled]

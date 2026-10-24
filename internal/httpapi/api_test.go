@@ -572,6 +572,24 @@ func TestAdministrationFlow(t *testing.T) {
 	c.ok("createApproverRule", 201, "POST", "/api/v1/policy/approver-rules", map[string]any{"name": "admins", "enabled": true,
 		"operators": map[string]any{"operators": []string{me.Operator.ID}}, "targets": map[string]any{"all": true}, "roles": map[string]any{"all": true}})
 	c.ok("getAgentEffectiveAccess", 200, "GET", "/api/v1/agents/"+agent.ID+"/effective-access", nil)
+	// HP-POL-009: what-if preview of an unsaved rule: before shows the stored policy, after shows the change, and
+	// nothing is saved.
+	r = c.ok("previewPolicyChange", 200, "POST", "/api/v1/policy/preview", map[string]any{"agent_id": agent.ID,
+		"rule": map[string]any{"name": "preview-deny", "effect": "deny", "enabled": true, "subjects": map[string]any{"agent_groups": []string{"sre"}},
+			"targets": map[string]any{"all": true}, "roles": map[string]any{"all": true}}})
+	var pv struct {
+		Before, After struct{ Items []struct{ Level string } }
+	}
+	r.json(t, &pv)
+	if len(pv.Before.Items) == 0 || pv.Before.Items[0].Level == "denied" || len(pv.After.Items) == 0 || pv.After.Items[0].Level != "denied" {
+		t.Fatalf("preview %s", r.body)
+	}
+	if r := c.do("GET", "/api/v1/policy/rules", nil); strings.Contains(string(r.body), "preview-deny") {
+		t.Fatal("preview saved the rule")
+	}
+	if r := c.do("POST", "/api/v1/policy/preview", map[string]any{"agent_id": agent.ID}); r.status != 400 && r.status != 422 {
+		t.Fatalf("preview without a change: %d", r.status)
+	}
 	// HP-POL-012 / SR-14: owners are settable; unknown operators are refused; the self-approval ban is a setting.
 	r = c.ok("setAgentOwners", 200, "PUT", "/api/v1/agents/"+agent.ID+"/owners", map[string]any{"owners": []string{me.Operator.ID}})
 	if !strings.Contains(string(r.body), me.Operator.ID) {

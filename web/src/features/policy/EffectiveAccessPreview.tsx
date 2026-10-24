@@ -74,7 +74,7 @@ function columns(by: 'agent' | 'server'): TableColumnsType<EffectiveAccessItem> 
 
 /**
  * Effective-access preview (HP-POL-009) for one agent or one server under the *current* policy version.
- * There is no what-if endpoint for unsaved rules in api/openapi.yaml, so this shows saved policy only.
+ * Unsaved rule edits are previewed in the rule drawer instead (PolicyChangePreview).
  */
 export function EffectiveAccessPreview() {
   const [by, setBy] = useState<'agent' | 'server'>('agent');
@@ -100,8 +100,8 @@ export function EffectiveAccessPreview() {
     <Card title="Effective access preview" size="small">
       <Space orientation="vertical" size={12} style={{ width: '100%' }}>
         <p style={{ margin: 0 }}>
-          Shows what the saved policy allows right now, with the rules that decided each result. Unsaved edits
-          are not previewed.
+          Shows what the saved policy allows right now, with the rules that decided each result. To see how an
+          unsaved rule would change this, use Preview changes in the rule editor.
         </p>
         <Space wrap>
           <Radio.Group
