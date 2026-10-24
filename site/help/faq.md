@@ -74,4 +74,4 @@ copies, separately from data backups. See [Keys and the KEK](/operators/keys).
 
 ### What is the license?
 
-No license has been chosen yet.
+Hallpass is licensed under the Apache License 2.0.

@@ -18,7 +18,7 @@
 
 > [!WARNING]
 > **Pre-release, not production-ready.** No version has been tagged and the release gates are not met: no 24-hour
-> soak, no external review of the recording format, CI not yet green on GitHub, and no license chosen. The current
+> soak, no external review of the recording format, and CI not yet green on GitHub. The current
 > evaluation is in [docs/evidence/unreleased/release-gates.md](docs/evidence/unreleased/release-gates.md), and
 > per-requirement status (implemented versus tested) in [docs/PLAN.md](docs/PLAN.md) §21.
 
@@ -190,4 +190,4 @@ suites), and commit rules.
 
 ## License
 
-Not yet chosen (review item R-01).
+[Apache License 2.0](LICENSE). See also [NOTICE](NOTICE).

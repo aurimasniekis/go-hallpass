@@ -767,11 +767,29 @@
   14. **Live-event streams (SR-09, SR-31).** Streams re-validate without refreshing the session's idle timer, close at
       idle or absolute expiry, and are capped at 16 per operator.
 
+### ADR-0045 — Apache-2.0 license, backdated to the first commit
+- **Status:** accepted (operator decision, 2026-10-24). Resolves R-01. Not security-relevant.
+- **Decision:**
+  - Hallpass is licensed under Apache-2.0. `LICENSE` holds the canonical text, unmodified. `NOTICE` holds the
+    copyright line.
+  - At the operator's request, history was rewritten (`git filter-branch --index-filter`) so that `LICENSE` exists
+    in every commit from the first one. Trees, authors, author and committer dates and messages are otherwise
+    unchanged.
+  - Docs that cite commit hashes were updated to the new hashes. The full old→new map is in
+    `docs/evidence/history-rewrite-2026-10-24.txt`.
+  - The pre-rewrite history is kept locally as the branch `backup/pre-license-rewrite`.
+- **Deviation:** HP-OPS-011 says no license file is added before the decision. Backdating deliberately puts `LICENSE`
+  into commits that predate the decision; the operator requested exactly that.
+- **Consequences:**
+  - The rewritten `main` must be force-pushed (operator action).
+  - Clones made before the rewrite must re-clone or reset.
+  - AGENTS.md's "no license" rule is replaced by "do not change the license without an operator decision".
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |
 |---|---|---|---|
-| R-01 | **License** for the future open-source release. | No proposal is made without authorization. Candidates to evaluate: Apache-2.0, MPL-2.0, AGPL-3.0. **Operator decision 2026-10-24:** deferred; no LICENSE file until decided. | Public release (RG-11) |
+| R-01 | **License** for the open-source release. | **Resolved 2026-10-24 (operator decision): Apache-2.0.** LICENSE (canonical text) and NOTICE added; history rewritten so LICENSE exists from the first commit (ADR-0045). | Resolved |
 | R-02 | **External cryptographic review** of HPREC1, the keyring and field encryption. | **Operator decision 2026-10-24:** no external review for now; releases use the RG-9 alternative and are labeled "recording format and keyring not externally reviewed" in CHANGELOG and release notes. A review remains recommended before 1.0. | RG-9 |
 | R-03 | **KMS/Vault/HSM backend** in v1 (`KeyWrapper`, `Signer`). | Ship interfaces plus local implementation in v1. Add Vault Transit/AWS KMS wrappers post-1.0 unless required. | — |
 | R-04 | **Litestream** as optional continuous DB replication for backup. | Document as optional and test compatibility (WAL, checkpoints) in WP23. Not a supported HA mode. | — |

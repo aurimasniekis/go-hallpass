@@ -39,9 +39,9 @@ under test.
 
 | # | Status | Commit / test |
 |---|---|---|
-| P-1, P-2, P-3, P-7, P-8 | fixed | fee9b40; fault tests TestFI05FI07…, TestFI08…, TestQueueBytesBelowRecordSize, TestAgentDisconnectReleasesDestination, TestFI17 pass |
-| P-4, P-5 | fixed | 86b565f; TestFI06SQLiteFull, TestFI10 pass |
-| P-6 | fixed | bd08fce (keepalives on both legs, started before session setup); TestFI15 passes |
+| P-1, P-2, P-3, P-7, P-8 | fixed | 6b62a86; fault tests TestFI05FI07…, TestFI08…, TestQueueBytesBelowRecordSize, TestAgentDisconnectReleasesDestination, TestFI17 pass |
+| P-4, P-5 | fixed | ed5c39e; TestFI06SQLiteFull, TestFI10 pass |
+| P-6 | fixed | ffeae3b (keepalives on both legs, started before session setup); TestFI15 passes |
 | P-9 | fixed (cursor) / documented (expiry) | cursor clamp + ADR-0039; TestFI21 passes |
 | P-10, P-11 | fixed | dot segments rejected (FuzzSanitizeReturnTo seeds), NAT64 local-use and Teredo denied (TestAllowedAddr) |
 

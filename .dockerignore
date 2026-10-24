@@ -8,6 +8,8 @@
 !internal/
 !api/
 !web/
+!LICENSE
+!NOTICE
 
 # Frontend: dependencies and build output are produced inside the build, never copied from the host.
 web/node_modules/

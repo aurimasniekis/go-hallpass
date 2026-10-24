@@ -62,7 +62,7 @@ In scope for v1.0:
   destination-side controls).
 - **Windows destinations** are not supported in v1 (the exec encoding assumes POSIX shells).
 - **SCIM or other push provisioning** from IdPs is out of scope (group sync happens at login).
-- **No license selection** without operator authorization (R-01).
+- **No license changes** without operator authorization (R-01: Apache-2.0, decided 2026-10-24).
 
 ## 4. Security boundaries and guarantees
 

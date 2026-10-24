@@ -21,14 +21,13 @@ hardware).
 | RG-8 Security review | **PASS (internal)** | [review-2026-10-24.md](../../security/review-2026-10-24.md) is an internal review performed by AI agents (not an external review). Of its findings, both HIGH and all 20 MEDIUM are fixed with regression tests (ADR-0042..0044). One LOW is accepted (SR-34) and one LOW is open (SR-35, lint coverage). |
 | RG-9 External crypto review | **PASS via label** | Operator decision (R-02): releases carry "recording format and keyring not externally reviewed" (CHANGELOG). |
 | RG-10 Docs | **PASS** | Operator, agent, destination-hardening, API (OpenAPI) and recording-format docs, the incident runbooks, remote-networks guide and documentation site (`site/`). The guarantees page is consistent with THREAT_MODEL.md. Doc errors found while building the site were corrected. |
-| RG-11 Open decisions | **FAIL** | R-01 (license) was deferred by the operator. Also open: R-08 (name/trademark), R-13, R-14, R-15, R-16. |
+| RG-11 Open decisions | **PARTIAL** | R-01 resolved: Apache-2.0 (ADR-0045). Still open: R-08 (name/trademark), R-13, R-14, R-15, R-16. |
 
 ## Known gaps a pre-1.0 release candidate must state
 
 - Not production-ready: RG-1, RG-5, RG-6 and RG-11 fail.
 - Recording format and keyring are not externally reviewed (R-02).
 - No 24 h soak and no reference-hardware benchmarks.
-- No license (R-01).
 - Slack and Telegram are tested only against recorded and fake provider APIs.
 - UI end-to-end tests cover a subset of workflows, in Chromium only (ADR-0038). There are no visual regression
   snapshots.
@@ -37,6 +36,6 @@ hardware).
 
 1. Unlock the SSH agent so the 10+ local commits can be pushed. Free GitHub Actions artifact storage. Get CI and the
    release workflow green (Trivy, SBOM).
-2. Decide R-01 (license).
+2. Resolve the remaining public-release review items (R-08 name/trademark check, R-15 versioning commitments).
 3. Optionally: run the 24 h soak and RH-1 benchmarks; enable GitHub Pages.
 4. Tag `v0.1.0-rc.1` locally once the operator agrees.

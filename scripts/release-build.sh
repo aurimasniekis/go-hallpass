@@ -114,6 +114,7 @@ for platform in "${platforms[@]}"; do
   cp deploy/examples/hallpass.example.yaml "$stage/"
   [[ -f deploy/systemd/hallpass.service ]] && cp deploy/systemd/hallpass.service "$stage/"
   [[ -f CHANGELOG.md ]] && cp CHANGELOG.md "$stage/"
+  cp LICENSE NOTICE "$stage/"
   chmod 0755 "$stage/hallpass" "$stage/hallpass-collector"
   find "$stage" -type f ! -name hallpass ! -name hallpass-collector -exec chmod 0644 {} +
   find "$stage" -exec env TZ=UTC touch -h -t "$touch_stamp" {} +

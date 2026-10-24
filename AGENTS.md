@@ -24,7 +24,8 @@ Hallpass is a security-sensitive terminating SSH gateway for AI agents. These ru
 - Do not invent cryptography. Use only Go standard library and `golang.org/x/crypto` primitives as specified in PLAN.md §13.
 - Never use `ssh.InsecureIgnoreHostKey` or an equivalent permissive host-key callback.
 - Never commit secrets, credentials, private production data, private infrastructure details or secret-bearing fixtures. Generate test keys at test time.
-- Do not add a LICENSE file or choose a license until the operator decides (DECISIONS.md R-01).
+- Hallpass is licensed under Apache-2.0 (LICENSE, NOTICE; DECISIONS.md R-01, ADR-0045). Do not change the license or add
+  conflicting license headers without an operator decision.
 
 ## Git workflow (commit locally, never push)
 

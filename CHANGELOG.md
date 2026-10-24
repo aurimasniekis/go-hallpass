@@ -11,8 +11,8 @@ yet. The authoritative per-work-package status is [docs/PLAN.md](docs/PLAN.md) Â
 
 ## [Unreleased]
 
-No release has been tagged. This section lists what exists on `main`. No license has been chosen yet (review item R-01),
-so no `LICENSE` file is included.
+No release has been tagged. This section lists what exists on `main`. Hallpass is licensed under Apache-2.0
+(LICENSE, NOTICE).
 
 > **Recording format and keyring not externally reviewed** (RG-9, review item R-02). The HPREC1 format, the keyring
 > and field encryption have had internal review only (docs/security/review-2026-10-24.md).

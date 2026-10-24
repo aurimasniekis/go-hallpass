@@ -4,7 +4,7 @@ Hallpass is a security-sensitive SSH access gateway. Read [`AGENTS.md`](AGENTS.m
 [`docs/PLAN.md`](docs/PLAN.md) before changing anything. GOAL.md is the product contract, and security requirements are never weakened
 without a recorded decision in [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
-> License: not yet chosen (see DECISIONS.md R-01). Do not add license headers or a LICENSE file.
+> License: Apache-2.0 (see [LICENSE](LICENSE) and [NOTICE](NOTICE)). Contributions are accepted under the same license.
 
 ## Development setup
 

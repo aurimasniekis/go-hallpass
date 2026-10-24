@@ -1546,7 +1546,7 @@ Ordering is dependency-driven. Each WP ends with a **local commit** (message via
   `deploy/systemd/hallpass.service` (hardening: `ProtectSystem=strict`, `NoNewPrivileges`, etc.), `.github/workflows/release.yaml`
   (goreleaser or scripted: multi-arch binaries, image, syft SBOM, `actions/attest-build-provenance`, checksums), `SECURITY.md`, `CONTRIBUTING.md`, `CHANGELOG.md`.
 - **Tests:** container smoke test (start, readyz, ssh list against fixture), Trivy scan, SBOM presence.
-- **Acceptance:** Owns: `HP-OPS-007`, `HP-OPS-009`, `HP-OPS-010`, `HP-OPS-011`, `HP-DOC-001`, `HP-DOC-006`. No LICENSE file until R-01 is resolved. **Commit:** `build(release): add container image, compose, and release pipeline`.
+- **Acceptance:** Owns: `HP-OPS-007`, `HP-OPS-009`, `HP-OPS-010`, `HP-OPS-011`, `HP-DOC-001`, `HP-DOC-006`. License: Apache-2.0 (R-01 resolved, ADR-0045). **Commit:** `build(release): add container image, compose, and release pipeline`.
 
 #### WP25 — Optional destination-side audit integration
 - **Depends:** WP12, WP21. **Files:** `internal/destaudit`, `docs/destination/*`.
@@ -1578,33 +1578,33 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 
 | WP | Title | Depends | Status | Commit |
 |---|---|---|---|---|
-| WP00 | Planning documents | — | implemented | e15801b |
-| WP01 | Scaffolding, CI, lint | WP00 | tested | 89620d3 |
-| WP02 | Config, runtime modes, logging | WP01 | tested | 860e1a7 |
-| WP03 | SQLite storage, migrations, lock, backup primitive | WP02 | tested | f0b96c0 |
-| WP04 | Keyring and field crypto | WP03 | tested | dc3680d, 4178285 |
-| WP05 | Audit, jobs, outbox | WP04 | tested | 3327bc9 |
-| WP06 | Agents and keys | WP05 | tested | bdf3f05 |
-| WP07 | Servers, host identities, roles, credentials/CA | WP06 | tested | 6284850 |
-| WP08 | Policy engine and effective access | WP07 | tested | d4b4e2a |
-| WP09 | Request/grant/session lifecycle and enforcer | WP08 | tested | 0fdc035 |
-| WP10 | SSH front end | WP09 | implemented | 42ada72, d948bf8, fe9f62a |
-| WP11 | SSH data plane | WP10 | implemented | d948bf8, bd08fce, fee9b40 |
-| WP12 | Recording format, recorder, reconciliation | WP11, WP04 | implemented | 88bbd7f, d948bf8, 06803ba |
-| WP13 | Local operator auth, sessions, MFA | WP05 | implemented | 1540b43, 5f00b8c |
-| WP14 | OIDC SSO | WP13 | implemented | 78df15a, a65d102 |
-| WP15 | RBAC, REST API, SSE | WP14, WP12 | implemented | 5f00b8c |
-| WP16 | Web approvals and notification core | WP15 | implemented | 5083bbc, 42a6805 |
-| WP17 | Slack | WP16 | implemented | 5083bbc |
-| WP18 | Telegram | WP16 | implemented | 5083bbc |
-| WP19 | Frontend foundation and design system | WP15 | implemented | fc10c80, 366b4c2 |
-| WP20 | Operational pages | WP19, WP16 | implemented | 366b4c2 |
-| WP21 | Timeline and replay UI | WP20 | implemented | 366b4c2 |
-| WP22 | Observability | WP15 | implemented | 55b0c35 |
-| WP23 | Backup/restore/upgrade/break-glass | WP12, WP13 | implemented | 25bde35, 732bcbd |
-| WP24 | Packaging and release pipeline | WP22, WP23 | implemented | 16ccfc9 |
-| WP25 | Destination-side audit integration | WP12, WP21 | implemented | 6c10a5f |
-| WP26 | Hardening | WP01–WP25 | implemented | fee5d24, bd08fce, fee9b40, 86b565f, 9cbcfdb, 05734b9, 899b65e |
+| WP00 | Planning documents | — | implemented | b562d97 |
+| WP01 | Scaffolding, CI, lint | WP00 | tested | 95e0175 |
+| WP02 | Config, runtime modes, logging | WP01 | tested | aeeca9c |
+| WP03 | SQLite storage, migrations, lock, backup primitive | WP02 | tested | c413abe |
+| WP04 | Keyring and field crypto | WP03 | tested | bce1fc3, d6ab10d |
+| WP05 | Audit, jobs, outbox | WP04 | tested | f75e7ae |
+| WP06 | Agents and keys | WP05 | tested | be287b2 |
+| WP07 | Servers, host identities, roles, credentials/CA | WP06 | tested | 690bd3b |
+| WP08 | Policy engine and effective access | WP07 | tested | ea190fb |
+| WP09 | Request/grant/session lifecycle and enforcer | WP08 | tested | d77b0e0 |
+| WP10 | SSH front end | WP09 | implemented | 605ac64, 8bc2017, e12e15f |
+| WP11 | SSH data plane | WP10 | implemented | 8bc2017, ffeae3b, 6b62a86 |
+| WP12 | Recording format, recorder, reconciliation | WP11, WP04 | implemented | 963f43b, 8bc2017, 6c86e47 |
+| WP13 | Local operator auth, sessions, MFA | WP05 | implemented | 6d137b8, d9c3d8e |
+| WP14 | OIDC SSO | WP13 | implemented | 8623ffc, 5a7baa3 |
+| WP15 | RBAC, REST API, SSE | WP14, WP12 | implemented | d9c3d8e |
+| WP16 | Web approvals and notification core | WP15 | implemented | abbe233, 000903f |
+| WP17 | Slack | WP16 | implemented | abbe233 |
+| WP18 | Telegram | WP16 | implemented | abbe233 |
+| WP19 | Frontend foundation and design system | WP15 | implemented | fea7a81, fbce845 |
+| WP20 | Operational pages | WP19, WP16 | implemented | fbce845 |
+| WP21 | Timeline and replay UI | WP20 | implemented | fbce845 |
+| WP22 | Observability | WP15 | implemented | 8ff8422 |
+| WP23 | Backup/restore/upgrade/break-glass | WP12, WP13 | implemented | d9ab150, e958e6d |
+| WP24 | Packaging and release pipeline | WP22, WP23 | implemented | e74a005 |
+| WP25 | Destination-side audit integration | WP12, WP21 | implemented | 1e93d1d |
+| WP26 | Hardening | WP01–WP25 | implemented | 3b246c0, ffeae3b, 6b62a86, ed5c39e, 7bf9c69, 2ddb598, 41b1db6 |
 | WP27 | Release-gate validation and RC | WP26 | in-progress | |
 
 ### 19.3 Progress log
@@ -1614,7 +1614,7 @@ Newest last. Each entry states what is **implemented**, what is **tested** (and 
 local run of the same targets the workflow executes, and the entry says so. Checklist marks in §21: `✅` = done (box checked),
 `◐` = partial progress (box stays unchecked).
 
-- **WP00** (2026-10-23): planning documents committed (`e15801b`).
+- **WP00** (2026-10-23): planning documents committed (`b562d97`).
 - **WP01** (2026-10-23): Go module (`go 1.27.3`, latest stable per user instruction; A-2 updated), `hallpass version`, golangci-lint v2 config (depguard: no math/rand, no log; forbidigo), custom analyzers `nohostkeyignore` and `txscope` with analysistest suites (tools module), Makefile, coverage-floor script, CI workflow (actions pinned by SHA, actionlint-clean), gitleaks config, CONTRIBUTING.md, docs index. Tested locally: `make vet custom-vet lint race tools-test coverage` green, gitleaks clean. Not yet run on GitHub (not pushed).
 - **WP02** (2026-10-23): `internal/config` (YAML via go.yaml.in/yaml/v3 with KnownFields, reflective HALLPASS_* overrides, aggregated validation, production vs development rules incl. KEK location and dev-feature rejection), `internal/obs` (ECS-aligned slog JSON, LevelVar) and `internal/obs/redact` (Secret[T], sensitive-key redaction), `hallpass config check|env`, example config, docs/operator/{configuration,logging}.md. Config loader is hand-rolled (no koanf), recorded as ADR-0025. Tested locally (race, lint, vet).
 - **WP03** (2026-10-23): `internal/store` (modernc SQLite, writer/reader pools with per-connection pragma verification, BEGIN IMMEDIATE Tx with jittered busy retry and after-commit hooks, error classification and Health tracking, flock process lock, Linux/macOS network-FS refusal, data-dir permission checks, goose migrations with pre-migration snapshots, quick/integrity checks, VACUUM INTO snapshot), sqlc (pinned v1.31.1 binary with checksum, drift check in CI), `internal/ids` (prefixed monotonic UUIDv7), `internal/clock`, `internal/store/storetest`, `hallpass migrate`, docs/operator/storage.md. Tested locally on macOS and in a Linux container (incl. FUSE refusal via `make test-netfs`).
@@ -1633,11 +1633,11 @@ local run of the same targets the workflow executes, and the entry says so. Chec
 - 2026-10-23 — WP15 + WP22: REST API v1 (spec-first OpenAPI 3.1, in-repo generator, RBAC matrix, problem details, pagination, idempotency, SSE hub, OIDC browser endpoints, embedded UI) and observability (metrics registry, readiness checks, tracing, correlation, call-site instrumentation, serve wiring). Remaining API resources (integrations, retention, recording export) arrive with WP16-18/WP23 follow-ups. ADR-0031, ADR-0034.
 - 2026-10-23 — WP16-WP18: notification core (internal/notify, migration 0012): integrations and routes with sealed write-only secrets, action tokens, provider identity links and link codes, durable replay cache, outbox delivery through the Slack/Telegram adapters with delivery-time rendering, message updates, webhook routing under /hooks, chat MFA requirement and rate limits; API endpoints for integrations, routes, deliveries and links. THREAT_MODEL T-05 corrected (ADR-0035, security-relevant). Real Slack/Telegram verification pending (WP17/WP18 status implemented, not externally verified).
 WP25 (2026-10-23): destination-side audit integration (internal/destaudit, cmd/hallpass-collector, migration 0014, /hooks/destaudit/{collector_id}, collector and record API). Deviations in ADR-0037 (route, separate binary, no HALLPASS_SESSION marker). Fixed unbounded webhook rate-limiter key table. OpenSSH+auditd container test pending.
-- **WP19–WP21** (2026-10-23, 366b4c2): all operational pages, session detail with timeline, destination records and per-channel replay; typed API client from the OpenAPI schema; reauth gate with SSO step-up; Chromium E2E (9 specs incl. axe in both themes) against a real gateway. Known gaps: no visual snapshots (HP-UI-015), no /system/time sampling, Storage & keys page is a placeholder (no API). API gaps found by the UI (tracked for follow-up): approver identity on grants/sessions, policy what-if endpoint, storage/keys/retention/backup endpoints, recovery-token redemption endpoint, OperatorPatch If-Match, host-CA list, route PATCH, delivery pagination, records page limit, typed free-form objects.
-- **WP26** (2026-10-23, fee5d24 + fixes): 28 fuzz targets, fault suite (test/fault, make test-fault), soak harness (make soak-smoke), security review checklist. The fault suite found 11 product defects; all were fixed (bd08fce destination keepalives; fee9b40/899b65e unrecorded forwarding, late termination on stalled storage, agent disconnect and stalled agent; 86b565f/9cbcfdb sticky disk-full and corruption guidance; 05734b9 return_to dot segments, egress NAT64/Teredo, enforcer cursor after clock steps, ADR-0039). Also fixed: unbounded webhook rate-limiter key table (42a6805) and the export default contradicting HP-REC-014 (06803ba, ADR-0040). Pending for RG-3/5/6/8: long fuzz runs, 24 h soak and benchmarks on reference hardware, the security review itself.
+- **WP19–WP21** (2026-10-23, fbce845): all operational pages, session detail with timeline, destination records and per-channel replay; typed API client from the OpenAPI schema; reauth gate with SSO step-up; Chromium E2E (9 specs incl. axe in both themes) against a real gateway. Known gaps: no visual snapshots (HP-UI-015), no /system/time sampling, Storage & keys page is a placeholder (no API). API gaps found by the UI (tracked for follow-up): approver identity on grants/sessions, policy what-if endpoint, storage/keys/retention/backup endpoints, recovery-token redemption endpoint, OperatorPatch If-Match, host-CA list, route PATCH, delivery pagination, records page limit, typed free-form objects.
+- **WP26** (2026-10-23, 3b246c0 + fixes): 28 fuzz targets, fault suite (test/fault, make test-fault), soak harness (make soak-smoke), security review checklist. The fault suite found 11 product defects; all were fixed (ffeae3b destination keepalives; 6b62a86/41b1db6 unrecorded forwarding, late termination on stalled storage, agent disconnect and stalled agent; ed5c39e/7bf9c69 sticky disk-full and corruption guidance; 2ddb598 return_to dot segments, egress NAT64/Teredo, enforcer cursor after clock steps, ADR-0039). Also fixed: unbounded webhook rate-limiter key table (000903f) and the export default contradicting HP-REC-014 (6c86e47, ADR-0040). Pending for RG-3/5/6/8: long fuzz runs, 24 h soak and benchmarks on reference hardware, the security review itself.
 - **WP27** (2026-10-24): release gates evaluated in docs/evidence/unreleased/release-gates.md. Not releasable: RG-2/3/5/6/8/9/11 fail or were not run (no CI remote, no reference hardware, no external review, no license), RG-4/7/10 partial. No tag created; nothing pushed.
-- **Demo feedback round** (2026-10-24): non-PTY shell hint (9a94ffd); classified channel close detail + gateway exit code, recently-ended activities, fail2ban-style SSH source bans HP-SSH-026/ADR-0041 (b18ec9a); remote networks guide and R-16 connector review item (f493dd9); UI timeline redesign, non-PTY replay fix, responsive panels, CA setup tips, onboarding wizard, bans card, screenshot layout pass (429748d); anonymous-vs-session API rate limits and 429 backoff (4d3754d); unredacted close reasons in logs (d2af4ca).
-- **RG-8 internal review** (2026-10-24, docs/security/review-2026-10-24.md, AI-agent internal review of a4b2a22): 0 CRITICAL, 2 HIGH, 20 MEDIUM, 26 LOW, 17 INFO. Status downgrades applied: HP-POL-012, HP-AUTH-016, HP-CRY-002, HP-CRY-005 (and pre-review items P-2, P-10 are only partially fixed: SR-21, SR-24). Fixes in progress.
+- **Demo feedback round** (2026-10-24): non-PTY shell hint (e717581); classified channel close detail + gateway exit code, recently-ended activities, fail2ban-style SSH source bans HP-SSH-026/ADR-0041 (4e9986d); remote networks guide and R-16 connector review item (5bfa098); UI timeline redesign, non-PTY replay fix, responsive panels, CA setup tips, onboarding wizard, bans card, screenshot layout pass (801e2dd); anonymous-vs-session API rate limits and 429 backoff (76cdab8); unredacted close reasons in logs (a1a8f5e).
+- **RG-8 internal review** (2026-10-24, docs/security/review-2026-10-24.md, AI-agent internal review of 394f897): 0 CRITICAL, 2 HIGH, 20 MEDIUM, 26 LOW, 17 INFO. Status downgrades applied: HP-POL-012, HP-AUTH-016, HP-CRY-002, HP-CRY-005 (and pre-review items P-2, P-10 are only partially fixed: SR-21, SR-24). Fixes in progress.
 <!-- progress-log-end -->
 
 ---
@@ -1944,8 +1944,8 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-OPS-007` Container and standalone deploy — WP24 — evidence: I, D — ◐ partial: Dockerfile/compose/systemd tested locally (smoke script, compose, systemd-in-container); /readyz + ssh list in smoke pending
 - [ ] `HP-OPS-008` CI pipeline — WP01 — evidence: C — ◐ implemented: CI jobs for lint/vet/analyzers/race/coverage/fuzz smoke/govulncheck/gitleaks/OpenSSH/web+API drift; Trivy in release workflow; not yet run on GitHub
 - [ ] `HP-OPS-009` Release provenance — WP24 — evidence: C — ◐ implemented: release workflow with SBOM, provenance, Trivy; locally exercised, not yet run in CI
-- [ ] `HP-OPS-010` Project documents — WP24 — evidence: D — ◐ partial: SECURITY.md, CONTRIBUTING.md, CHANGELOG.md, VERSIONING.md present; LICENSE pending R-01
-- [ ] `HP-OPS-011` License decision — WP24 — evidence: D
+- [x] `HP-OPS-010` Project documents — WP24 — evidence: D — ✅ done: LICENSE (Apache-2.0, canonical text), NOTICE, SECURITY.md, CONTRIBUTING.md, CHANGELOG.md, docs/VERSIONING.md
+- [x] `HP-OPS-011` License decision — WP24 — evidence: D — ✅ done: operator decision 2026-10-24, Apache-2.0 (DECISIONS R-01, ADR-0045)
 - [x] `HP-OPS-012` No secrets in repo — WP01 — evidence: C — ✅ tested (local) @ WP01: gitleaks v8.30.1 clean; CI job `security`; .gitignore excludes keys/DBs/recordings
 - [x] `HP-OPS-013` Config and runtime modes — WP02 — evidence: U, I — ✅ tested (local) @ WP02: internal/config (strict YAML, HALLPASS_* env, unknown-key/env rejection, production restrictions), `hallpass config check`
 - [x] `HP-OPS-014` Durable jobs — WP05 — evidence: I — ✅ tested (local) @ WP05: durable jobs (lease, backoff, dead-letter, dedup, crash reclaim) + Periodic sweeps; outbox worker shares the model
@@ -1967,7 +1967,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-TST-005` Fault injection — WP26 — evidence: FI — ◐ make test-fault: catalog FI-01..FI-23 passes (all 9 findings fixed); FI-19 covered by oidc tests; FI-24 power loss needs a VM hard reset (not done)
 - [ ] `HP-TST-006` Soak — WP26 — evidence: S — ◐ soak harness (test/soak, make soak-smoke); 30 s smoke: 1,386 sessions, 0 failures, no goroutine/FD growth; 24 h run on reference hardware pending
 - [ ] `HP-TST-007` Measured performance — WP26 — evidence: S — ◐ smoke numbers only (M1 Max, all in one process): exec p95 437 ms, revoke→closed max 155 ms; reference-hardware benchmarks pending
-- [x] `HP-TST-008` Security review — WP26 — evidence: SR — ✅ done (internal): AI-agent security review of auth, policy, SSH, crypto and webhooks (docs/security/review-2026-10-24.md); all HIGH/MEDIUM/LOW findings fixed (848c399, SR-35 txscope) except SR-34 accepted (ADR-0044); not an external review
+- [x] `HP-TST-008` Security review — WP26 — evidence: SR — ✅ done (internal): AI-agent security review of auth, policy, SSH, crypto and webhooks (docs/security/review-2026-10-24.md); all HIGH/MEDIUM/LOW findings fixed (61d7852, SR-35 txscope) except SR-34 accepted (ADR-0044); not an external review
 - [x] `HP-TST-009` Coverage floor — WP01 — evidence: C — ✅ tested: make coverage floor 80% passes for policy 81.8, access 81.7, keyring 82.1, recording 81.1, grammar 98.9, opauth 81.4 (local; CI job present)
 
 #### HP-DOC — Documentation

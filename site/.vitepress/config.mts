@@ -105,7 +105,7 @@ export default defineConfig({
     search: { provider: 'local' },
     outline: { level: [2, 3] },
     footer: {
-      message: 'Pre-release software. No license has been chosen yet.',
+      message: 'Pre-release software. Licensed under Apache-2.0.',
       copyright: 'Hallpass contributors',
     },
   },

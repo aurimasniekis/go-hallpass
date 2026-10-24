@@ -80,14 +80,16 @@ LABEL org.opencontainers.image.title="hallpass" \
       org.opencontainers.image.description="Terminating SSH access gateway for AI agents" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${COMMIT}" \
-      org.opencontainers.image.base.name="gcr.io/distroless/static-debian12:nonroot"
+      org.opencontainers.image.base.name="gcr.io/distroless/static-debian12:nonroot" \
+      org.opencontainers.image.licenses="Apache-2.0"
+COPY --chown=0:0 --chmod=0444 LICENSE NOTICE /usr/share/doc/hallpass/
 COPY --from=build --chown=0:0 --chmod=0555 /out/hallpass /usr/local/bin/hallpass
 COPY --from=build /rootfs/ /
 ENV HALLPASS_CONFIG=/etc/hallpass/hallpass.yaml
 USER 65532:65532
 WORKDIR /var/lib/hallpass
 VOLUME ["/var/lib/hallpass"]
-# ssh.listen and http.listen defaults (internal/config/defaults.go). The HTTP console/API arrives with WP15.
+# ssh.listen and http.listen defaults (internal/config/defaults.go).
 EXPOSE 2222/tcp 8080/tcp
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["/usr/local/bin/hallpass"]
