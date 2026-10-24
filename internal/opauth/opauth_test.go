@@ -281,18 +281,23 @@ func TestLoginThrottlingAndEnumeration(t *testing.T) {
 	if testing.Short() {
 		return
 	}
-	timeIt := func(email string) time.Duration {
-		var ds []time.Duration
-		for i := range 15 {
+	// Interleave the two kinds of attempts so load drift on the machine (CI runners) affects both alike.
+	var kd, ud []time.Duration
+	for i := range 21 {
+		for _, email := range []string{"admin@example.com", "nobody@example.com"} {
 			f.clk.Advance(time.Hour)
 			start := time.Now()
 			_, _ = f.svc.Login(f.ctx, LoginInput{Email: email, Password: "wrong password!!", Meta: SessionMeta{IP: "203.0.114." + itoa(i)}})
-			ds = append(ds, time.Since(start))
+			if email == "nobody@example.com" {
+				ud = append(ud, time.Since(start))
+			} else {
+				kd = append(kd, time.Since(start))
+			}
 		}
-		slices.Sort(ds)
-		return ds[len(ds)/2]
 	}
-	known, unknown := timeIt("admin@example.com"), timeIt("nobody@example.com")
+	slices.Sort(kd)
+	slices.Sort(ud)
+	known, unknown := kd[len(kd)/2], ud[len(ud)/2]
 	ratio := float64(known) / float64(unknown)
 	t.Logf("median known=%s unknown=%s ratio=%.2f", known, unknown, ratio)
 	if ratio < 0.75 || ratio > 1.33 {

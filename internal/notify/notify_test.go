@@ -332,10 +332,23 @@ func TestDeliveryFailureNeverApproves(t *testing.T) {
 	if f.state(r.ID) != access.ReqPending {
 		t.Fatal("failed delivery changed the request")
 	}
-	rows, err := f.a.Store.R().ListDeliveries(f.ctx, dbDeliveries())
-	must(t, err)
+	// The outbox records the failure just after the provider call returns: wait for it.
+	var rows []db.ListDeliveriesRow
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var err error
+		rows, err = f.a.Store.R().ListDeliveries(f.ctx, dbDeliveries())
+		must(t, err)
+		if len(rows) > 0 && rows[0].Attempts > 0 && rows[0].LastError.String != "" || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	if len(rows) == 0 || rows[0].Attempts == 0 || rows[0].LastError.String == "" {
 		t.Fatalf("delivery history %+v", rows)
+	}
+	if f.state(r.ID) != access.ReqPending {
+		t.Fatal("failed delivery changed the request")
 	}
 }
 
