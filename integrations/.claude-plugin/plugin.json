@@ -1,0 +1,9 @@
+{
+  "name": "hallpass",
+  "version": "0.1.0",
+  "description": "Use a Hallpass SSH gateway safely: list servers and roles, request time-bound access with an honest reason, wait for human approval, run commands, and handle gateway exit codes.",
+  "author": { "name": "Aurimas Niekis" },
+  "homepage": "https://github.com/aurimasniekis/go-hallpass",
+  "repository": "https://github.com/aurimasniekis/go-hallpass",
+  "keywords": ["ssh", "access", "approval", "gateway", "agents"]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "hallpass",
+  "owner": { "name": "Aurimas Niekis" },
+  "plugins": [
+    {
+      "name": "hallpass",
+      "source": "./integrations",
+      "description": "Skill for AI agents that reach servers through a Hallpass SSH gateway."
+    }
+  ]
+}

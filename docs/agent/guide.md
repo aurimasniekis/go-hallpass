@@ -49,7 +49,7 @@ Forwarding (`-L`, `-R`, `-D`, `-W`), agent forwarding, X11 and subsystems such a
 ssh center                                 # list (default)
 ssh center list --json
 ssh center roles web1
-ssh center request web1 --role inspect --reason "disk alert on /var" --duration 30m
+ssh center 'request web1 --role inspect --reason "disk alert on /var" --duration 30m'
 ssh center status req_01… --wait
 ssh center cancel req_01…
 ssh -t center connect web1 --role inspect  # interactive shell (needs a PTY: ssh -t)
@@ -76,6 +76,11 @@ ssh center help exec
 The gateway splits its part of the command on spaces and tabs. `'…'` is literal, `"…"` is literal except for `\"` and
 `\\`, and outside quotes `\x` means `x`. There is no variable, glob, tilde or command expansion at the gateway. Control
 characters other than TAB, and therefore multi-line commands, are rejected with exit 81.
+
+**Multi-word option values** such as `--reason` need quotes that reach the gateway. ssh joins its arguments with
+spaces, so quotes your local shell removes are lost: `ssh center request web1 --reason "disk alert"` arrives as
+`--reason disk alert` and fails with exit 81. Quote the whole gateway command once:
+`ssh center 'request web1 --role inspect --reason "disk alert on /var"'`.
 
 Everything after the first unquoted `--` is sent unchanged to the destination, and the remote user's login shell
 interprets it. `--` does not stop remote shell expansion. Your local shell also parses the command first, so quote
