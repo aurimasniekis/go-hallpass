@@ -8,8 +8,13 @@
 #   SKIP_BUILD=1          reuse web/dist and the binary from a previous run in $WORK
 #   E2E_EXTRA_CONFIG      YAML appended to the generated configuration (top-level keys not already present)
 #   E2E_SOURCE_ADDRESS    egress.source_addresses entry (the from= address in suggested authorized_keys lines)
+#   E2E_DEST=1            also start a throwaway OpenSSH destination container (test/openssh image) for the session
+#                         and replay specs; they read HP_E2E_DEST (host:port) and HP_E2E_DEST_CONTAINER
+#   E2E_DEX=1             also start a throwaway Dex identity provider on DEX_PORT (default 25556) for the SSO spec,
+#                         with one user whose password is generated per run (HP_E2E_DEX_* variables)
 #
-# Needs Go, pnpm, ssh-keygen and ssh, and Chromium for Playwright (`pnpm exec playwright install chromium`).
+# Needs Go, pnpm, ssh-keygen and ssh, and Chromium for Playwright (`pnpm exec playwright install chromium`); Docker for
+# E2E_DEST=1 and E2E_DEX=1.
 # The server log is kept on failure. Nothing is pushed.
 set -euo pipefail
 
@@ -19,6 +24,8 @@ ssh_port=${SSH_PORT:-22222}
 work=${WORK:-$(mktemp -d)}
 url="http://127.0.0.1:$http_port"
 pid=""
+dest=""
+dex=""
 
 cleanup() {
   local rc=$?
@@ -26,6 +33,8 @@ cleanup() {
     kill "$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
   fi
+  if [[ -n $dest ]]; then docker rm -f "$dest" >/dev/null 2>&1 || true; fi
+  if [[ -n $dex ]]; then docker rm -f "$dex" >/dev/null 2>&1 || true; fi
   if [[ $rc -ne 0 ]]; then
     echo "e2e: FAIL (server log: $work/server.log)" >&2
     tail -n 40 "$work/server.log" >&2 2>/dev/null || true
@@ -48,6 +57,68 @@ for port in "$http_port" "$ssh_port"; do
     exit 1
   fi
 done
+
+if [[ ${E2E_DEST:-} == 1 ]]; then
+  # Own build context: the repository's .dockerignore excludes test/. Host keys are generated at container start.
+  ctx=$(mktemp -d)
+  cp "$root/test/openssh/Dockerfile.sshd" "$root/test/openssh/sshd_config" "$root/test/openssh/entrypoint.sh" "$ctx/"
+  docker build -q -t hallpass-e2e-dest:local -f "$ctx/Dockerfile.sshd" "$ctx" >/dev/null
+  rm -rf "$ctx"
+  dest=hallpass-e2e-dest-$$
+  docker run -d --name "$dest" -p 127.0.0.1::22 hallpass-e2e-dest:local >/dev/null
+  for _ in $(seq 1 50); do
+    docker exec "$dest" sh -c 'test -s /etc/ssh/ssh_host_ed25519_key.pub && pgrep sshd' >/dev/null 2>&1 && break
+    sleep 0.2
+  done
+  export HP_E2E_DEST="127.0.0.1:$(docker port "$dest" 22/tcp | head -n 1 | sed 's/.*://')" HP_E2E_DEST_CONTAINER=$dest
+fi
+
+if [[ ${E2E_DEX:-} == 1 ]]; then
+  dex_port=${DEX_PORT:-25556}
+  if (exec 3<>"/dev/tcp/127.0.0.1/$dex_port") 2>/dev/null; then
+    echo "e2e: 127.0.0.1:$dex_port is already in use; set DEX_PORT" >&2
+    exit 1
+  fi
+  dex_issuer="http://127.0.0.1:$dex_port/dex"
+  dex_secret=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
+  dex_password=$(head -c 18 /dev/urandom | od -An -tx1 | tr -d ' \n')
+  dex_hash=$(printf '%s\n' "$dex_password" | (cd "$root" && go run ./scripts/e2e/bcrypt))
+  cat >"$work/dex.yaml" <<DEX
+issuer: $dex_issuer
+storage: {type: memory}
+web: {http: 0.0.0.0:5556}
+oauth2: {responseTypes: [code], skipApprovalScreen: true}
+enablePasswordDB: true
+staticClients:
+  - id: hallpass-e2e
+    name: HallPass
+    secret: "$dex_secret"
+    redirectURIs: ["$url/auth/oidc/callback"]
+staticPasswords:
+  - email: "sso-approver@example.test"
+    username: sso-approver
+    name: SSO Approver
+    emailVerified: true
+    userID: "e2e-sso-approver"
+    hash: "$dex_hash"
+    groups: ["hallpass-approvers"]
+DEX
+  dex=hallpass-e2e-dex-$$
+  # Pinned like the OIDC interoperability tests (test/oidcinterop/docker_test.go).
+  docker create --name "$dex" -p "127.0.0.1:$dex_port:5556" \
+    ghcr.io/dexidp/dex:v2.46.0@sha256:933fcd3f523338c847b88ef84a7145fb2fcb7b9917f08418612afeaaa2001777 \
+    dex serve /etc/dex/hallpass.yaml >/dev/null
+  docker cp "$work/dex.yaml" "$dex:/etc/dex/hallpass.yaml" >/dev/null
+  rm -f "$work/dex.yaml"
+  docker start "$dex" >/dev/null
+  for _ in $(seq 1 100); do
+    curl -fsS "$dex_issuer/.well-known/openid-configuration" >/dev/null 2>&1 && break
+    sleep 0.2
+  done
+  curl -fsS "$dex_issuer/.well-known/openid-configuration" >/dev/null
+  export HP_E2E_DEX_ISSUER=$dex_issuer HP_E2E_DEX_CLIENT_ID=hallpass-e2e HP_E2E_DEX_CLIENT_SECRET=$dex_secret \
+    HP_E2E_DEX_EMAIL=sso-approver@example.test HP_E2E_DEX_PASSWORD=$dex_password
+fi
 
 rm -rf "$work/data" "$root/web/.e2e-state"
 cat >"$work/hallpass.yaml" <<EOF

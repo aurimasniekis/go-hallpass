@@ -101,8 +101,12 @@ jobs:
       - name: install
         working-directory: web
         run: pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps chromium
-      # Fresh development instance on loopback, real agent SSH request, approval in the browser (scripts/e2e.sh).
+      # Fresh development instance on loopback, real agent SSH request, approval in the browser (scripts/e2e.sh), with an
+      # OpenSSH destination container for replay and file transfer, and a Dex container for SSO sign-in.
       - name: e2e against a fresh backend
+        env:
+          E2E_DEST: "1"
+          E2E_DEX: "1"
         run: scripts/e2e.sh --reporter=list
 
   openssh:

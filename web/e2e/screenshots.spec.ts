@@ -1,12 +1,13 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 
 import { expect, test, type Browser, type Locator, type Page } from '@playwright/test';
 
+import { Api } from './api';
 import { e2eUrl, saveAdmin } from './env';
 import { type AgentKey, gatewaySsh, generateAgentKey, sshAddr, writeKnownHosts } from './ssh';
-import { noteApiRequest, throttle, trackApiRequests } from './throttle';
+import { trackApiRequests } from './throttle';
 import { freshTotp } from './totp';
 
 /**
@@ -43,30 +44,6 @@ interface AccessSession extends Id {
   agent_id: string;
   server_id: string;
   role_id: string;
-}
-
-/** Same-origin API calls with the signed-in browser session (CSRF, Origin and idempotency headers). */
-class Api {
-  private csrf = '';
-  constructor(private readonly page: Page) {}
-
-  async init(): Promise<void> {
-    this.csrf = (await this.call<{ csrf_token: string }>('GET', '/api/v1/me')).csrf_token;
-  }
-
-  async call<T>(method: string, path: string, data?: unknown): Promise<T> {
-    await throttle(220);
-    noteApiRequest();
-    const res = await this.page.request.fetch(path, {
-      method,
-      ...(data === undefined ? {} : { data }),
-      headers: { Origin: e2eUrl ?? '', 'X-CSRF-Token': this.csrf, 'Idempotency-Key': randomUUID() },
-    });
-    if (!res.ok()) {
-      throw new Error(`${method} ${path}: ${String(res.status())} ${await res.text()}`);
-    }
-    return (res.status() === 204 ? undefined : await res.json()) as T;
-  }
 }
 
 /** Interactive `ssh -tt` session as an agent: send lines, wait for the prompt, collect everything printed. */
