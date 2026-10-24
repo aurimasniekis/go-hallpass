@@ -32,7 +32,8 @@ agent JSON schemas, the recording format and the database schema).
   it. Deleting a server or git remote needs its name typed and takes its roles with it.
 - **API tokens** for Terraform and scripts (**Administration → API tokens**, `/api/v1/api-tokens`): bearer tokens
   that act for their creator with one of the creator's roles, expire after 1–366 days, and work only on configuration
-  and read operations (`x-token` in the API document).
+  and read operations (`x-token` in the API document). They are what the
+  [Terraform provider](https://github.com/aurimasniekis/terraform-provider-hallpass) uses.
 - Database growth bounds: delivered notifications are kept for 30 days and finished background jobs for 7 days; free
   pages are returned to the filesystem every 5 minutes; a writer queue-depth metric.
 

@@ -66,6 +66,8 @@ flowchart LR
 - **Hidden inventory.** Agents see aliases only. An unknown server and a forbidden one give the same answer.
 - **Operators** with Argon2id passwords and TOTP or OIDC single sign-on, and administrator, approver, auditor and
   viewer roles.
+- **Configuration as code** with the [Terraform provider](https://github.com/aurimasniekis/terraform-provider-hallpass)
+  and API tokens: agents, servers, git remotes, roles, keys, policy, single sign-on and chat approvals.
 - **One Go binary** with the web UI embedded and SQLite storage. Backup and restore, integrity anchors, Prometheus
   metrics, health checks and optional OpenTelemetry tracing.
 

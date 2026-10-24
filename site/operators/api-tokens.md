@@ -40,6 +40,26 @@ curl -H "Authorization: Bearer $HALLPASS_TOKEN" https://hallpass.example.com/api
 An operation a token may not use answers `403` ("API tokens cannot use this operation"). In the API document these
 operations lack `x-token: true`.
 
+## Terraform
+
+The [HallPass Terraform provider](https://github.com/aurimasniekis/terraform-provider-hallpass) uses an API token to
+manage agents and their keys, servers and git remotes, host keys, roles and git access profiles, login keys, policy and
+approver rules, single sign-on and chat approvals:
+
+```hcl
+provider "hallpass" {
+  endpoint = "https://hallpass.example.com" # or HALLPASS_ENDPOINT
+  token    = var.hallpass_token             # or HALLPASS_TOKEN
+}
+
+resource "hallpass_agent" "claude_sre" {
+  name   = "claude-sre"
+  groups = ["sre-agents"]
+}
+```
+
+Give it an **Administrator** token. Operators, approvals and recordings stay in the console.
+
 ## Rotate and revoke
 
 Create the new token, switch your automation to it, then **Revoke** the old one. The list shows when and from where
