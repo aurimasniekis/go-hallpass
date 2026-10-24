@@ -6,6 +6,8 @@
 # Usage: scripts/e2e.sh [playwright args...]
 #   HTTP_PORT / SSH_PORT  loopback ports (default 28080 / 22222; must be free)
 #   SKIP_BUILD=1          reuse web/dist and the binary from a previous run in $WORK
+#   E2E_EXTRA_CONFIG      YAML appended to the generated configuration (top-level keys not already present)
+#   E2E_SOURCE_ADDRESS    egress.source_addresses entry (the from= address in suggested authorized_keys lines)
 #
 # Needs Go, pnpm, ssh-keygen and ssh, and Chromium for Playwright (`pnpm exec playwright install chromium`).
 # The server log is kept on failure. Nothing is pushed.
@@ -61,9 +63,17 @@ http:
 egress:
   allow_cidrs: [127.0.0.0/8]
   allow_special_cidrs: [127.0.0.0/8]
+${E2E_SOURCE_ADDRESS:+  source_addresses: [$E2E_SOURCE_ADDRESS]}
 EOF
+if [[ -n ${E2E_EXTRA_CONFIG:-} ]]; then printf '%s\n' "$E2E_EXTRA_CONFIG" >>"$work/hallpass.yaml"; fi
 
-token=$("$work/hallpass" admin bootstrap -config "$work/hallpass.yaml" 2>/dev/null | awk '/^  token: /{print $2}')
+# The binary refuses unknown HALLPASS_* variables, so harness settings use other prefixes (HP_*).
+if ! boot=$("$work/hallpass" admin bootstrap -config "$work/hallpass.yaml" 2>&1); then
+  printf '%s\n' "$boot" | tail -n 5 >&2
+  echo "e2e: bootstrap failed" >&2
+  exit 1
+fi
+token=$(printf '%s\n' "$boot" | awk '/^  token: /{print $2}')
 [[ -n $token ]] || { echo "e2e: bootstrap printed no setup token" >&2; exit 1; }
 
 "$work/hallpass" serve -config "$work/hallpass.yaml" >"$work/server.log" 2>&1 &

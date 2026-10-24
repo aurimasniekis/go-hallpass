@@ -24,6 +24,17 @@ export default defineConfig({
   },
   projects: [
     { name: 'setup', testMatch: /auth\.setup\.ts/ },
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, dependencies: ['setup'] },
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      dependencies: ['setup'],
+      testIgnore: /screenshots\.spec\.ts/,
+    },
+    // Documentation screenshots (scripts/screenshots.sh): bootstraps its own administrator on a fresh backend.
+    {
+      name: 'screenshots',
+      testMatch: /screenshots\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 },
+    },
   ],
 });

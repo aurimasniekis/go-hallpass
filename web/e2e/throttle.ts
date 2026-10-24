@@ -16,6 +16,11 @@ export function trackApiRequests(page: Page): void {
   });
 }
 
+/** Records an API request made outside the page (APIRequestContext calls do not emit page events). */
+export function noteApiRequest(): void {
+  sent.push(Date.now());
+}
+
 export async function throttle(budget = 200): Promise<void> {
   for (;;) {
     const cutoff = Date.now() - 60_000;
