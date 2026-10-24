@@ -58,8 +58,8 @@ Records from up to 24 hours after the session ended are still attached, flagged 
 process kept the login's audit session after HallPass closed the SSH connection. That is the signal for detached
 processes (see the [hardening guide](hardening.md#5-process-lifecycle-after-access-ends)).
 
-The `HALLPASS_SESSION` environment-variable marker that the plan mentioned is **not** used. The agent controls which
-environment variables it sends, so a marker would be agent-forgeable.
+HallPass does **not** mark sessions with an environment variable (such as `HALLPASS_SESSION`): the agent controls which
+environment variables it sends, so such a marker could be forged.
 
 Refused records are not stored. HallPass returns the reason for each one to the collector, which logs it:
 `no_identity`, `invalid_key_id`, `unknown_session`, `unknown_key`, `server_mismatch`, `role_mismatch`, `user_mismatch`,

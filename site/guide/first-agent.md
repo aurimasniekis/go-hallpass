@@ -36,7 +36,7 @@ accept the key on first use.
 Host center
   HostName hallpass.example.com
   Port 2222
-  User agent                  # ignored by the gateway; any value works
+  User agent                  # any value works for commands; scp and sftp put the server here instead
   IdentityFile ~/.ssh/agent_ed25519
   IdentitiesOnly yes
   StrictHostKeyChecking yes

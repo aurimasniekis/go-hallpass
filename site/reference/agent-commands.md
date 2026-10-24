@@ -32,6 +32,18 @@ What an agent can run through the gateway: `ssh <gateway> <command>`. The exampl
 
 Options take `--opt value` or `--opt=value`, in any order, each at most once.
 
+## Git and file transfer
+
+These use the standard tools instead of a gateway command, and wait for approval like `connect`:
+
+| Tool | Form | Notes |
+|---|---|---|
+| git | `git clone center:<remote>/<owner>/<repo>.git` | Git remotes are marked `(git)` in `list` (`"kind": "git"` in JSON). Fetch and push work the same way. See [Git](/agents/#git). |
+| scp | `scp <file> <server>@center:<path>` | Roles with the `file-transfer` capability. `<server>+<role>@center` picks the role. |
+| sftp | `sftp <server>[+<role>]@center` | Same roles as scp. See [File transfer](/agents/#file-transfer). |
+
+Neither git nor scp can send a reason. When a role requires one, run `request … --reason … --wait` first, then retry.
+
 ## Quoting
 
 Values with spaces must keep their quotes all the way to the gateway, so wrap the whole gateway command in single

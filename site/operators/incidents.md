@@ -80,11 +80,15 @@ systemctl start hallpass
 The command re-enables a disabled operator and prints a single-use token valid for 30 minutes. Every start then logs
 a break-glass alert until an administrator acknowledges it on the **System** page.
 
-::: warning Not yet usable from the browser
-The current build prints a `/recover?token=…` link, but the web page and API endpoint that accept the recovery token
-are not shipped yet. Until they are, plan around the other recovery paths: keep more than one administrator, keep
-recovery codes, and do not disable password login without a tested SSO path.
-:::
+Start the server, open the printed `/recover?token=…` link and choose **Use recovery login** (nothing is used up until
+you confirm). You are signed in with a break-glass session:
+
+- the account's other sessions end, and its authenticator and recovery codes are removed;
+- if two-factor authentication is required, enroll a new authenticator first;
+- an account with a local password also gets a one-time link (valid 1 hour) to set a new password. Using it signs out
+  every session, including this one, so finish urgent work first.
+
+It works while password login is disabled, for example when the identity provider is down.
 
 ## Chat or IdP outage
 

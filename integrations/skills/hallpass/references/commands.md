@@ -32,6 +32,16 @@ Options for `request`, `connect` and `exec`:
 
 Options take `--opt value` or `--opt=value`, in any order, each at most once.
 
+Git and file transfer use the standard tools, not a gateway command, and wait for approval like `connect`:
+
+```sh
+git clone center:github/acme/api.git          # git remotes are marked (git) in list
+scp build.tar web1@center:/tmp/               # roles with the file-transfer capability
+sftp web1+deploy@center                       # "+<role>" picks the role
+```
+
+Neither git nor scp can send a reason: when one is required, `request … --reason … --wait` first, then retry.
+
 ## Quoting
 
 The gateway splits its own part of the command on spaces and tabs:
@@ -89,7 +99,7 @@ Example error (stderr):
 Host center
   HostName hallpass.example.net
   Port 2222
-  User agent                  # ignored by the gateway
+  User agent                  # any value works for commands; scp and sftp put the server here instead
   IdentityFile ~/.ssh/agent_ed25519
   IdentitiesOnly yes
   StrictHostKeyChecking yes   # pin the gateway host key from `hallpass hostkey show`
@@ -98,4 +108,5 @@ Host center
   ServerAliveInterval 30
 ```
 
-Forwarding (`-L`, `-R`, `-D`, `-W`), agent forwarding, X11 and subsystems such as `sftp` are refused and audited.
+Forwarding (`-L`, `-R`, `-D`, `-W`), agent forwarding and X11 are refused and audited. `scp` and `sftp` work only
+through roles with the `file-transfer` capability.

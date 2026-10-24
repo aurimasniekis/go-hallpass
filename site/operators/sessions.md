@@ -9,7 +9,9 @@ shell), the recordings and a timeline. Find them under **Access → Sessions**.
 
 <Shot name="session-overview" themed alt="Access session summary, grant, channels and recording segments" />
 
-- **Summary and grant**: agent, server, role, remote user, the grant's remaining time and a **Revoke** button.
+- **Summary**: agent, server, role, remote user, the grant's remaining time, live and total channels, and retention.
+- **Grant and request**: the grant's state, start and end, capabilities, the request and the agent's reason, and a
+  **Revoke** button while the grant is active.
 - **Channels**: every command and shell, how it ended and with which exit status. Gateway exit codes (80–90) mean the
   gateway ended the channel, not the destination.
 - **Recording segments**: the encrypted files, their state and integrity status.

@@ -29,7 +29,7 @@ Pin the gateway host key. Do not accept it on first use. Ask the operator for th
 Host center
   HostName hallpass.example.net
   Port 2222
-  User agent                  # ignored by the gateway; any value works
+  User agent                  # any value works for commands; scp and sftp put the server here instead
   IdentityFile ~/.ssh/agent_ed25519
   IdentitiesOnly yes
   StrictHostKeyChecking yes
@@ -71,6 +71,18 @@ ssh center help exec
 - A grant lasts from approval for its duration. Reconnecting never extends it. When it expires or is revoked, running
   sessions end with exit 87 and a notice on stderr.
 - Unknown servers and servers you may not see give the same answer: exit 82, "not found or not permitted".
+
+## Git and file transfer
+
+Git and file transfer use the standard tools, not a gateway command, and wait for approval like `connect`:
+
+```sh
+git clone center:github/acme/api.git          # git remotes are marked (git) in list
+scp build.tar web1@center:/tmp/               # roles with the file-transfer capability
+sftp web1+deploy@center                       # "+<role>" picks the role
+```
+
+Neither git nor scp can send a reason: when one is required, `request … --reason … --wait` first, then retry.
 
 ## Quoting
 

@@ -31,7 +31,7 @@ service first. `backup create`, `backup verify`, `anchors export`, `config` and 
 | `hallpass admin recover --email EMAIL` | Break-glass: issue a single-use, 30-minute recovery login for an existing operator, re-enabling it if disabled (offline; audited). |
 | `hallpass admin recover --email EMAIL --new-admin` | Break-glass: create a new local administrator and issue its recovery login. |
 
-The web page that accepts recovery tokens is not shipped yet; see
+Open the printed `/recover?token=…` link to use it; see
 [the runbook](/operators/incidents#locked-out-of-administration).
 
 ## Keys

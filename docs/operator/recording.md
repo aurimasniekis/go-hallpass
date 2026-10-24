@@ -4,10 +4,9 @@ Every destination channel is recorded. Recording is mandatory by default: a sess
 recording is established, and a session whose recording cannot be written is terminated (exit 80 to the agent). The
 format is HPREC1 ([formats/hprec1.md](../formats/hprec1.md)), with one encrypted file per segment under
 `<data_dir>/recordings/<shard>/<session>/<segment>.hprec` (`<shard>` is the last two characters of the session ID).
-Reconciliation, verification, replay, the plaintext export, retention, key-slot maintenance, backup and restore derive
-this location from the segment and session IDs and never use the `path` column for file I/O, so a modified row cannot
-point them at a file outside `recordings/`. **Not yet covered:** the ciphertext bundle export
-(`GET /api/v1/access-sessions/{id}/export`, default `format=bundle`) still reads the stored path.
+Reconciliation, verification, replay, both exports (plaintext and ciphertext bundle), retention, key-slot maintenance,
+backup and restore derive this location from the segment and session IDs and never use the `path` column for file
+I/O, so a modified row cannot point them at a file outside `recordings/`.
 
 ## Configuration (`recording:`)
 

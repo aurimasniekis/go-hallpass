@@ -12,13 +12,13 @@ never decides twice.
 
 ## Chat approvals
 
-1. Create an integration (**Settings → Integrations**, administrator, recent authentication):
+1. Create an integration (**Administration → Integrations**, administrator, recent authentication):
    - Slack: [slack.md](slack.md).
    - Telegram: [telegram.md](telegram.md).
    Secrets are encrypted at rest and write-only.
 2. Add **notification routes**: a destination (Slack channel ID, Telegram chat ID) plus a target selector (all servers,
    servers, groups or labels). An empty selector matches nothing.
-3. Each approver links their chat account. In **Me → Chat accounts**, create a link code (single use, 10 minutes) and
+3. Each approver links their chat account. In **My account → Chat accounts**, create a link code (single use, 10 minutes) and
    send it to the bot:
    - Slack: `/hallpass link <code>`.
    - Telegram: `/link <code>` in a **private** chat with the bot. A code posted in a group is burned.
@@ -38,7 +38,7 @@ canceled or expires, the messages are edited to show the outcome.
 
 Messages go through the durable outbox:
 - up to 8 attempts with exponential backoff, then a `dead` state;
-- delivery history under **Settings → Integrations → Deliveries** (`GET /api/v1/notification-deliveries`), kept for
+- delivery history under **Administration → Integrations → Deliveries** (`GET /api/v1/notification-deliveries`), kept for
   30 days after the last attempt, then deleted together with the encrypted message;
 - dead letters are counted in the `hallpass_outbox_dead` metric.
 
