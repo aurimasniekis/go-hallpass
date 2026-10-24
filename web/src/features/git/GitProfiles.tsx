@@ -73,7 +73,7 @@ export function GitProfiles({
           expandedRowRender: (r) => (
             <Space orientation="vertical" size={12} style={{ width: '100%' }}>
               <Alert type="info" showIcon title="Installing the login key" description={keyHint} />
-              <CredentialsPanel roleId={r.id} />
+              <CredentialsPanel roleId={r.id} gitRemote />
             </Space>
           ),
         }}

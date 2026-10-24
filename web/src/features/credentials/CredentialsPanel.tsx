@@ -19,6 +19,12 @@ import { FormModal } from '../servers/FormModal';
 import { credentialActions, credentialNextStep } from './credentialActions';
 import { KeyLineOptionsHint } from './KeyLineOptionsHint';
 
+/** The bare public key with its `hallpass:<remote>/<profile>` comment, as git hosts accept it. */
+function gitPublicKey(c: LoginCredential): string {
+  const comment = c.authorized_keys_line.split(' ').pop() ?? '';
+  return comment.startsWith('hallpass:') ? `${c.public_key.trim()} ${comment}` : c.public_key.trim();
+}
+
 function ProbeButton({ cred, roleId }: { cred: LoginCredential; roleId: string }) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
@@ -133,7 +139,11 @@ function RevokeButton({ cred, roleId }: { cred: LoginCredential; roleId: string 
  * the overlap remove the old line → retire/revoke the old key. Private keys never leave the server; an
  * imported PEM is sent once and dropped from the form.
  */
-export function CredentialsPanel({ roleId }: { roleId: string }) {
+/**
+ * Login credentials of a role. On a git remote (`gitRemote`) the key goes into the git host's settings (a deploy key
+ * or an account's SSH keys), which accept only the bare public key, so no authorized_keys options are shown.
+ */
+export function CredentialsPanel({ roleId, gitRemote = false }: { roleId: string; gitRemote?: boolean }) {
   const queryClient = useQueryClient();
   const query = useQuery(credentialsQueryOptions(roleId));
   const now = useNow(30_000);
@@ -269,11 +279,23 @@ export function CredentialsPanel({ roleId }: { roleId: string }) {
                   {credentialNextStep(focus, now) ? (
                     <Alert type="info" showIcon title={credentialNextStep(focus, now)} />
                   ) : null}
-                  <CopyField label="authorized_keys line" value={focus.authorized_keys_line} />
-                  <p style={{ margin: 0 }}>
-                    Append this line to <code className="hp-mono">~/.ssh/authorized_keys</code> of the
-                    role&apos;s remote user. <KeyLineOptionsHint line={focus.authorized_keys_line} />
-                  </p>
+                  {gitRemote ? (
+                    <>
+                      <CopyField label="Public key" value={gitPublicKey(focus)} />
+                      <p style={{ margin: 0 }}>
+                        Add this key on the git host, then use <strong>Probe</strong> to check that the host
+                        accepts it.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <CopyField label="authorized_keys line" value={focus.authorized_keys_line} />
+                      <p style={{ margin: 0 }}>
+                        Append this line to <code className="hp-mono">~/.ssh/authorized_keys</code> of the
+                        role&apos;s remote user. <KeyLineOptionsHint line={focus.authorized_keys_line} />
+                      </p>
+                    </>
+                  )}
                 </Space>
               </Card>
             ) : null}

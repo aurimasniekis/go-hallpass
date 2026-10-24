@@ -146,4 +146,35 @@ describe('Git pages', () => {
     ]);
     expect((patch?.body as { capabilities: string[] }).capabilities).toEqual(['git-read', 'git-write']);
   });
+
+  it('shows the bare public key to add on the git host', async () => {
+    const user = userEvent.setup();
+    mockApi({
+      'GET /api/v1/me': makeMe({ permissions: ['inventory.read', 'inventory.write'] }),
+      'GET /api/v1/servers/srv_git/roles': { items: [profile] },
+      'GET /api/v1/roles/rol_1/credentials': {
+        items: [
+          {
+            id: 'lcr_1',
+            role_id: 'rol_1',
+            kind: 'managed_key',
+            algorithm: 'ssh-ed25519',
+            public_key: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample',
+            fingerprint: 'SHA256:example',
+            state: 'pending',
+            created_at: '2026-10-24T08:00:00Z',
+            created_by: 'operator:opr_1',
+            authorized_keys_line:
+              'restrict,from="192.0.2.10" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample hallpass:github/acme-push',
+          },
+        ],
+      },
+    });
+    renderWithProviders(<GitProfiles serverId="srv_git" canWrite keyHint="Add it as a deploy key." />);
+    await user.click(await screen.findByRole('button', { name: /expand row/i }));
+    expect(await screen.findByLabelText('Public key')).toHaveValue(
+      'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample hallpass:github/acme-push',
+    );
+    expect(screen.queryByLabelText('authorized_keys line')).not.toBeInTheDocument();
+  });
 });

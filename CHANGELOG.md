@@ -33,6 +33,17 @@ agent JSON schemas, the recording format and the database schema).
 - The policy page's effective-access preview names the deciding rules, and the server wizard recognizes rules that
   reach a server through groups or labels.
 
+### Fixed
+
+- Scanning host keys says why it failed, for example that the address is outside `egress.allow_cidrs`, the connection
+  was refused or timed out, instead of only "no host keys could be retrieved".
+- The server and git remote lists show confirmed host keys; they showed "None active" and "Not confirmed" for every
+  entry.
+- A retired host key can be enrolled again: scanning offers it as pending for confirmation, pasting it trusts it. Both
+  failed before, because the retired entry blocked the same key.
+- Git access profiles show the bare public key to add on the git host. They showed an `authorized_keys` line with
+  options, which GitHub and other git hosts reject.
+
 ## [0.1.0] - 2026-10-24
 
 First release. HallPass is a terminating SSH gateway for AI agents: agents use plain `ssh` with their own key,
