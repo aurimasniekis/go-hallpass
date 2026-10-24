@@ -1637,6 +1637,7 @@ WP25 (2026-10-23): destination-side audit integration (internal/destaudit, cmd/h
 - **WP26** (2026-10-23, fee5d24 + fixes): 28 fuzz targets, fault suite (test/fault, make test-fault), soak harness (make soak-smoke), security review checklist. The fault suite found 11 product defects; all were fixed (bd08fce destination keepalives; fee9b40/899b65e unrecorded forwarding, late termination on stalled storage, agent disconnect and stalled agent; 86b565f/9cbcfdb sticky disk-full and corruption guidance; 05734b9 return_to dot segments, egress NAT64/Teredo, enforcer cursor after clock steps, ADR-0039). Also fixed: unbounded webhook rate-limiter key table (42a6805) and the export default contradicting HP-REC-014 (06803ba, ADR-0040). Pending for RG-3/5/6/8: long fuzz runs, 24 h soak and benchmarks on reference hardware, the security review itself.
 - **WP27** (2026-10-24): release gates evaluated in docs/evidence/unreleased/release-gates.md. Not releasable: RG-2/3/5/6/8/9/11 fail or were not run (no CI remote, no reference hardware, no external review, no license), RG-4/7/10 partial. No tag created; nothing pushed.
 - **Demo feedback round** (2026-10-24): non-PTY shell hint (9a94ffd); classified channel close detail + gateway exit code, recently-ended activities, fail2ban-style SSH source bans HP-SSH-026/ADR-0041 (b18ec9a); remote networks guide and R-16 connector review item (f493dd9); UI timeline redesign, non-PTY replay fix, responsive panels, CA setup tips, onboarding wizard, bans card, screenshot layout pass (429748d); anonymous-vs-session API rate limits and 429 backoff (4d3754d); unredacted close reasons in logs (d2af4ca).
+- **RG-8 internal review** (2026-10-24, docs/security/review-2026-10-24.md, AI-agent internal review of a4b2a22): 0 CRITICAL, 2 HIGH, 20 MEDIUM, 26 LOW, 17 INFO. Status downgrades applied: HP-POL-012, HP-AUTH-016, HP-CRY-002, HP-CRY-005 (and pre-review items P-2, P-10 are only partially fixed: SR-21, SR-24). Fixes in progress.
 <!-- progress-log-end -->
 
 ---
@@ -1752,7 +1753,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-POL-009` Effective-access preview — WP08 — evidence: U, E — ◐ WP08: PreviewAgent/PreviewServer with deciding rule + Engine.WhatIf tested; UI pending WP20
 - [x] `HP-POL-010` Hidden-target non-disclosure — WP10 — evidence: U, O, I — ✅ tested: unknown and hidden targets indistinguishable (internal/app/e2e_test.go TestGatewayHiddenTarget, test/openssh/gateway_test.go TestOpenSSHHiddenTarget)
 - [x] `HP-POL-011` Approver authority rules — WP08 — evidence: U, I — ✅ tested (local) @ WP08: approver rules + internal role required; admins need rules too
-- [x] `HP-POL-012` Self-approval prohibition — WP08 — evidence: U, I — ✅ tested (local) @ WP08: agent owners + policy.prohibit_self_approval (default prohibited)
+- [ ] `HP-POL-012` Self-approval prohibition — WP08 — evidence: U, I — ◐ downgraded by internal review SR-14: the self-approval check exists, but agent owners cannot be set through any API or UI, so the ban never applies in production
 - [x] `HP-POL-013` Auto-approval within limits — WP08 — evidence: U, I — ✅ tested (local) @ WP08: AutoApproves only ≤ auto max; longer requests need a human; decision recording in WP09
 - [x] `HP-POL-014` Command allowlists are not a sandbox — WP08 — evidence: D — ✅ done: docs/operator/policy.md (capabilities are channel types) + docs/destination/hardening.md (allowlists are not a sandbox; ForceCommand/sudoers)
 
@@ -1810,10 +1811,10 @@ check · R recovery drill · SR security review · D documentation review.
 #### HP-CRY — Cryptography and key management
 
 - [x] `HP-CRY-001` Master KEK provisioning — WP04 — evidence: U, I — ✅ tested (local) @ WP04: LoadKEK file/env/dev, production refusal, perms/owner checks, canary detects wrong KEK; `hallpass keys init-kek`
-- [x] `HP-CRY-002` Purpose keys and rotation — WP04 — evidence: U, I — ✅ tested: purpose keys versioned, rotation, background re-encryption job (keyring + app TestResealRegistry) and guarded retire CLI (cmd TestKeysRetireGuard); audit/recording/manifest exceptions documented
+- [ ] `HP-CRY-002` Purpose keys and rotation — WP04 — evidence: U, I — ◐ downgraded by internal review SR-39/SR-37/SR-36: field re-encryption job + guarded retire tested; recording-key rotation does not rewrap segment keys, destaudit details are not resealed, token-key rotation invalidates codes
 - [x] `HP-CRY-003` Field encryption — WP04 — evidence: U, P — ✅ tested (local) @ WP04: Keyring.Seal/Open with FieldAAD(table|column|row) + key version; bit-flip, row-swap and purpose-confusion tests
 - [ ] `HP-CRY-004` Recording file format — WP12 — evidence: U, Z, SR — ◐ partial: HPREC1 implemented, unit + fuzz tested (94.8%); external crypto review pending (R-02)
-- [x] `HP-CRY-005` Integrity verification — WP12 — evidence: I, R — ✅ tested: hallpass verify (segments, ciphertext hash, final frame, chain links + MACs); TestVerifyDetectsTampering
+- [ ] `HP-CRY-005` Integrity verification — WP12 — evidence: I, R — ◐ downgraded by internal review SR-02/SR-17: verify checks segment hashes and chain MACs but never compares chain entries with segment rows, so hidden or deleted finalized segments pass
 - [ ] `HP-CRY-006` Vetted cryptography only — WP01 — evidence: C, SR — ◐ WP01: depguard bans math/rand; nohostkeyignore analyzer; ongoing constraint, SR at WP26
 - [ ] `HP-CRY-007` Key loss and recovery — WP23 — evidence: D, R — ◐ partial: documented, KEK exclusion enforced/tested; recovery drill evidence pending
 - [x] `HP-CRY-008` External integrity anchoring — WP23 — evidence: I, D — ✅ tested: anchors export/verify incl. rewritten history (internal/backup tests anchors_test)
@@ -1853,7 +1854,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-AUTH-013` CSRF protection — WP13 — evidence: I, E — ✅ tested: CSRF token + Origin/Sec-Fetch-Site on mutations (internal/httpapi/api_test.go)
 - [x] `HP-AUTH-014` Recent authentication — WP13 — evidence: I, E — ✅ tested: per-operation x-reauth/x-mfa gating (internal/httpapi tests incl. stale-session refusal)
 - [x] `HP-AUTH-015` Lockout prevention — WP13 — evidence: I, E — ✅ tested: last admin guard (opauth) + SSO-only preconditions and protection (internal/oidc/oidc_test.go (mock IdP) TestTestLoginAndSSOOnly)
-- [x] `HP-AUTH-016` Break-glass recovery — WP23 — evidence: I, R — ✅ tested: offline admin recover CLI (backup/cmd tests) + alert at start and in system status until acknowledged (opauth TestBreakGlassAlert, API)
+- [ ] `HP-AUTH-016` Break-glass recovery — WP23 — evidence: I, R — ◐ downgraded by internal review SR-07: offline admin recover CLI issues a recovery token, but no endpoint or UI route redeems it
 - [x] `HP-AUTH-017` Dev auth isolation — WP13 — evidence: C, I — ✅ tested: no dev-auth code exists; production config rejects dev.* (config tests, fuzz)
 - [x] `HP-AUTH-018` Credential secrecy — WP13 — evidence: U, I — ✅ tested (local) @ WP13: no passwords/TOTP/codes in audit or plaintext storage; redaction layer from WP02
 
