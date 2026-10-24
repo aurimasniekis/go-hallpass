@@ -8,13 +8,14 @@ import { activitiesQueryOptions } from '../../api/queries';
 import { qk } from '../../api/queryKeys';
 import type { Channel } from '../../api/types';
 import { ConfirmAction } from '../../ds/ConfirmAction';
+import { Countdown } from '../../ds/Countdown';
 import { DataTable } from '../../ds/DataTable';
 import { PageHeader } from '../../ds/PageHeader';
 import { LoadingState, PermissionDenied } from '../../ds/states';
 import { formatDateTime, formatRelative, shortId } from '../../lib/format';
 import { useNow } from '../../lib/useNow';
 import { usePermissions } from '../../lib/usePermissions';
-import { AgentName, RoleName } from '../../shared/names';
+import { AgentName, RoleName, ServerName } from '../../shared/names';
 import { ChannelEndCell, GatewayExitLegend } from '../../shared/ChannelEnd';
 import { StateBadge } from '../../shared/StateBadge';
 import { channelKind } from '../../shared/channelClose';
@@ -110,6 +111,7 @@ export function ActivitiesPage() {
             emptyDescription="Channels appear here while agents are connected."
             columns={[
               { key: 'agent', title: 'Agent', render: (_v, c) => <AgentName id={c.agent_id} /> },
+              { key: 'server', title: 'Server', render: (_v, c) => <ServerName id={c.server_id} /> },
               { key: 'role', title: 'Role', render: (_v, c) => <RoleName id={c.role_id} /> },
               { key: 'kind', title: 'Kind', render: (_v, c) => channelKind(c) },
               {
@@ -118,6 +120,12 @@ export function ActivitiesPage() {
                 render: (_v, c) => <StateBadge kind="channel" state={c.state} />,
               },
               { key: 'opened', title: 'Opened', render: (_v, c) => relative(c.opened_at) },
+              {
+                key: 'remaining',
+                title: 'Remaining',
+                // Grant expiry from the server, counted down on the offset-corrected clock (HP-SES-005, HP-UI-011).
+                render: (_v, c) => (c.grant_expires_at ? <Countdown deadline={c.grant_expires_at} /> : '—'),
+              },
               { key: 'session', title: 'Session', render: (_v, c) => <SessionLink id={c.session_id} /> },
               {
                 key: 'connection',

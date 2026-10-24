@@ -292,6 +292,8 @@ type channelDTO struct {
 	CloseReason  string     `json:"close_reason,omitempty"`
 	CloseDetail  string     `json:"close_detail,omitempty"`
 	GatewayCode  *int64     `json:"gateway_exit_code"`
+	ServerID     string     `json:"server_id,omitempty"`
+	GrantExpires *time.Time `json:"grant_expires_at,omitempty"`
 	ExitStatus   *int64     `json:"exit_status"`
 	ExitSignal   string     `json:"exit_signal,omitempty"`
 }

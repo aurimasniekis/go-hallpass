@@ -659,6 +659,11 @@ func TestAdministrationFlow(t *testing.T) {
 	reg, err := h.a.Access.RegisterChannel(h.ctx, access.RegisterInput{ConnectionID: connID, AgentID: agent.ID, KeyID: keys[0].ID, GrantID: dec.Grant.ID,
 		Kind: access.KindExec})
 	must(t, err)
+	// HP-SES-005: the opening channel is listed with its grant's server and expiry (remaining time in the UI).
+	r = c.ok("listActivities", 200, "GET", "/api/v1/activities", nil)
+	if !strings.Contains(string(r.body), `"grant_expires_at":"`) || !strings.Contains(string(r.body), `"server_id":"`+srv.ID+`"`) {
+		t.Fatalf("live activity lacks grant expiry/server: %s", r.body)
+	}
 	rec, err := h.a.Recording.Open(h.ctx, reg, access.KindExec, false)
 	must(t, err)
 	must(t, rec.ExecRequested("uptime"))

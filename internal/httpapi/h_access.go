@@ -446,8 +446,21 @@ func (s *Server) ListActivities(c *gen.Call) (*gen.Result, error) {
 		return nil, err
 	}
 	out := make([]channelDTO, 0, len(rows))
+	grants := map[string]*access.Grant{}
 	for _, ch := range rows {
-		out = append(out, channel(ch))
+		d := channel(ch)
+		// Live channels carry their grant's server and expiry, so the view can show the target and the remaining time
+		// (HP-SES-005).
+		g, ok := grants[ch.GrantID]
+		if !ok {
+			g, _ = s.d.Access.GetGrant(ctx, ch.GrantID)
+			grants[ch.GrantID] = g
+		}
+		if g != nil {
+			exp := g.ExpiresAt
+			d.ServerID, d.GrantExpires = g.ServerID, &exp
+		}
+		out = append(out, d)
 	}
 	if v := c.R.URL.Query().Get("ended_since"); v != "" {
 		sec, err := strconv.ParseInt(v, 10, 64)

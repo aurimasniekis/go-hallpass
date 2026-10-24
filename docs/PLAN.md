@@ -1789,7 +1789,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-SES-002` Connections and channels — WP09 — evidence: I, O — ✅ tested: connections/channels recorded with states and close reasons over SSH (e2e)
 - [x] `HP-SES-003` Session closure — WP09 — evidence: I — ✅ tested (local) @ WP09: closing while channels live, closed with reason when grant ended and channels closed
 - [x] `HP-SES-004` Detached processes — WP25 — evidence: D — ✅ done: docs/destination/hardening.md (logind KillUserProcesses, cgroups, PAM limits, ClientAlive*); destination audit flags after_session_end records
-- [ ] `HP-SES-005` Live activity view — WP20 — evidence: E
+- [x] `HP-SES-005` Live activity view — WP20 — evidence: E — ✅ tested: live channels list agent, server, role, kind, start time, server-derived remaining grant time (grant_expires_at counted down on the offset-corrected clock) and terminate (httpapi TestAdministrationFlow, ActivitiesPage tests); updated live via SSE
 
 #### HP-REC — Event history and recording
 
@@ -1910,7 +1910,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-UI-008` Tables and saved filters — WP20 — evidence: E — ◐ server pagination, filters and saved filters implemented; column chooser not implemented
 - [ ] `HP-UI-009` Charts with real data — WP20 — evidence: E, A — ◐ ECharts from /stats/overview with table alternatives; some PLAN §14.6 series (decision latency, storage growth, delivery) lack API data
 - [x] `HP-UI-010` Destructive confirmation — WP19 — evidence: E — ✅ tested: ConfirmAction (typed confirmations, idempotency keys) unit tests; lockdown typed confirmation in Chromium E2E
-- [ ] `HP-UI-011` Server-derived countdowns — WP19 — evidence: U, E — ◐ countdowns from server timestamps; /system/time clock-offset sampling not implemented
+- [x] `HP-UI-011` Server-derived countdowns — WP19 — evidence: U, E — ✅ tested: the API client samples the server Date header (clock store), and every Countdown subtracts the measured offset (ds countdown tests, clock store)
 - [x] `HP-UI-012` No optimistic security success — WP19 — evidence: E — ✅ tested: decisions shown only after server confirmation (request approve flow in Chromium E2E; unit tests)
 - [x] `HP-UI-013` Safe replay rendering — WP21 — evidence: U, E, SR — ✅ tested: xterm link activation disabled, OSC 0/1/2/8/52 swallowed, no title subscription, untrusted text never rendered as HTML (ds/terminal tests); internal review SR-46 fixed
 - [x] `HP-UI-014` Accessibility — WP19 — evidence: A — ✅ tested: axe (WCAG 2.2 AA) no serious/critical violations on all top-level and detail pages in light and dark (Chromium E2E); keyboard-scrollable tables

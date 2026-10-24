@@ -47,6 +47,19 @@ describe('<ActivitiesPage>', () => {
     expect(await screen.findByText(terminateOutcome(true))).toBeInTheDocument();
   });
 
+  it('shows the remaining grant time as a server-derived countdown (HP-SES-005)', async () => {
+    const expires = new Date(Date.now() + 25 * 60_000 + 30_000).toISOString();
+    mockApi(
+      on('GET', '/api/v1/me', makeMe({ permissions: ['sessions.read'] })),
+      on('GET', '/api/v1/activities', {
+        items: [{ ...channel, server_id: 'srv_1', grant_expires_at: expires }],
+      }),
+    );
+    renderInRouter(<ActivitiesPage />);
+    expect((await screen.findAllByText('Remaining')).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/^25m/)).toBeInTheDocument();
+  });
+
   it('hides terminate without activities.terminate', async () => {
     mockApi(
       on('GET', '/api/v1/me', makeMe({ permissions: ['sessions.read'] })),

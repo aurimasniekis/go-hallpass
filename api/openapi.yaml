@@ -2236,6 +2236,8 @@ components:
             Classified failure detail for failed or gateway-ended channels (for example "destination host key changed",
             "destination refused the login credential", "destination unreachable (timeout)"). Never contains addresses.
         gateway_exit_code: {type: [integer, "null"], description: Gateway exit code (80-90) when the gateway ended the channel.}
+        server_id: {type: string, description: Server of the channel's grant (live activities).}
+        grant_expires_at: {$ref: "#/components/schemas/NullableTimestamp", description: "Grant expiry for live channels: the remaining time is grant_expires_at minus the corrected server clock (HP-SES-005)."}
         exit_status: {type: [integer, "null"]}
         exit_signal: {type: string}
     SSHBan:

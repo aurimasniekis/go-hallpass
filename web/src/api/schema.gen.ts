@@ -2378,6 +2378,10 @@ export interface components {
             close_detail?: string;
             /** @description Gateway exit code (80-90) when the gateway ended the channel. */
             gateway_exit_code?: number | null;
+            /** @description Server of the channel's grant (live activities). */
+            server_id?: string;
+            /** @description Grant expiry for live channels: the remaining time is grant_expires_at minus the corrected server clock (HP-SES-005). */
+            grant_expires_at?: components["schemas"]["NullableTimestamp"];
             exit_status?: number | null;
             exit_signal?: string;
         };
