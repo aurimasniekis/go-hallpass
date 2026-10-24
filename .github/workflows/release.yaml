@@ -84,6 +84,8 @@ jobs:
         with:
           go-version-file: go.mod
       - name: vet and race tests
+        env:
+          HALLPASS_TEST_TX_MAX: 500ms # race detector overhead on shared runners; see ci.yaml
         run: make vet race
 
   web:
