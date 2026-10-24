@@ -1938,7 +1938,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-OPS-001` Health and readiness — WP22 — evidence: I — ✅ tested: /healthz, /readyz lifecycle and checks (obs/health tests, app e2e)
 - [x] `HP-OPS-002` Graceful shutdown — WP11 — evidence: I, O — ✅ tested: drain then terminate on SIGTERM (internal/app/e2e_test.go TestGatewayShutdownTerminates), container/systemd stop tests (WP24)
 - [x] `HP-OPS-003` Backup command — WP23 — evidence: I, R — ✅ tested: backup create/verify/restore round trip, tamper cases (internal/backup tests)
-- [ ] `HP-OPS-004` Restore onto clean machine — WP23 — evidence: R — ◐ partial: in-process restore tested; scripted clean-container drill pending
+- [x] `HP-OPS-004` Restore onto clean machine — WP23 — evidence: R — ✅ tested: scripts/recovery-drill.sh restores a 349 MiB backup into a clean hardened container (no network), verifies all segments and chain head, RTO 6.6 s (docs/evidence/unreleased/recovery-drill.txt); 10 GiB on reference hardware pending
 - [ ] `HP-OPS-005` Upgrade and rollback — WP23 — evidence: R, D — ◐ partial: forward-only migrations + docs; previous-release upgrade fixture test pending
 - [ ] `HP-OPS-006` Capacity and disk alerts — WP22 — evidence: I, D — ◐ partial: disk metrics, reserve check refusing channels, readiness degrade; capacity guide pending WP26
 - [ ] `HP-OPS-007` Container and standalone deploy — WP24 — evidence: I, D — ◐ partial: Dockerfile/compose/systemd tested locally (smoke script, compose, systemd-in-container); /readyz + ssh list in smoke pending
@@ -1961,13 +1961,13 @@ check · R recovery drill · SR security review · D documentation review.
 #### HP-TST — Testing and quality
 
 - [x] `HP-TST-001` Race detector — WP01 — evidence: C — ✅ tested (local) @ WP01: `make race` runs `go test -race -count=1 ./...`; CI job `go` configured
-- [ ] `HP-TST-002` Fuzzing — WP26 — evidence: Z — ◐ 28 new fuzz targets (plus existing parsers) ran 30 s each with no open crashers; make fuzz-smoke; RG-3 needs ≥ 10 min per target
+- [x] `HP-TST-002` Fuzzing — WP26 — evidence: Z — ✅ tested: all 41 fuzz targets ran 10 min each with no crashers; sampled corpora committed (docs/evidence/unreleased/fuzz-campaign.txt)
 - [ ] `HP-TST-003` Real OpenSSH integration — WP10 — evidence: O — ◐ tested locally: make test-openssh (11 tests: exec, PTY, forwarding refusal, hidden target, host-key change, revocation, key revocation, agent/server disable, certificates, unknown key); not yet run in CI
 - [ ] `HP-TST-004` Browser E2E — WP19 — evidence: E — ◐ Chromium E2E (ADR-0038) passes locally against a real gateway (9 specs incl. axe); not all operator workflows covered (SSO, replay, chat linking, invite); not run in CI
 - [ ] `HP-TST-005` Fault injection — WP26 — evidence: FI — ◐ make test-fault: catalog FI-01..FI-23 passes (all 9 findings fixed); FI-19 covered by oidc tests; FI-24 power loss needs a VM hard reset (not done)
 - [ ] `HP-TST-006` Soak — WP26 — evidence: S — ◐ soak harness (test/soak, make soak-smoke); 30 s smoke: 1,386 sessions, 0 failures, no goroutine/FD growth; 24 h run on reference hardware pending
 - [ ] `HP-TST-007` Measured performance — WP26 — evidence: S — ◐ smoke numbers only (M1 Max, all in one process): exec p95 437 ms, revoke→closed max 155 ms; reference-hardware benchmarks pending
-- [ ] `HP-TST-008` Security review — WP26 — evidence: SR — ◐ review checklist written (docs/security/review-checklist.md) with 11 pre-review findings fixed; the review itself is not done
+- [ ] `HP-TST-008` Security review — WP26 — evidence: SR — ◐ internal review done by AI agents (docs/security/review-2026-10-24.md): HIGH and MEDIUM fixed (848c399, ADR-0042..0044), SR-34 accepted, SR-35 open; not an external review
 - [ ] `HP-TST-009` Coverage floor — WP01 — evidence: C — ◐ WP01: floor script `scripts/coverage-floor.sh` (80%) in CI; enforced as each listed package lands
 
 #### HP-DOC — Documentation
