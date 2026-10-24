@@ -42,7 +42,8 @@ export function ServersPage() {
 
   const rows = useMemo(() => {
     const term = search.trim().toLowerCase();
-    const items = query.data?.items;
+    // Git remotes have their own page.
+    const items = query.data?.items.filter((s) => s.kind !== 'git');
     if (!items || term === '') {
       return items;
     }

@@ -1,6 +1,6 @@
 import { PlusOutlined, ScanOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Card, Form, Input, Space, Table } from 'antd';
+import { Alert, Button, Card, Form, Input, Space, Table, Tag } from 'antd';
 import { useState } from 'react';
 
 import { api } from '../../api/client';
@@ -81,7 +81,22 @@ function RetireIdentity({ serverId, identity }: { serverId: string; identity: Ho
  * Destination host identities (PLAN §11.2, HP-SRV-004..007): enroll by pasting a known key or by scanning
  * and confirming the fingerprint out of band; retire old keys.
  */
-export function HostIdentities({ serverId, canWrite }: { serverId: string; canWrite: boolean }) {
+/** A git host's published host key fingerprints, to compare scanned keys against. */
+export interface PublishedHostKeys {
+  name: string;
+  fingerprints: string[];
+  url: string;
+}
+
+export function HostIdentities({
+  serverId,
+  canWrite,
+  published,
+}: {
+  serverId: string;
+  canWrite: boolean;
+  published?: PublishedHostKeys;
+}) {
   const queryClient = useQueryClient();
   const query = useQuery(hostIdentitiesQueryOptions(serverId));
   const [adding, setAdding] = useState(false);
@@ -129,6 +144,15 @@ export function HostIdentities({ serverId, canWrite }: { serverId: string; canWr
       }
     >
       <Space orientation="vertical" size={12} style={{ width: '100%' }}>
+        {published ? (
+          <p className="hp-legend" style={{ margin: 0 }}>
+            Compare every fingerprint with the ones {published.name}{' '}
+            <a href={published.url} target="_blank" rel="noreferrer">
+              publishes
+            </a>{' '}
+            before confirming. Keys that match one of them exactly are marked.
+          </p>
+        ) : null}
         {scanError !== null ? (
           <Alert type="error" showIcon title="Scan failed" description={errorMessage(scanError)} />
         ) : null}
@@ -163,7 +187,18 @@ export function HostIdentities({ serverId, canWrite }: { serverId: string; canWr
             scroll={{ x: 'max-content' }}
             aria-label="Host identities"
             columns={[
-              { key: 'fp', title: 'Fingerprint', render: (_, h) => <Fingerprint value={h.fingerprint} /> },
+              {
+                key: 'fp',
+                title: 'Fingerprint',
+                render: (_, h) => (
+                  <Space size={8} wrap>
+                    <Fingerprint value={h.fingerprint} />
+                    {published?.fingerprints.includes(h.fingerprint) ? (
+                      <Tag color="green">Matches {published.name}&apos;s published key</Tag>
+                    ) : null}
+                  </Space>
+                ),
+              },
               { key: 'alg', title: 'Algorithm', dataIndex: 'algorithm' },
               {
                 key: 'state',

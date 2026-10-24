@@ -10,6 +10,7 @@ const PLAN_LIST_ROUTES = [
   '/activities',
   '/agents',
   '/servers',
+  '/git',
   '/groups',
   '/policy',
   '/operators',
@@ -31,6 +32,7 @@ describe('navigation', () => {
     expect(activeNavPath('/requests/r1')).toBe('/requests');
     expect(activeNavPath('/settings/auth')).toBe('/settings/auth');
     expect(activeNavPath('/roles/x')).toBe('/servers');
+    expect(activeNavPath('/git/srv_1')).toBe('/git');
     expect(activeNavPath('/nope')).toBeUndefined();
   });
 

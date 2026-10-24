@@ -19,6 +19,8 @@ import { jsonResponse, makeMe } from '../../test/fixtures';
 import { createTestQueryClient } from '../../test/utils';
 import { AgentDetailPage } from '../agents/AgentDetailPage';
 import { AgentsPage } from '../agents/AgentsPage';
+import { GitRemoteDetailPage } from '../git/GitRemoteDetailPage';
+import { GitRemotesPage } from '../git/GitRemotesPage';
 import { GroupsPage } from '../groups/GroupsPage';
 import { RoleDetailPage } from '../roles/RoleDetailPage';
 import { SERVER_TABS, ServerDetailPage } from './ServerDetailPage';
@@ -80,6 +82,8 @@ export function renderInventory(path: string, opts: { permissions: string[]; han
       component: ServerRoute,
     }),
     createRoute({ getParentRoute: () => root, path: '/roles/$id', component: RoleRoute }),
+    createRoute({ getParentRoute: () => root, path: '/git', component: GitRemotesPage }),
+    createRoute({ getParentRoute: () => root, path: '/git/$id', component: GitRoute }),
     // Link target only (operator names link here); the page itself is not under test.
     createRoute({ getParentRoute: () => root, path: '/operators/$id', component: () => null }),
     createRoute({
@@ -118,6 +122,11 @@ function ServerRoute() {
   const { tab } = useSearch({ strict: false });
   const serverTab = SERVER_TABS.find((t) => t === tab) ?? 'overview';
   return <ServerDetailPage id={id ?? ''} tab={serverTab} />;
+}
+
+function GitRoute() {
+  const { id } = useParams({ strict: false });
+  return <GitRemoteDetailPage id={id ?? ''} />;
 }
 
 function RoleRoute() {

@@ -21,6 +21,7 @@ import { UserCAsPanel } from '../credentials/UserCAsPanel';
 import { FormModal } from '../servers/FormModal';
 import { orDash } from '../servers/formUtils';
 import { DurationText } from '../servers/ServerRoles';
+import { pushSummary } from '../git/gitForm';
 import { RoleFormFields } from './RoleFormFields';
 import { roleFormValues, toRoleInput, type RoleFormValues } from './roleForm';
 
@@ -58,7 +59,13 @@ export function RoleDetailPage({ id }: { id: string }) {
     );
   }
   const role = query.data;
-  const serverLink = (
+  // Git access profiles are edited on the Git page: the SSH role form cannot express their repository rules.
+  const isGit = role.git !== undefined;
+  const serverLink = isGit ? (
+    <Link to="/git/$id" params={{ id: role.server_id }}>
+      ← <ServerName id={role.server_id} link={false} /> access profiles
+    </Link>
+  ) : (
     <Link to="/servers/$id" params={{ id: role.server_id }} search={{ tab: 'roles' }}>
       ← <ServerName id={role.server_id} link={false} /> roles
     </Link>
@@ -68,7 +75,7 @@ export function RoleDetailPage({ id }: { id: string }) {
     <>
       <PageHeader
         above={serverLink}
-        title={`Role ${role.alias}`}
+        title={isGit ? `Access profile ${role.alias}` : `Role ${role.alias}`}
         description={
           <>
             Logs in as <code className="hp-mono">{role.remote_user}</code> on{' '}
@@ -76,7 +83,7 @@ export function RoleDetailPage({ id }: { id: string }) {
           </>
         }
         extra={
-          can('inventory.write') ? (
+          can('inventory.write') && !isGit ? (
             <Button
               onClick={() => {
                 setEditing(true);
@@ -96,6 +103,17 @@ export function RoleDetailPage({ id }: { id: string }) {
               { span: 2, key: 'desc', label: 'Description', value: orDash(role.description) },
               { key: 'status', label: 'Status', value: <EnabledBadge enabled={role.enabled} /> },
               { key: 'caps', label: 'Capabilities', value: <TagList values={role.capabilities} /> },
+              ...(isGit
+                ? [
+                    {
+                      span: 2 as const,
+                      key: 'repos',
+                      label: 'Repositories',
+                      value: <TagList values={role.git?.repos ?? []} />,
+                    },
+                    { span: 2 as const, key: 'push', label: 'Push', value: pushSummary(role) },
+                  ]
+                : []),
               {
                 key: 'default',
                 label: 'Default duration',

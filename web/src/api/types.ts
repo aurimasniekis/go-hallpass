@@ -46,6 +46,7 @@ export type Group = S['Group'];
 export type Server = S['Server'];
 export type ServerInput = S['ServerInput'];
 export type Role = S['Role'];
+export type GitRules = S['GitRules'];
 export type RoleInput = S['RoleInput'];
 export type HostIdentity = S['HostIdentity'];
 export type HostCA = S['HostCA'];

@@ -77,6 +77,8 @@ export interface DataTableProps<T extends object> {
   onRowClick?: (row: T) => void;
   /** Note rendered under the table (legends, hints). */
   footer?: ReactNode;
+  /** Expandable rows (details rendered under a row). */
+  expandable?: TableProps<T>['expandable'];
 }
 
 function columnKey<T>(column: TableColumnsType<T>[number]): string | undefined {
@@ -108,6 +110,7 @@ export function DataTable<T extends object>({
   pagination,
   onRowClick,
   footer,
+  expandable,
 }: DataTableProps<T>) {
   const density = useDensity();
 
@@ -173,6 +176,7 @@ export function DataTable<T extends object>({
         />
       ) : null}
       <Table<T>
+        {...(expandable ? { expandable } : {})}
         columns={controlledColumns}
         dataSource={rows}
         rowKey={rowKey}
