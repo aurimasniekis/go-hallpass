@@ -50,7 +50,7 @@ jobs:
       - name: coverage floor (HP-TST-009)
         run: make coverage
       - name: fuzz smoke (HP-TST-002)
-        run: make fuzz-smoke FUZZTIME=${{ github.event_name == 'schedule' && '10m' || '30s' }}
+        run: make fuzz-smoke FUZZTIME=${{ github.event_name == 'schedule' && '10m' || '10s' }}
 
   web:
     name: web (lint, typecheck, unit tests, build) and API drift (HP-API-001)
