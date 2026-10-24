@@ -63,7 +63,7 @@ step "backup (online primitive, VACUUM INTO + segments + manifest)"
 t0=$(now_ms)
 "$work/hallpass" backup create --config "$work/src.yaml" --out "$work/backup" >/dev/null
 backup_ms=$(( $(now_ms) - t0 ))
-"$work/hallpass" backup verify --config "$work/src.yaml" "$work/backup" >/dev/null
+"$work/hallpass" backup verify "$work/backup" >/dev/null
 [[ ! -e "$work/backup/dev-kek" ]] || fail "backup contains the KEK"
 bak_bytes=$(du -sk "$work/backup" | awk '{print $1*1024}')
 

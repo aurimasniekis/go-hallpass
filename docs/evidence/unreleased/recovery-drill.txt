@@ -1,0 +1,9 @@
+Hallpass recovery drill — 2026-10-24T05:02:47Z
+commit:        dbcd87ff1461
+image:         hallpass:local (32793bb42f27)
+host:          Darwin arm64, 10 CPUs (not the RH-1 reference hardware)
+data set:      349 MiB, 4981 segment files (soak 2m)
+backup:        347 MiB in 27601ms; verified; KEK not included
+restore:       3244ms (clean volumes, no network, read-only root, non-root)
+verify:        2809ms: 4981 segments (4981 ok), chain ok=True length=4981, head matches source=True
+RTO:           6626ms from restore start to /readyz ready; SSH banner: SSH-2.0-Hallpass
