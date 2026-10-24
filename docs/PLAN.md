@@ -1733,12 +1733,12 @@ check · R recovery drill · SR security review · D documentation review.
 #### HP-KEY — Destination login credentials and signing keys
 
 - [x] `HP-KEY-001` Managed login key default — WP07 — evidence: U, I — ✅ tested (local) @ WP07: per-role managed Ed25519, sealed with credential key, no export path
-- [ ] `HP-KEY-002` Public key installation aid — WP07 — evidence: E, I — ◐ WP07: AuthorizedKeysLine (restrict[,pty],from=egress.source_addresses) tested; UI copy action pending WP20
+- [x] `HP-KEY-002` Public key installation aid — WP07 — evidence: E, I — ✅ tested: AuthorizedKeysLine (restrict[,pty],from=egress) tested; UI shows the line with copy action and install command (credentials panel, onboarding wizard; web tests)
 - [x] `HP-KEY-003` Login key rotation — WP07 — evidence: I, O — ✅ tested: probe/activate against real sshd (test/openssh/gateway_test.go), rotation with overlap (credentials tests)
 - [x] `HP-KEY-004` OpenSSH user certificates — WP07 — evidence: U, O — ✅ tested: short-lived user certificates accepted by real sshd (test/openssh/gateway_test.go TestOpenSSHCertificateLogin)
 - [x] `HP-KEY-005` Signer abstraction — WP07 — evidence: U — ✅ tested (local) @ WP07: credentials.Signer/SignerResolver + FromCryptoSigner adapter (ECDSA DER→SSH) test; no external backend shipped (R-03)
-- [ ] `HP-KEY-006` Distinct key types — WP07 — evidence: C, SR — ◐ WP07: separate types/tables (host_identities, host_cas, login_credentials, user_cas, gateway_host_keys) and packages; API/UI separation WP15/WP20; SR WP26
-- [ ] `HP-KEY-007` Credential isolation — WP07 — evidence: U, I, SR — ◐ WP07: DTOs carry no private material (JSON test), imported keys flagged/never exported, credentials never presented to untrusted hosts; API/log review WP15/WP26
+- [x] `HP-KEY-006` Distinct key types — WP07 — evidence: C, SR — ✅ tested: separate types/tables/packages (host_identities, host_cas, login_credentials, user_cas, gateway_host_keys), separate API resources and UI pages; internal review found no interchange
+- [x] `HP-KEY-007` Credential isolation — WP07 — evidence: U, I, SR — ✅ tested: DTOs carry no private material (JSON tests), imported keys flagged and never exported, credentials never offered to unverified hosts (destssh), redacted logs; internal review 2026-10-24 found no exposure
 
 #### HP-POL — Visibility and policy
 
@@ -1779,9 +1779,9 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-GRT-006` Atomic concurrency limits — WP09 — evidence: I, S — ◐ WP09: counts + insert in one writer tx; 12 concurrent registrations vs limit 2 → exactly 2 (tested); load test WP26
 - [x] `HP-GRT-007` Race resolution — WP09 — evidence: U, I — ✅ tested (local) @ WP09: CAS + 20 concurrent deciders exactly one decision; replay idempotent; expiry/policy rechecked in-tx
 - [ ] `HP-GRT-008` Enforcement bound — WP09 — evidence: I, O, S — ◐ tested: revocation terminates real OpenSSH sessions in ms (test/openssh/gateway_test.go TestOpenSSHRevocation), lost-event path <5s (access tests); load test pending WP26
-- [ ] `HP-GRT-009` Operator revocation — WP09 — evidence: I, E — ◐ WP09: RevokeGrant (admin or in-scope approver, audited, sealed note, event) tested; UI WP20
+- [x] `HP-GRT-009` Operator revocation — WP09 — evidence: I, E — ✅ tested: RevokeGrant (admin or in-scope approver, reason, audited, grant event pushed via SSE) in access + httpapi tests; UI revoke on sessions/grants pages with ConfirmAction (web tests)
 - [x] `HP-GRT-010` Approval after expiry — WP09 — evidence: I — ✅ tested (local) @ WP09: expired request not approvable; new approval → new grant + session
-- [ ] `HP-GRT-011` Emergency lockdown — WP09 — evidence: I, E — ◐ WP09: SetLockdown revokes all grants, cancels pending, blocks requests/channels (tested); UI/CLI WP20/WP23
+- [x] `HP-GRT-011` Emergency lockdown — WP09 — evidence: I, E — ✅ tested: lockdown revokes grants, cancels pending, blocks requests/channels, audited (access tests, fault revocation storm); UI enable/lift with typed confirmation (Chromium E2E + unit tests)
 
 #### HP-SES — Access sessions
 
@@ -1798,14 +1798,14 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-REC-003` Idempotent events — WP12 — evidence: U, I — ◐ partial: recorder has no retry path (append failure fails closed); deterministic idempotency keys not implemented
 - [x] `HP-REC-004` Capture fidelity — WP12 — evidence: O, I — ✅ tested: recorder round-trip (exec cmd, stdout/stderr, PTY output, resize, signal, exit)
 - [ ] `HP-REC-005` Input recording opt-in — WP12 — evidence: I, D — ◐ partial: input recording off by default, per-role opt-in tested; UI warning pending WP21
-- [ ] `HP-REC-006` No false command claims — WP21 — evidence: E, D
+- [x] `HP-REC-006` No false command claims — WP21 — evidence: E, D — ✅ tested: Hallpass never infers commands from keystrokes; exec commands are labeled captured (from the exec request), destination reports are labeled unverified, and nothing is labeled verified (timeline describe tests, replay tests); docs and guarantees page state no secret redaction
 - [x] `HP-REC-007` Mandatory recording fail-closed — WP12 — evidence: FI, O — ✅ tested: segment established before forwarding; failure fails closed (TestRecorderFailureFailsClosed, OpenSSH)
 - [x] `HP-REC-008` Durability guarantee — WP12 — evidence: FI, I — ✅ tested: group commit ≤250 ms / strict mode; crash-recovery tests; fault injection pending WP26
 - [x] `HP-REC-009` Accurate incomplete marking — WP12 — evidence: FI, I — ✅ tested: TestReconcileStartup, TestReconcileUnrecoverableAndVerifyMissing
-- [ ] `HP-REC-010` Unified timeline, distinct streams — WP21 — evidence: E
+- [x] `HP-REC-010` Unified timeline, distinct streams — WP21 — evidence: E — ✅ tested: one timeline per access session across connections (grouped by connection/channel), concurrent terminals replay as separate per-channel streams with separate stdout/stderr for exec (SessionTimeline, ReplayPanel tests)
 - [x] `HP-REC-011` No silent event drops — WP12 — evidence: U, FI, S — ✅ tested: TestRecorderBackpressure (block then fail, never drop)
 - [ ] `HP-REC-012` Destination-side audit integration — WP25 — evidence: O, D — ◐ implemented + tested (unit/integration): signed collector batches, certificate/managed-key correlation, sealed details, provenance labels (internal/destaudit, cmd/hallpass-collector, httpapi TestAdministrationFlow); OpenSSH+auditd container test pending; ADR-0037
-- [ ] `HP-REC-013` Retention and deletion — WP12 — evidence: I, E — ◐ tested: per-role-class retention (recording.retention_classes) + tombstones (config + recording tests); UI display pending WP20
+- [x] `HP-REC-013` Retention and deletion — WP12 — evidence: I, E — ✅ tested: per-role-class retention, deletion removes files and payloads with an audited MACed tombstone (recording tests, ADR-0043), backup interaction documented (docs/operator/recording.md, backup.md); UI shows retention class and delete-after
 - [x] `HP-REC-014` Restricted, audited download — WP21 — evidence: E, I — ✅ tested: playback (recording.play) and export (recording.export, recent auth + MFA) separate and audited; default export is the ciphertext bundle, plaintext opt-in (httpapi TestAdministrationFlow checkBundle; ADR-0040); UI encrypted/decrypted export actions (ExportButton)
 
 #### HP-CRY — Cryptography and key management
@@ -1816,7 +1816,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-CRY-004` Recording file format — WP12 — evidence: U, Z, SR — ◐ partial: HPREC1 implemented, unit + fuzz tested (94.8%); external crypto review pending (R-02)
 - [x] `HP-CRY-005` Integrity verification — WP12 — evidence: I, R — ✅ tested (internal): verify binds every chain entry to its segment row, MACed chain head and retention tombstones detect keyless hiding, relabeling, truncation and deletion (recording TestVerifyDetectsKeylessHiding, backup integrity tests, fault suite); not externally verified (R-02); ADR-0043
 - [ ] `HP-CRY-006` Vetted cryptography only — WP01 — evidence: C, SR — ◐ WP01: depguard bans math/rand; nohostkeyignore analyzer; ongoing constraint, SR at WP26
-- [ ] `HP-CRY-007` Key loss and recovery — WP23 — evidence: D, R — ◐ partial: documented, KEK exclusion enforced/tested; recovery drill evidence pending
+- [x] `HP-CRY-007` Key loss and recovery — WP23 — evidence: D, R — ✅ tested: docs state KEK loss is unrecoverable and require separate KEK backup; backups exclude the KEK (tested); recovery drill restores with a separately delivered KEK (docs/evidence/unreleased/recovery-drill.txt)
 - [x] `HP-CRY-008` External integrity anchoring — WP23 — evidence: I, D — ✅ tested: anchors export/verify incl. rewritten history (internal/backup tests anchors_test)
 - [x] `HP-CRY-009` Ciphertext-only archival — WP23 — evidence: I, R — ✅ tested: ciphertext-only backups, KEK excluded (internal/backup tests)
 
@@ -1841,12 +1841,12 @@ check · R recovery drill · SR security review · D documentation review.
 
 - [x] `HP-AUTH-001` Secure bootstrap — WP13 — evidence: I, E — ✅ tested: setup token bootstrap (opauth) + hallpass admin bootstrap CLI
 - [x] `HP-AUTH-002` Argon2id hashing — WP13 — evidence: U — ✅ tested (local) @ WP13: Argon2id PHC, 16-byte salts, versioned params (prod m=64MiB t=3 p=2 guarded by test), rehash-on-login, Calibrate
-- [ ] `HP-AUTH-003` Password policy — WP13 — evidence: U, E — ◐ WP13: NFKC, 12..1024 bytes, no truncation (tested incl. >72-byte difference); UI paste/password-manager E2E pending WP19
+- [x] `HP-AUTH-003` Password policy — WP13 — evidence: U, E — ✅ tested: NFKC, 12..1024 bytes, no truncation (unit); UI password fields allow paste and set autocomplete for password managers; E2E fills the real form
 - [x] `HP-AUTH-004` Throttling without permanent lockout — WP13 — evidence: I — ✅ tested (local) @ WP13: per-account and per-IP (/64) progressive throttle capped at 15 min, decays after 24 h, admin clear; no permanent lockout
 - [x] `HP-AUTH-005` Enumeration resistance — WP13 — evidence: U, I — ✅ tested (local) @ WP13: identical error for unknown/wrong/disabled; dummy hash at current params; timing medians within 25% (asserted; found and fixed a stale-dummy-hash timing leak)
-- [ ] `HP-AUTH-006` TOTP MFA — WP13 — evidence: U, I, E — ◐ WP13: RFC 6238 vectors, ±1 step, step-reuse rejection, sealed secret, confirmed enrollment (tested); UI E2E pending WP19
+- [x] `HP-AUTH-006` TOTP MFA — WP13 — evidence: U, I, E — ✅ tested: RFC 6238 vectors, ±1 step, step reuse rejected, sealed secret, confirmed enrollment with pending secret (unit, ADR-0042); enrollment through the real UI in Chromium E2E
 - [x] `HP-AUTH-007` Recovery codes — WP13 — evidence: U, I — ✅ tested (local) @ WP13: 10 HMAC-hashed single-use recovery codes, shown once, regenerable with recent auth
-- [ ] `HP-AUTH-008` Mandatory MFA for privileged accounts — WP13 — evidence: I, E — ◐ WP13: admins/approvers (local) forced to enroll; sessions limited until MFA (tested); UI E2E pending WP19
+- [x] `HP-AUTH-008` Mandatory MFA for privileged accounts — WP13 — evidence: I, E — ✅ tested: local admins/approvers forced to enroll, sessions limited until MFA (unit + API); bootstrap forced enrollment in Chromium E2E
 - [ ] `HP-AUTH-009` Password change and reset — WP13 — evidence: I, E — ◐ WP13: admin-issued single-use 1 h hashed reset tokens; change requires current password (tested); SMTP delivery + UI pending WP16/WP20
 - [x] `HP-AUTH-010` Session invalidation — WP13 — evidence: I — ✅ tested (local) @ WP13: reset/change/disable/MFA change/role reduction revoke sessions
 - [ ] `HP-AUTH-011` Invitations — WP13 — evidence: I, E — ◐ WP13: single-use 72 h hashed invitations with preset roles (tested); UI pending WP20
@@ -1912,7 +1912,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-UI-010` Destructive confirmation — WP19 — evidence: E — ✅ tested: ConfirmAction (typed confirmations, idempotency keys) unit tests; lockdown typed confirmation in Chromium E2E
 - [ ] `HP-UI-011` Server-derived countdowns — WP19 — evidence: U, E — ◐ countdowns from server timestamps; /system/time clock-offset sampling not implemented
 - [x] `HP-UI-012` No optimistic security success — WP19 — evidence: E — ✅ tested: decisions shown only after server confirmation (request approve flow in Chromium E2E; unit tests)
-- [ ] `HP-UI-013` Safe replay rendering — WP21 — evidence: U, E, SR — ◐ xterm link handler and OSC 52 disabled, untrusted text never rendered as HTML (unit tests); security review pending
+- [x] `HP-UI-013` Safe replay rendering — WP21 — evidence: U, E, SR — ✅ tested: xterm link activation disabled, OSC 0/1/2/8/52 swallowed, no title subscription, untrusted text never rendered as HTML (ds/terminal tests); internal review SR-46 fixed
 - [x] `HP-UI-014` Accessibility — WP19 — evidence: A — ✅ tested: axe (WCAG 2.2 AA) no serious/critical violations on all top-level and detail pages in light and dark (Chromium E2E); keyboard-scrollable tables
 - [ ] `HP-UI-015` Visual regression — WP19 — evidence: V — ◐ not implemented: Playwright visual snapshots
 - [x] `HP-UI-016` Embedded build — WP19 — evidence: C, I — ✅ tested: embedui build tag embeds web/dist; SPA handler tests; serve smoke test
@@ -1968,7 +1968,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-TST-006` Soak — WP26 — evidence: S — ◐ soak harness (test/soak, make soak-smoke); 30 s smoke: 1,386 sessions, 0 failures, no goroutine/FD growth; 24 h run on reference hardware pending
 - [ ] `HP-TST-007` Measured performance — WP26 — evidence: S — ◐ smoke numbers only (M1 Max, all in one process): exec p95 437 ms, revoke→closed max 155 ms; reference-hardware benchmarks pending
 - [x] `HP-TST-008` Security review — WP26 — evidence: SR — ✅ done (internal): AI-agent security review of auth, policy, SSH, crypto and webhooks (docs/security/review-2026-10-24.md); all HIGH/MEDIUM/LOW findings fixed (848c399, SR-35 txscope) except SR-34 accepted (ADR-0044); not an external review
-- [ ] `HP-TST-009` Coverage floor — WP01 — evidence: C — ◐ WP01: floor script `scripts/coverage-floor.sh` (80%) in CI; enforced as each listed package lands
+- [x] `HP-TST-009` Coverage floor — WP01 — evidence: C — ✅ tested: make coverage floor 80% passes for policy 81.8, access 81.7, keyring 82.1, recording 81.1, grammar 98.9, opauth 81.4 (local; CI job present)
 
 #### HP-DOC — Documentation
 
