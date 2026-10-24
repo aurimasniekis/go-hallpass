@@ -96,6 +96,25 @@ func ReadPushCommands(r io.Reader) (*PushCommands, error) {
 	}
 }
 
+// CopyPktSection copies pkt-lines from r to w up to and including the next flush packet (for example the push options
+// that follow the command list).
+func CopyPktSection(r io.Reader, w io.Writer) error {
+	var raw bytes.Buffer
+	for {
+		_, flush, err := readPkt(r, &raw)
+		if err != nil {
+			return err
+		}
+		if raw.Len() > maxCommandBytes {
+			return fmt.Errorf("%w: section too large", ErrProtocol)
+		}
+		if flush {
+			_, err := w.Write(raw.Bytes())
+			return err
+		}
+	}
+}
+
 // readPkt reads one pkt-line, appending its bytes to raw. flush is true for "0000".
 func readPkt(r io.Reader, raw *bytes.Buffer) (payload []byte, flush bool, err error) {
 	var hdr [4]byte
@@ -147,12 +166,16 @@ type RefRules struct {
 	Tags []string `json:"tags,omitempty"`
 	// AllowDelete permits deleting branches that Branches matches and ProtectedBranches does not.
 	AllowDelete bool `json:"allow_delete,omitempty"`
+	// AllowForcePush permits updating a branch to a commit that does not descend from its current tip. When false
+	// (the default) HallPass proves every branch update is a fast-forward from the pushed commits, and refuses it
+	// otherwise.
+	AllowForcePush bool `json:"allow_force_push,omitempty"`
 }
 
 // RefPolicy is a compiled RefRules.
 type RefPolicy struct {
 	branches, protected, tags PatternSet
-	allowDelete               bool
+	allowDelete, allowForce   bool
 }
 
 // Compile validates and compiles the rules. Ref names are case-sensitive.
@@ -169,7 +192,7 @@ func (r RefRules) Compile() (*RefPolicy, error) {
 	if err != nil {
 		return nil, fmt.Errorf("tags: %w", err)
 	}
-	return &RefPolicy{branches: b, protected: p, tags: t, allowDelete: r.AllowDelete}, nil
+	return &RefPolicy{branches: b, protected: p, tags: t, allowDelete: r.AllowDelete, allowForce: r.AllowForcePush}, nil
 }
 
 // RefDenied explains why one ref update is refused.
@@ -209,6 +232,12 @@ func (p *RefPolicy) Check(u RefUpdate) error {
 		return nil
 	}
 	return deny("only branches and tags can be pushed")
+}
+
+// NeedsFastForward reports whether an allowed update must be proven a fast-forward: an existing branch moved to
+// another commit while force-pushes are blocked.
+func (p *RefPolicy) NeedsFastForward(u RefUpdate) bool {
+	return !p.allowForce && strings.HasPrefix(u.Ref, "refs/heads/") && !u.Create() && !u.Delete() && u.Old != u.New
 }
 
 // CheckAll checks every update and returns all refusals, in order.

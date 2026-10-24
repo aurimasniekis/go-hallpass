@@ -827,8 +827,14 @@
     IDs, refusals, bytes transferred) in the session timeline and the channel row. Pack data is not recorded: it is the
     repository content, which the host keeps. This deviates from mandatory byte-stream recording for this channel type.
   - Only `GIT_PROTOCOL` is forwarded from the agent's environment.
-- **Limits:** force-push detection and multi-approver requests are separate follow-ups. Until then, protect branches
-  on the host as well; HallPass restricts which refs may change, not whether an update is a fast-forward.
+- **Force-push:** unless a profile sets `allow_force_push`, every update of an existing branch must be proven a
+  fast-forward. HallPass reads the pushed pack as it streams to the host (commits, including commits deltified against
+  pack objects), computes their object IDs and follows parent links from the new tip to the old one. The pack's final
+  checksum is withheld until the proof succeeds; otherwise the session ends, the host rejects the truncated pack and
+  no ref changes. An update it cannot prove from the pushed commits (for example moving a branch to a commit the host
+  already has) is refused rather than guessed.
+- **Limits:** multi-approver requests are a separate follow-up. Host-side branch protection remains a good second
+  layer.
 
 ## 2. Open review items (operator decisions required)
 

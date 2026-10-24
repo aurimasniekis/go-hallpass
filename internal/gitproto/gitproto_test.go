@@ -291,3 +291,22 @@ func FuzzPattern(f *testing.F) {
 		_ = p.Match(name)
 	})
 }
+
+func TestNeedsFastForward(t *testing.T) {
+	blocked, _ := RefRules{Branches: []string{"**"}, Tags: []string{"*"}, AllowDelete: true}.Compile()
+	allowed, _ := RefRules{Branches: []string{"**"}, AllowForcePush: true}.Compile()
+	update := RefUpdate{Old: oidA, New: oidB, Ref: "refs/heads/x"}
+	if !blocked.NeedsFastForward(update) || allowed.NeedsFastForward(update) {
+		t.Fatal("branch update")
+	}
+	for _, u := range []RefUpdate{
+		{Old: zero, New: oidB, Ref: "refs/heads/x"}, // create
+		{Old: oidA, New: zero, Ref: "refs/heads/x"}, // delete
+		{Old: oidA, New: oidA, Ref: "refs/heads/x"}, // no-op
+		{Old: zero, New: oidB, Ref: "refs/tags/v1"}, // tag
+	} {
+		if blocked.NeedsFastForward(u) {
+			t.Errorf("%+v needs no ancestry proof", u)
+		}
+	}
+}

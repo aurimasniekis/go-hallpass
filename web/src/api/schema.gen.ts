@@ -2151,6 +2151,8 @@ export interface components {
                 tags?: string[];
                 /** @description Allow deleting branches that branches matches and protected_branches does not. */
                 allow_delete?: boolean;
+                /** @description Allow moving a branch to a commit that does not descend from its current tip. When false (the default), every branch update must be provable as a fast-forward from the pushed commits. */
+                allow_force_push?: boolean;
             };
         };
         RoleInput: {

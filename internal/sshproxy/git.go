@@ -1,10 +1,12 @@
 package sshproxy
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"io"
 	"regexp"
+	"slices"
 	"sync/atomic"
 
 	"github.com/aurimasniekis/go-hallpass/internal/access"
@@ -27,13 +29,17 @@ func gitEnv(env [][2]string) [][2]string {
 // gitPushGate reads the push's ref-update commands from the agent before anything is sent to the git host, checks
 // them against the access profile's ref rules and forwards them only when every update is allowed. A refused push
 // ends the session without the host ever seeing a command, so it changes nothing there. It reports whether the
-// caller should continue copying the rest of the stream (the pack).
-func (p *Proxy) gitPushGate(ctx context.Context, s *Session, reg *access.ChannelReg, t *terminator, stdin io.WriteCloser, bytesIn *atomic.Int64) bool {
+// caller should continue copying the rest of the stream, and from which reader.
+//
+// When force-pushes are blocked and a branch is moved, the pack that follows is read as it streams to the host and
+// its final checksum is withheld until every such update is proven a fast-forward. If one is not, the session ends:
+// the host gets a truncated pack, rejects it and changes no ref.
+func (p *Proxy) gitPushGate(ctx context.Context, s *Session, reg *access.ChannelReg, t *terminator, stdin io.WriteCloser, bytesIn *atomic.Int64) (io.Reader, bool) {
 	pc, err := gitproto.ReadPushCommands(s.Agent)
 	switch {
 	case errors.Is(err, io.EOF):
 		_ = stdin.Close() // the client sent nothing: let the host end the exchange
-		return false
+		return nil, false
 	case err != nil:
 		msg := "malformed push"
 		if errors.Is(err, gitproto.ErrSignedPush) {
@@ -42,7 +48,7 @@ func (p *Proxy) gitPushGate(ctx context.Context, s *Session, reg *access.Channel
 		s.Notify("push refused: " + msg)
 		_ = p.o.Access.AppendSessionEvent(ctx, reg, access.EvGitPushRefused, "", map[string]any{"repo": s.Git.Repo, "error": msg})
 		t.refuse("git_push_refused")
-		return false
+		return nil, false
 	}
 	updates := make([]map[string]any, 0, len(pc.Updates))
 	for _, u := range pc.Updates {
@@ -63,14 +69,73 @@ func (p *Proxy) gitPushGate(ctx context.Context, s *Session, reg *access.Channel
 		}
 		_ = p.o.Access.AppendSessionEvent(ctx, reg, access.EvGitPushRefused, "", map[string]any{"repo": s.Git.Repo, "updates": updates, "refused": refused})
 		t.refuse("git_push_refused")
-		return false
+		return nil, false
 	}
-	_ = p.o.Access.AppendSessionEvent(ctx, reg, access.EvGitPush, "", map[string]any{"repo": s.Git.Repo, "updates": updates})
+	var checks []int
+	for i, u := range pc.Updates {
+		if s.Git.Push.NeedsFastForward(u) {
+			checks = append(checks, i)
+		}
+	}
 	bytesIn.Add(int64(len(pc.Raw)))
 	if _, err := stdin.Write(pc.Raw); err != nil {
-		return false
+		return nil, false
 	}
-	return true
+	if len(checks) == 0 {
+		_ = p.o.Access.AppendSessionEvent(ctx, reg, access.EvGitPush, "", map[string]any{"repo": s.Git.Repo, "updates": updates})
+		return s.Agent, true
+	}
+
+	br := bufio.NewReaderSize(s.Agent, 64<<10)
+	counted := countingWriter{w: stdin, n: bytesIn}
+	if slices.Contains(pc.Capabilities, "push-options") {
+		if err := gitproto.CopyPktSection(br, counted); err != nil {
+			return p.refusePush(ctx, s, reg, t, updates, nil, "malformed push options")
+		}
+	}
+	graph, trailer, err := gitproto.ScanPack(br, counted, len(pc.Updates[checks[0]].Old)/2)
+	if err != nil {
+		return p.refusePush(ctx, s, reg, t, updates, nil, "the pushed pack could not be read")
+	}
+	var refused []map[string]any
+	for _, i := range checks {
+		u := pc.Updates[i]
+		ff := graph.AncestryOf(u.Old, u.New)
+		updates[i]["fast_forward"] = ff == gitproto.FastForward
+		if ff != gitproto.FastForward {
+			reason := "not a fast-forward; force-push is blocked for this access profile"
+			if ff == gitproto.Unknown {
+				reason = "cannot prove a fast-forward from the pushed commits; force-push is blocked (push new commits on top of the branch)"
+			}
+			refused = append(refused, map[string]any{"ref": u.Ref, "reason": reason})
+		}
+	}
+	if len(refused) > 0 {
+		return p.refusePush(ctx, s, reg, t, updates, refused, "")
+	}
+	_ = p.o.Access.AppendSessionEvent(ctx, reg, access.EvGitPush, "", map[string]any{"repo": s.Git.Repo, "updates": updates})
+	if _, err := counted.Write(trailer); err != nil {
+		return nil, false
+	}
+	return br, true
+}
+
+// refusePush tells the agent why, records the refusal and ends the session without letting the push complete.
+func (p *Proxy) refusePush(ctx context.Context, s *Session, reg *access.ChannelReg, t *terminator, updates, refused []map[string]any, msg string) (io.Reader, bool) {
+	for _, r := range refused {
+		s.Notify("push refused: " + r["ref"].(string) + ": " + r["reason"].(string))
+	}
+	data := map[string]any{"repo": s.Git.Repo, "updates": updates}
+	if msg != "" {
+		s.Notify("push refused: " + msg)
+		data["error"] = msg
+	}
+	if refused != nil {
+		data["refused"] = refused
+	}
+	_ = p.o.Access.AppendSessionEvent(ctx, reg, access.EvGitPushRefused, "", data)
+	t.refuse("git_push_refused")
+	return nil, false
 }
 
 // countingWriter counts bytes written through it.

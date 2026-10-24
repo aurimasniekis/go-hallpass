@@ -424,15 +424,18 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 	outputs.Go(func() { pump(stdout, agentOut, outStream, rec, touch, recFail) })
 	outputs.Go(func() { pump(stderr, s.Agent.Stderr(), errStream, rec, touch, recFail) })
 	go func() {
+		var src io.Reader = s.Agent
 		if s.Git != nil && s.Git.Service == gitproto.ReceivePack {
-			if !p.gitPushGate(ctx, s, reg, t, stdin, &bytesIn) {
+			r, ok := p.gitPushGate(ctx, s, reg, t, stdin, &bytesIn)
+			if !ok {
 				return
 			}
+			src = r
 			touch()
 		}
 		buf := make([]byte, 32*1024)
 		for {
-			n, err := s.Agent.Read(buf)
+			n, err := src.Read(buf)
 			if n > 0 {
 				touch()
 				if recordInput {

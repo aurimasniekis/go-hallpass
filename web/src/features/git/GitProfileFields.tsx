@@ -89,6 +89,14 @@ export function GitProfileFields() {
           <Form.Item label="Branch deletion" name="allow_delete" valuePropName="checked">
             <Switch aria-label="Allow deleting allowed branches" />
           </Form.Item>
+          <Form.Item
+            label="Force-push"
+            name="allow_force_push"
+            valuePropName="checked"
+            extra="Off: HallPass checks the pushed commits and refuses any branch update it cannot prove is a fast-forward."
+          >
+            <Switch aria-label="Allow force-push" />
+          </Form.Item>
         </>
       ) : null}
       <Form.Item label="Default access duration" name="default_duration" rules={[{ required: true }]}>

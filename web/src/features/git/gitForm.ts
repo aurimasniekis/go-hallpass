@@ -10,6 +10,7 @@ export interface GitProfileFormValues {
   protected_branches: string[];
   tags: string[];
   allow_delete: boolean;
+  allow_force_push: boolean;
   default_duration: number;
   max_duration: number;
 }
@@ -23,6 +24,7 @@ export const GIT_PROFILE_DEFAULTS: GitProfileFormValues = {
   protected_branches: ['main', 'master'],
   tags: [],
   allow_delete: false,
+  allow_force_push: false,
   default_duration: 3600,
   max_duration: 8 * 3600,
 };
@@ -36,6 +38,7 @@ export function toGitProfileInput(v: GitProfileFormValues) {
       protected_branches: v.protected_branches,
       tags: v.tags,
       allow_delete: v.allow_delete,
+      allow_force_push: v.allow_force_push,
     };
   }
   return {
@@ -59,6 +62,7 @@ export function gitProfileFormValues(r: Role): GitProfileFormValues {
     protected_branches: push?.protected_branches ?? [],
     tags: push?.tags ?? [],
     allow_delete: push?.allow_delete ?? false,
+    allow_force_push: push?.allow_force_push ?? false,
     default_duration: r.default_duration,
     max_duration: r.max_duration,
   };
@@ -79,6 +83,9 @@ export function pushSummary(r: Pick<Role, 'capabilities' | 'git'>): string {
   }
   if (p.allow_delete) {
     parts.push('Deletes allowed');
+  }
+  if (p.allow_force_push) {
+    parts.push('Force-push allowed');
   }
   return parts.join(' · ');
 }

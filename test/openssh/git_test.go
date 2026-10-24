@@ -100,7 +100,33 @@ func TestOpenSSHGit(t *testing.T) {
 	}
 	mainBefore := host.Exec("git --git-dir=/home/deploy/acme/api.git rev-parse main")
 
-	out, code := g.git(repo, "push", "origin", "HEAD:main")
+	// A fast-forward update of an existing branch passes the pack check and lands on the host.
+	if out, code := g.git(repo, "commit", "-q", "--allow-empty", "-m", "second fix"); code != 0 {
+		t.Fatalf("commit: %s", out)
+	}
+	if out, code := g.git(repo, "push", "origin", "HEAD:refs/heads/agent/fix-cart"); code != 0 {
+		t.Fatalf("fast-forward push: %d %s", code, out)
+	}
+	head, _ = g.git(repo, "rev-parse", "HEAD")
+	if got := host.Exec("git --git-dir=/home/deploy/acme/api.git rev-parse agent/fix-cart"); got != strings.TrimSpace(head) {
+		t.Fatalf("fast-forward not applied: host %q, want %q", got, head)
+	}
+	// Rewriting the branch and force-pushing it is refused, and the host keeps the old tip.
+	if out, code := g.git(repo, "commit", "-q", "--amend", "--allow-empty", "-m", "rewritten fix"); code != 0 {
+		t.Fatalf("amend: %s", out)
+	}
+	out, code := g.git(repo, "push", "--force", "origin", "HEAD:refs/heads/agent/fix-cart")
+	if code == 0 || !strings.Contains(out, "force-push is blocked") {
+		t.Fatalf("force push: %d %s", code, out)
+	}
+	if got := host.Exec("git --git-dir=/home/deploy/acme/api.git rev-parse agent/fix-cart"); got != strings.TrimSpace(head) {
+		t.Fatalf("refused force-push changed the branch: host %q, want %q", got, head)
+	}
+	if out, code := g.git(repo, "reset", "-q", "--hard", "origin/agent/fix-cart"); code != 0 {
+		t.Fatalf("reset: %s", out)
+	}
+
+	out, code = g.git(repo, "push", "origin", "HEAD:main")
 	if code == 0 || !strings.Contains(out, "hallpass: push refused: refs/heads/main: protected branch") {
 		t.Fatalf("push to main: %d %s", code, out)
 	}
@@ -124,7 +150,7 @@ func TestOpenSSHGit(t *testing.T) {
 		t.Fatalf("exec on a git remote: %d %s", code, stderr)
 	}
 
-	for typ, want := range map[string]int{"git.requested": 4, "git.push": 1, "git.push_refused": 2, "git.transferred": 4} {
+	for typ, want := range map[string]int{"git.requested": 6, "git.push": 2, "git.push_refused": 3, "git.transferred": 6} {
 		var n int
 		must(t, g.A.Store.ReadDB().QueryRowContext(ctx, `SELECT count(*) FROM timeline_events WHERE type = ?`, typ).Scan(&n))
 		if n != want {

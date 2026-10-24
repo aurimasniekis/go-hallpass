@@ -34,6 +34,7 @@ describe('git profile form', () => {
       protected_branches: ['main', 'master'],
       tags: ['v*-rc.*'],
       allow_delete: true,
+      allow_force_push: false,
     });
     const role = {
       ...body,

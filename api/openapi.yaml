@@ -1973,6 +1973,11 @@ components:
             protected_branches: {type: array, items: {type: string}, description: "Branches never changed, even when branches matches."}
             tags: {type: array, items: {type: string}, description: "Tags that may be created; existing tags are never moved or deleted."}
             allow_delete: {type: boolean, description: "Allow deleting branches that branches matches and protected_branches does not."}
+            allow_force_push:
+              type: boolean
+              description: >-
+                Allow moving a branch to a commit that does not descend from its current tip. When false (the default),
+                every branch update must be provable as a fast-forward from the pushed commits.
     RoleInput:
       type: object
       properties:
