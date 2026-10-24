@@ -923,10 +923,10 @@
     and `x-mfa`, and its idempotent replay never repeats the token).
   - A token acts for its creator with one role the creator held when issuing it, and only while the creator is enabled
     and still holds that role. Tokens cannot issue tokens.
-  - Tokens work only on operations marked `x-token` in the API document: reads within the role, and configuration
-    changes (agents, inventory, credentials, policy, SSO, integrations). Decisions, cancellations, grant revocation,
-    activity termination, recording content and export, operators, tokens, `/me`, `auth`, the event stream and
-    lockdown stay browser-only.
+  - Tokens work only on operations marked `x-token` in the API document: reads within the role (including the
+    operator list, so approver rules can name operators), and configuration changes (agents, inventory, credentials,
+    policy, SSO, integrations). Decisions, cancellations, grant revocation, activity termination, recording content and
+    export, changes to operators, tokens, `/me`, `auth`, the event stream and lockdown stay browser-only.
   - **Relaxations:** token requests skip the Origin and CSRF checks (no ambient credential) and **skip recent
     authentication and MFA** on the `x-token` operations that normally require them (HP-AUTH-014), because issuing the
     token required both.

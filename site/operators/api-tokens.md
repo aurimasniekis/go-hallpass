@@ -7,11 +7,11 @@ them under **Administration → API tokens** (administrators).
 
 A token acts **for you**, with **one of your roles**, until it expires or is revoked:
 
-- it reads what that role allows;
+- it reads what that role allows, including the list of operators;
 - it changes configuration: agents and their keys, servers, git remotes, roles and access profiles, host keys, login
   keys and certificates, groups, policy and approver rules, single sign-on and chat integrations;
 - it never approves, denies or cancels requests, revokes grants, ends live sessions, reads or exports recordings,
-  manages operators or tokens, or uses lockdown. Those stay with people in the console.
+  changes operators or tokens, or uses lockdown. Those stay with people in the console.
 
 It stops working when you revoke it, when it expires, when your account is disabled, and when you no longer hold its
 role. Changes made with it appear in the audit log under your name, with `via: api_token:<id>` in the details.

@@ -1351,15 +1351,17 @@ func TestAPITokenAPI(t *testing.T) {
 	h.spec.validate(t, "createServer", r)
 	var srv struct{ ID string }
 	r.json(t, &srv)
-	if r := h.bearerDo(tok, "GET", "/api/v1/servers", nil); r.status != 200 {
-		t.Fatalf("list: %d %s", r.status, r.body)
+	for _, p := range []string{"/api/v1/servers", "/api/v1/operators"} {
+		if r := h.bearerDo(tok, "GET", p, nil); r.status != 200 {
+			t.Fatalf("GET %s with a token: %d %s", p, r.status, r.body)
+		}
 	}
 	// Step-up operations work: the token was issued under recent authentication and MFA.
 	if r := h.bearerDo(tok, "DELETE", "/api/v1/servers/"+srv.ID, nil); r.status != 204 {
 		t.Fatalf("delete (x-reauth) with a token: %d %s", r.status, r.body)
 	}
 	for _, path := range []struct{ method, path string }{
-		{"GET", "/api/v1/me"}, {"GET", "/api/v1/operators"}, {"GET", "/api/v1/api-tokens"},
+		{"GET", "/api/v1/me"}, {"POST", "/api/v1/operators"}, {"GET", "/api/v1/api-tokens"},
 		{"POST", "/api/v1/api-tokens"}, {"POST", "/api/v1/requests/req_x/approve"}, {"POST", "/api/v1/system/lockdown"},
 	} {
 		if r := h.bearerDo(tok, path.method, path.path, map[string]any{}); r.status != 403 {

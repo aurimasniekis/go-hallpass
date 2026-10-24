@@ -288,6 +288,7 @@ paths:
       operationId: listOperators
       tags: [operators]
       x-permission: operators.manage
+      x-token: true
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Operator"}}}}}}}
     post:
@@ -308,6 +309,7 @@ paths:
       operationId: getOperator
       tags: [operators]
       x-permission: operators.manage
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Operator"}}}}
