@@ -137,7 +137,7 @@ export function RecoverPage({
                 />
               ) : null}
               <Button type="primary" onClick={onDone}>
-                Continue to Hallpass
+                Continue to HallPass
               </Button>
             </Space>
           }

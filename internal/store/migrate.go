@@ -21,7 +21,7 @@ import (
 //go:embed migrations/*.sql
 var migrationFS embed.FS
 
-// ErrSchemaTooNew means the database was migrated by a newer Hallpass; downgrades are refused (HP-DB-005).
+// ErrSchemaTooNew means the database was migrated by a newer HallPass; downgrades are refused (HP-DB-005).
 var ErrSchemaTooNew = errors.New("database schema is newer than this binary")
 
 func newProvider(d *sql.DB, fsys fs.FS) (*goose.Provider, error) {

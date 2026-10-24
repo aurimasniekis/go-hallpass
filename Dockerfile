@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# Hallpass container image (PLAN WP24, ADR-0022, HP-OPS-007).
+# HallPass container image (PLAN WP24, ADR-0022, HP-OPS-007).
 #
 #   web    : builds the operator UI (web/dist) with the locked pnpm dependency tree.
 #   build  : static Go binary (CGO_ENABLED=0, -trimpath), cross-compiled on the build platform (no emulation).

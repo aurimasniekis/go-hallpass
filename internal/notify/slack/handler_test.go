@@ -116,7 +116,7 @@ func TestHandlerCommand(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp["response_type"] != "ephemeral" || resp["text"] != "Hallpass" {
+	if resp["response_type"] != "ephemeral" || resp["text"] != "HallPass" {
 		t.Fatalf("%v", resp)
 	}
 	assertSafeBlocks(t, resp["blocks"])
@@ -231,7 +231,7 @@ func TestHandlerEndToEndWithClient(t *testing.T) {
 	}
 	clk := clock.NewFake(time.Unix(1_700_000_000, 0))
 	v, _ := NewVerifier(VerifierConfig{SigningSecret: redact.NewSecret(testSecret), Replay: chat.NewMemoryReplayCache(clk, 0), Clock: clk})
-	sink := &chattest.Sink{Reply: "Your Slack account is not linked to a Hallpass approver."}
+	sink := &chattest.Sink{Reply: "Your Slack account is not linked to a HallPass approver."}
 	h, _ := NewHandler(HandlerConfig{Verifier: v, Sink: sink, TeamID: testTeam, Responder: client, ResponseURLBase: srv.URL + "/", Clock: clk})
 	body := formBody(interaction(func(p map[string]any) { p["response_url"] = srv.URL + "/actions/1" }))
 	w := httptest.NewRecorder()

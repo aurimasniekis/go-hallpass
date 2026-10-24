@@ -1,4 +1,4 @@
-# Hallpass — Test Strategy
+# HallPass — Test Strategy
 
 > Defines how every requirement in `docs/GOAL.md` is verified, plus the fault-injection catalog, performance methodology and
 > release-gate evidence. Requirement IDs here must match GOAL.md exactly. When a requirement is added, add it here in the same commit.
@@ -486,7 +486,7 @@ Each scenario passes only if the stated expected outcome holds **and** no securi
 - Gateway: 4 vCPU x86-64 at ≥ 2.5 GHz (e.g. AWS `c6i.xlarge` class), 8 GiB RAM, local NVMe SSD (instance store or equivalent with
   reliable fsync), Linux kernel ≥ 6.1, ext4 (`data=ordered`), release build, `GOMAXPROCS=4`.
 - Destinations: 4 sshd containers on a separate host. Load driver on a third host. All on the same LAN with < 1 ms RTT.
-- Every report records exact instance types, kernel, filesystem, Go version, Hallpass commit and config. Results from other hardware
+- Every report records exact instance types, kernel, filesystem, Go version, HallPass commit and config. Results from other hardware
   are reported as such and never presented as RH-1 numbers.
 
 ### 5.2 Workloads

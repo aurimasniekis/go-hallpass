@@ -144,7 +144,7 @@ func (svc *Service) interaction(ctx context.Context, integrationID string, in ch
 	}
 	hashes, err := svc.tokenHashes(in.ActionTokenID)
 	if err != nil || len(hashes) == 0 {
-		return "Hallpass could not process this action."
+		return "HallPass could not process this action."
 	}
 	var (
 		h   []byte
@@ -165,7 +165,7 @@ func (svc *Service) interaction(ctx context.Context, integrationID string, in ch
 	}
 	op, err := svc.operatorFor(ctx, in.Identity)
 	if err != nil {
-		return refused("not_linked", "Your "+in.Provider+" account is not linked to a Hallpass approver. Link it from your Hallpass profile.")
+		return refused("not_linked", "Your "+in.Provider+" account is not linked to a HallPass approver. Link it from your HallPass profile.")
 	}
 	if tok.UsedAt.Valid {
 		// Idempotent redelivery (HP-NTF-009): report the recorded outcome without side effects.
@@ -175,7 +175,7 @@ func (svc *Service) interaction(ctx context.Context, integrationID string, in ch
 		return refused("expired", "This request has expired.")
 	}
 	if *svc.opts.ChatRequiresMFA && !svc.chatMFA(ctx, op) {
-		return refused("mfa_required", "Chat approvals need MFA: enroll TOTP in Hallpass (or sign in with SSO), then try again.")
+		return refused("mfa_required", "Chat approvals need MFA: enroll TOTP in HallPass (or sign in with SSO), then try again.")
 	}
 	if !svc.allowDecision(op.ID) {
 		return refused("rate_limited", "Too many decisions; wait a minute and try again.")
@@ -200,7 +200,7 @@ func (svc *Service) interaction(ctx context.Context, integrationID string, in ch
 			return refused("not_possible", "Not possible: "+publicMessage(err))
 		}
 		svc.log.Error("chat decision failed", "error", err.Error())
-		return "Hallpass could not record the decision; try the web UI."
+		return "HallPass could not record the decision; try the web UI."
 	}
 	outcome := res.Request.State
 	if res.Grant != nil {
@@ -226,10 +226,10 @@ func publicMessage(err error) string {
 func (svc *Service) status(ctx context.Context, q chat.StatusQuery) string {
 	op, err := svc.operatorFor(ctx, q.Identity)
 	if err != nil {
-		return "Your account is not linked to a Hallpass operator."
+		return "Your account is not linked to a HallPass operator."
 	}
 	if len(op.Roles) == 0 {
-		return "You have no Hallpass role."
+		return "You have no HallPass role."
 	}
 	r, err := svc.access.GetRequest(ctx, q.RequestID)
 	if err != nil {
@@ -300,7 +300,7 @@ func (svc *Service) link(ctx context.Context, integrationID string, lr chat.Link
 	}
 	hashes, err := svc.linkCodeHashes(normalizeCrockford(code))
 	if err != nil || len(hashes) == 0 {
-		return "Hallpass could not process the link code."
+		return "HallPass could not process the link code."
 	}
 	var (
 		opID string
@@ -343,7 +343,7 @@ func (svc *Service) link(ctx context.Context, integrationID string, lr chat.Link
 		svc.refuse(ctx, integrationID, lr.Identity, "provider_link.failed", "invalid_or_expired_code")
 		return "That link code is invalid or expired."
 	}
-	return "Linked to Hallpass operator " + svc.operatorDisplay(ctx, opID) + "."
+	return "Linked to HallPass operator " + svc.operatorDisplay(ctx, opID) + "."
 }
 
 var errPublicChat = errors.New("public chat")

@@ -341,7 +341,7 @@ export function OnboardingWizard({
         <p className="hp-card-intro" style={{ margin: 0 }}>
           Each role needs a way for the gateway to log in to the destination: a login key installed in the
           remote user&apos;s <code className="hp-mono">authorized_keys</code>, or a certificate signed by a
-          Hallpass user CA.
+          HallPass user CA.
         </p>
         {roleItems.map((r, i) => (
           <RoleLoginSetup

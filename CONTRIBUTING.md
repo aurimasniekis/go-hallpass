@@ -1,6 +1,6 @@
-# Contributing to Hallpass
+# Contributing to HallPass
 
-Hallpass is a security-sensitive SSH access gateway. Read [`AGENTS.md`](AGENTS.md), [`docs/GOAL.md`](docs/GOAL.md) and
+HallPass is a security-sensitive SSH access gateway. Read [`AGENTS.md`](AGENTS.md), [`docs/GOAL.md`](docs/GOAL.md) and
 [`docs/PLAN.md`](docs/PLAN.md) before changing anything. GOAL.md is the product contract, and security requirements are never weakened
 without a recorded decision in [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
@@ -20,7 +20,7 @@ without a recorded decision in [`docs/DECISIONS.md`](docs/DECISIONS.md).
 | `make build` | Static (`CGO_ENABLED=0`) build into `bin/hallpass`. |
 | `make race` | All Go tests with the race detector. |
 | `make lint` | golangci-lint with the repository configuration. |
-| `make custom-vet` | Hallpass analyzers: `nohostkeyignore` (bans `ssh.InsecureIgnoreHostKey`) and `txscope` (no I/O or waits inside store write transactions). |
+| `make custom-vet` | HallPass analyzers: `nohostkeyignore` (bans `ssh.InsecureIgnoreHostKey`) and `txscope` (no I/O or waits inside store write transactions). |
 | `make coverage` | Coverage floor (≥ 80%) for security-critical packages. |
 | `make fuzz-smoke` | Every fuzz target for `FUZZTIME` (default 30 s). |
 | `make check` | Everything CI runs for Go. |

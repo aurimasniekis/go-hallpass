@@ -5,7 +5,7 @@ objectives (HP-DB-014), master-key loss (HP-CRY-007), external integrity anchors
 (HP-CRY-009) and break-glass administrator recovery (HP-AUTH-016). Design: PLAN §4.4, §13.8, §13.10, §18.5–18.16 and ADR-0023.
 
 > **Losing the KEK loses the data.** Every sealed database field, every recording key and every integrity MAC depends on the
-> master key (KEK). Backups never contain it. If the KEK is lost, no backup can be read, and neither Hallpass nor anyone else
+> master key (KEK). Backups never contain it. If the KEK is lost, no backup can be read, and neither HallPass nor anyone else
 > can recover the data. Keep at least two offline copies of the KEK, stored separately from data backups and under stricter
 > access control (see `keys.md`).
 
@@ -42,7 +42,7 @@ hallpass backup create --config /etc/hallpass/hallpass.yaml --out /backup/hallpa
 ```
 
 - **Online and lock-free.** It opens the database read-only and runs `VACUUM INTO` inside a WAL read transaction. The server keeps
-  running and its writer is never blocked. Run it as the Hallpass service user.
+  running and its writer is never blocked. Run it as the HallPass service user.
 - **Consistent.** The database is snapshotted first. Segment files are then copied according to the snapshot's view, so
   recordings created after T are excluded, exactly as the database excludes them. For each finalized or interrupted segment,
   the header and ciphertext hashes are checked against the snapshot while copying.
@@ -102,7 +102,7 @@ steps 3–5 bind files to the database copy, and **MAC verification needs the KE
 
 On a new or clean host:
 
-1. Install the same or a newer Hallpass binary. An older binary refuses a newer schema.
+1. Install the same or a newer HallPass binary. An older binary refuses a newer schema.
 2. Provide the KEK the backup was made with (`kek.file`, mode 0400, outside the data directory). Restore refuses to run without
    a configured KEK, and refuses a KEK whose ID differs from the backup's `kek_id`.
 3. Restore into an empty data directory. The server must be stopped, because restore takes the data-directory lock:
@@ -152,12 +152,12 @@ Migrations are forward-only. **Rollback** = stop, restore the pre-upgrade backup
 ## Litestream (optional, R-04)
 
 [Litestream](https://litestream.io) can continuously replicate `hallpass.db` to object storage to shrink the database RPO.
-It is **optional and not a high-availability mode**: there is still exactly one active Hallpass per data directory, and failover
+It is **optional and not a high-availability mode**: there is still exactly one active HallPass per data directory, and failover
 is a cold restore. Caveats:
 
 - Litestream replicates only the database. Recordings still need `hallpass backup` or continuous segment sync, and a replica
   whose recordings are older than its database restores with `missing` segments.
-- Hallpass runs `PRAGMA wal_checkpoint(TRUNCATE)` every 5 minutes. Compatibility with Litestream's checkpoint handling has
+- HallPass runs `PRAGMA wal_checkpoint(TRUNCATE)` every 5 minutes. Compatibility with Litestream's checkpoint handling has
   **not yet been tested** (R-04 open). Treat Litestream as an addition to, never a replacement for, `hallpass backup`.
 - A Litestream restore must go into an empty data directory, and needs the same KEK and the recordings directory.
 

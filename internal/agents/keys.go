@@ -41,7 +41,7 @@ func ParseAgentKey(input string) (*ParsedKey, error) {
 	}
 	if strings.Contains(input, "PRIVATE KEY") || strings.Contains(input, "OPENSSH PRIVATE") {
 		// Never echo the input: it may be secret material.
-		return nil, apperr.New(apperr.CodeInvalid, "a private key was supplied; Hallpass only accepts agent public keys and never stores agent private keys")
+		return nil, apperr.New(apperr.CodeInvalid, "a private key was supplied; HallPass only accepts agent public keys and never stores agent private keys")
 	}
 	data := bytes.TrimSpace([]byte(input))
 	if bytes.Count(data, []byte("\n")) > 0 {
@@ -52,7 +52,7 @@ func ParseAgentKey(input string) (*ParsedKey, error) {
 		return nil, apperr.New(apperr.CodeInvalid, "not a valid OpenSSH public key line")
 	}
 	if len(options) > 0 {
-		return nil, apperr.New(apperr.CodeInvalid, "authorized_keys options are not accepted; Hallpass enforces restrictions itself")
+		return nil, apperr.New(apperr.CodeInvalid, "authorized_keys options are not accepted; HallPass enforces restrictions itself")
 	}
 	if len(bytes.TrimSpace(rest)) > 0 {
 		return nil, apperr.New(apperr.CodeInvalid, "exactly one public key line is required")

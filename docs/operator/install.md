@@ -34,11 +34,11 @@ Install only artifacts whose checksum and attestation both verify.
 - Linux (amd64 or arm64) with a **local** filesystem for the data directory. NFS, SMB/CIFS, FUSE and other network
   filesystems are refused (HP-DB-007). Use full-disk encryption: the database stores inventory and policy in plaintext
   ([storage.md](storage.md)).
-- One Hallpass process per data directory. There is no clustering ([storage.md](storage.md)).
+- One HallPass process per data directory. There is no clustering ([storage.md](storage.md)).
 - A clock synchronized by NTP with slewing (chrony or systemd-timesyncd), not stepped. Grant expiry, approval-token
   windows and webhook timestamp checks use wall-clock UTC. A backward step lengthens active grants by the size of the
   step (ADR-0039).
-- Network: agents reach the SSH port (default `2222`). Hallpass reaches destination servers on port 22 from addresses you
+- Network: agents reach the SSH port (default `2222`). HallPass reaches destination servers on port 22 from addresses you
   pin with `from=` in `authorized_keys` ([../destination/hardening.md](../destination/hardening.md)). The web console port
   (default `8080`) should only be reachable through a TLS-terminating reverse proxy.
 
@@ -92,7 +92,7 @@ install -d -m 0700 -o hallpass -g hallpass /var/lib/hallpass
 sudo -u hallpass hallpass migrate --config /etc/hallpass/hallpass.yaml
 ```
 
-Hallpass runs with `umask 0077`: files in the data directory are `0600` and directories `0700`. Startup refuses a data
+HallPass runs with `umask 0077`: files in the data directory are `0600` and directories `0700`. Startup refuses a data
 directory or KEK that is accessible to group or others, or owned by another user (HP-DB-010).
 
 ### 5. Service
@@ -163,4 +163,4 @@ Compose variables use the `HP_` prefix because the binary rejects unknown `HALLP
 
 ## Upgrading
 
-See [upgrade.md](upgrade.md). Never run an older binary against a database migrated by a newer one; Hallpass refuses it.
+See [upgrade.md](upgrade.md). Never run an older binary against a database migrated by a newer one; HallPass refuses it.

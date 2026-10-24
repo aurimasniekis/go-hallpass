@@ -1,6 +1,6 @@
 # Security policy
 
-Hallpass is a security-sensitive gateway that can see plaintext SSH sessions. Please report vulnerabilities privately.
+HallPass is a security-sensitive gateway that can see plaintext SSH sessions. Please report vulnerabilities privately.
 
 ## Reporting
 
@@ -15,13 +15,13 @@ latest minor release line ([docs/VERSIONING.md](docs/VERSIONING.md)).
 
 ## Scope and guarantees
 
-What Hallpass does and does not guarantee is documented in [docs/GOAL.md](docs/GOAL.md) (security guarantees and
+What HallPass does and does not guarantee is documented in [docs/GOAL.md](docs/GOAL.md) (security guarantees and
 non-guarantees) and [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) (assets, trust boundaries, residual risks). In
 particular:
 
 - A compromised gateway host that holds the KEK can read recordings and rewrite unanchored history. Export integrity
   anchors to external append-only storage ([docs/operator/backup.md](docs/operator/backup.md)).
-- Destination-side commands run in the destination's shell; Hallpass records but does not sandbox them.
+- Destination-side commands run in the destination's shell; HallPass records but does not sandbox them.
 - The HPREC1 recording format has **not** had an external cryptographic review yet (DECISIONS.md R-02).
 
 ## Hardening references

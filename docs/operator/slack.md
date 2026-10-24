@@ -1,6 +1,6 @@
 # Slack approvals
 
-Hallpass can post pending access requests to Slack channels. Linked approvers can approve or deny a request with
+HallPass can post pending access requests to Slack channels. Linked approvers can approve or deny a request with
 buttons, and use `/hallpass link <code>` and `/hallpass status <request-id>`. Requirements: HP-NTF-002..005,
 HP-NTF-011, PLAN §10.4, ADR-0011.
 
@@ -12,14 +12,14 @@ HP-NTF-011, PLAN §10.4, ADR-0011.
 
 ## How it works
 
-1. An agent requests access. Hallpass writes one outbox message for each Slack route (channel) that matches the request.
+1. An agent requests access. HallPass writes one outbox message for each Slack route (channel) that matches the request.
 2. The delivery worker posts a Block Kit message with `chat.postMessage`. The message shows the verified agent identity,
    server and role (alias and description), capabilities, the requested duration, the expiry, and the reason. The reason
    is labeled **"Agent-provided reason (untrusted)"** and truncated to 500 characters. The message has one *Approve
    &lt;duration&gt;* button for each allowed duration (up to 5), a *Deny* button, and a *Details* link to the web console.
    It never contains destination addresses, remote usernames or credentials.
-3. When someone clicks a button, Slack posts a signed request to Hallpass. Hallpass verifies the request, maps the
-   clicking Slack user to a Hallpass operator through a link that operator created earlier, and runs the **same**
+3. When someone clicks a button, Slack posts a signed request to HallPass. HallPass verifies the request, maps the
+   clicking Slack user to a HallPass operator through a link that operator created earlier, and runs the **same**
    decision checks as the web UI: role, approver scope, self-approval, MFA policy, request state and duration limits.
 4. The original message is edited to show the outcome (best effort). The clicking user also gets a short private reply
    that only they can see.
@@ -35,16 +35,16 @@ paste the manifest below. Replace `hallpass.example.com` with the host of your `
 
 ```yaml
 display_information:
-  name: Hallpass
+  name: HallPass
   description: Access approvals for AI agents
 features:
   bot_user:
-    display_name: Hallpass
+    display_name: HallPass
     always_online: false
   slash_commands:
     - command: /hallpass
       url: https://hallpass.example.com/hooks/slack/INTEGRATION_ID
-      description: Link your Hallpass account or check a request
+      description: Link your HallPass account or check a request
       usage_hint: "link <code> | status <request-id>"
       should_escape: false
 oauth_config:
@@ -62,20 +62,20 @@ settings:
 ```
 
 - **Scopes.** The app needs only `chat:write` (post and edit its own messages) and `commands` (the slash command). Do not
-  add other scopes. In particular, Hallpass does not need `chat:write.public`, so the bot can post only to channels it
+  add other scopes. In particular, HallPass does not need `chat:write.public`, so the bot can post only to channels it
   has been invited to.
 - **One URL.** Interactivity and the slash command use the same endpoint. The handler tells them apart by payload.
-  The path ends in the Hallpass integration ID, which exists only after step 3. Create the app with the placeholder,
+  The path ends in the HallPass integration ID, which exists only after step 3. Create the app with the placeholder,
   then replace `INTEGRATION_ID` in both URLs (*Interactivity & Shortcuts* and *Slash Commands*) with the webhook URL
-  that Hallpass shows for the integration.
-- **Single workspace.** Do not distribute the app. Hallpass accepts requests from exactly one team ID and rejects all
+  that HallPass shows for the integration.
+- **Single workspace.** Do not distribute the app. HallPass accepts requests from exactly one team ID and rejects all
   others with `403`.
 
 Then:
 
 1. **Install to Workspace** and copy the **Bot User OAuth Token** (`xoxb-…`).
 2. Under **Basic Information → App Credentials**, copy the **Signing Secret**. Do not use the deprecated
-   "Verification Token". Hallpass ignores it.
+   "Verification Token". HallPass ignores it.
 3. Find the **team ID** (`T…`). It appears in the browser URL of the Slack web client
    (`app.slack.com/client/T…/…`) and under *Workspace settings → About this workspace*.
 
@@ -83,13 +83,13 @@ Then:
 
 1. Create a channel for approvals. A private channel is recommended, because every member can read request details,
    including the agent-provided reason.
-2. Invite the bot to it: `/invite @Hallpass`.
+2. Invite the bot to it: `/invite @HallPass`.
 3. Copy the **channel ID** (`C…`) from *channel details → About* (at the bottom).
 
 Keep channel membership limited to people who should see access requests. Anyone in the channel sees the message, but
 only linked, authorized operators can decide.
 
-## 3. Configure Hallpass
+## 3. Configure HallPass
 
 Create a Slack integration in the web console (administrator, reauthentication required) with:
 
@@ -104,8 +104,8 @@ Network requirements:
 
 - **Inbound.** Slack must reach `https://<public_url host>/hooks/slack/<integration_id>` over HTTPS with a publicly trusted
   certificate.
-- **Outbound.** Hallpass calls `https://slack.com/api/` and `https://hooks.slack.com/` and must be allowed to reach both.
-- **Clock.** The Hallpass host clock must be NTP-synchronized. Requests with timestamps more than 5 minutes away from the
+- **Outbound.** HallPass calls `https://slack.com/api/` and `https://hooks.slack.com/` and must be allowed to reach both.
+- **Clock.** The HallPass host clock must be NTP-synchronized. Requests with timestamps more than 5 minutes away from the
   server clock are rejected with `401`.
 
 ## 4. Link approver accounts
@@ -115,11 +115,11 @@ A Slack user can decide requests only after the operator links their Slack accou
 1. The operator signs in to the web console and creates a **Slack link code** (8 characters, valid for 10 minutes,
    single use, bound to that operator).
 2. Within 10 minutes the operator runs `/hallpass link <code>` in Slack. The reply is visible only to them.
-3. Hallpass records the team ID and Slack user ID (never the display name) as that operator's Slack identity.
+3. HallPass records the team ID and Slack user ID (never the display name) as that operator's Slack identity.
 
 An administrator can also link or unlink accounts manually (audited, reauthentication required). Unlinking takes effect
 immediately, and links of disabled operators have no effect. If an unlinked user clicks a button, only they see the reply
-"your Slack account is not linked to a Hallpass approver", and nothing is decided.
+"your Slack account is not linked to a HallPass approver", and nothing is decided.
 
 ## 5. What is verified on every request
 
@@ -131,7 +131,7 @@ In this order (PLAN §10.4):
    time (`401` otherwise).
 4. The SHA-256 of the decoded signature is stored in the replay cache for 10 minutes. A repeated request is acknowledged
    with `200` and ignored. If the replay cache is unavailable, the request is rejected with `503` (fail closed).
-5. The payload must come from the configured team and contain exactly one Hallpass button (`hp1:a:<token>` or
+5. The payload must come from the configured team and contain exactly one HallPass button (`hp1:a:<token>` or
    `hp1:d:<token>`), or must be the `/hallpass` command.
 
 Every rejected request is reported to the audit pipeline (rate limited) and counted in metrics. Rejections never include
@@ -145,15 +145,15 @@ agent, server and role names, descriptions, capabilities and decider names:
 - Control characters, bidirectional overrides, zero-width and other invisible characters are removed. Newlines are
   collapsed, so a reason cannot fake extra message lines.
 - `&`, `<` and `>` are escaped, so `<!channel>`, `<!here>`, `<@U…>`, `<#C…>` and `<https://…|label>` cannot form.
-- Untrusted text is placed only in `plain_text` objects with emoji conversion off. Hallpass never sends untrusted text in
+- Untrusted text is placed only in `plain_text` objects with emoji conversion off. HallPass never sends untrusted text in
   `mrkdwn` fields. The notification fallback text contains only the request ID.
 - Messages are posted with `parse=none`, `link_names=false`, `unfurl_links=false` and `unfurl_media=false`.
 
 ## Rotating secrets
 
-- **Signing secret.** *Basic Information → Regenerate*, then update the integration in Hallpass right away. Requests
+- **Signing secret.** *Basic Information → Regenerate*, then update the integration in HallPass right away. Requests
   signed with the old secret fail with `401` until you do.
-- **Bot token.** Reinstall the app or revoke the token (*OAuth & Permissions → Revoke tokens*), then update Hallpass.
+- **Bot token.** Reinstall the app or revoke the token (*OAuth & Permissions → Revoke tokens*), then update HallPass.
   Deliveries fail with `invalid_auth` until the token is updated. They retry with backoff and are then marked **dead**.
   They never approve anything (HP-NTF-010).
 
@@ -161,7 +161,7 @@ Rotate both immediately if you suspect either was exposed.
 
 ## What chat approval can and cannot guarantee
 
-**Guaranteed by Hallpass:**
+**Guaranteed by HallPass:**
 
 - Only requests signed with your signing secret, fresh, not replayed and from your team are processed.
 - A decision is made only for a linked Slack user whose operator passes the full decision check at click time. Possession
@@ -171,7 +171,7 @@ Rotate both immediately if you suspect either was exposed.
 
 **Not guaranteed:**
 
-- **Slack account security.** Hallpass trusts Slack to authenticate the person clicking. A compromised Slack account
+- **Slack account security.** HallPass trusts Slack to authenticate the person clicking. A compromised Slack account
   that is linked to an approver can approve within that approver's scope. Enforce SSO and 2FA in Slack. For sensitive
   roles, use the per-role `approval_channels` restriction (web only) and the "recent web MFA" requirement (DECISIONS
   R-10).
@@ -188,8 +188,8 @@ Rotate both immediately if you suspect either was exposed.
 
 | Symptom | Likely cause |
 |---|---|
-| Buttons show a warning triangle, and Hallpass logs `bad_signature` or `stale_timestamp` | Wrong signing secret, or clock skew on the Hallpass host. |
-| `403` / `wrong_workspace` | The team ID in Hallpass does not match the workspace. |
+| Buttons show a warning triangle, and HallPass logs `bad_signature` or `stale_timestamp` | Wrong signing secret, or clock skew on the HallPass host. |
+| `403` / `wrong_workspace` | The team ID in HallPass does not match the workspace. |
 | Deliveries go **dead** with `channel_not_found` / `not_in_channel` | The bot was not invited, or the route has the wrong channel ID. |
-| Deliveries retry with `rate limited` | Slack rate limiting. Hallpass honors `Retry-After` and retries. |
-| "not linked to a Hallpass approver" | The user has not completed `/hallpass link`, or the link was removed or the operator disabled. |
+| Deliveries retry with `rate limited` | Slack rate limiting. HallPass honors `Retry-After` and retries. |
+| "not linked to a HallPass approver" | The user has not completed `/hallpass link`, or the link was removed or the operator disabled. |

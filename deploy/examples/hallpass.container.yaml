@@ -1,4 +1,4 @@
-# Hallpass configuration for the container image (deploy/compose.yaml, docs/operator/container.md).
+# HallPass configuration for the container image (deploy/compose.yaml, docs/operator/container.md).
 # Secret-free: replace the placeholder values below. The KEK is mounted separately as a secret and never lives in
 # this file or in the data volume. Every key can be overridden with HALLPASS_<PATH> environment variables.
 

@@ -81,7 +81,7 @@ func New(s *store.Store, kr *keyring.Keyring, aw *audit.Writer, bus *eventbus.Bu
 		o.MFARequiredRoles = []string{RoleAdministrator, RoleApprover}
 	}
 	if o.Issuer == "" {
-		o.Issuer = "Hallpass"
+		o.Issuer = "HallPass"
 	}
 	if o.Clock == nil {
 		o.Clock = clock.System{}
@@ -344,7 +344,7 @@ var ErrLastSSOAdmin = apperr.New(apperr.CodePrecondition,
 	"password login is disabled and this change would leave no enabled administrator who can sign in with SSO; re-enable password login first")
 
 // SSOAdminsAtRisk reports whether SSO-only enforcement is on and no enabled administrator with a linked identity on an
-// enabled provider remains, i.e. nobody could administer Hallpass without break-glass (HP-AUTH-015).
+// enabled provider remains, i.e. nobody could administer HallPass without break-glass (HP-AUTH-015).
 func SSOAdminsAtRisk(ctx context.Context, q *db.Queries) (bool, error) {
 	n, on, err := ssoAdmins(ctx, q)
 	return on && n == 0, err

@@ -17,7 +17,7 @@ func Handler(files fs.FS) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusNotFound)
-			_, _ = io.WriteString(w, "The Hallpass web UI is not included in this build (build with -tags embedui after `pnpm build`).\n")
+			_, _ = io.WriteString(w, "The HallPass web UI is not included in this build (build with -tags embedui after `pnpm build`).\n")
 		})
 	}
 	assets := http.FileServerFS(files)

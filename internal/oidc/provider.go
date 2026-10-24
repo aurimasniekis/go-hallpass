@@ -132,7 +132,7 @@ type Identity struct {
 
 // Options configure the service.
 type Options struct {
-	// PublicURL is Hallpass's external base URL; the redirect URI is PublicURL + CallbackPath.
+	// PublicURL is HallPass's external base URL; the redirect URI is PublicURL + CallbackPath.
 	PublicURL string
 	// DevMode allows http:// issuers on localhost (HP-OIDC-005).
 	DevMode bool

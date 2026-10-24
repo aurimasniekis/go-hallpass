@@ -16,7 +16,7 @@ function hostPrincipals(names: readonly string[]): string {
 
 /**
  * Exact commands for trusting host certificates instead of pinning each host key (PLAN §11.2). The
- * private CA key never touches Hallpass: only `host_ca.pub` is pasted.
+ * private CA key never touches HallPass: only `host_ca.pub` is pasted.
  */
 export function HostCASetupTip({
   alias,
@@ -37,7 +37,7 @@ export function HostCASetupTip({
         </li>
         <li>
           Sign the destination&apos;s host key. <code className="hp-mono">-n</code> lists the names the
-          certificate is valid for; bind the same principals in Hallpass:
+          certificate is valid for; bind the same principals in HallPass:
           <CodeBlock
             code={`ssh-keygen -s host_ca -I ${id} -h -n ${names} -V +52w /etc/ssh/ssh_host_ed25519_key.pub`}
           />
@@ -62,7 +62,7 @@ sudo sshd -t && sudo systemctl reload sshd   # the unit is "ssh" on Debian/Ubunt
 
 /**
  * Exact commands for certificate logins to a destination (PLAN §11.3): the destination trusts the
- * Hallpass user CA and maps principals to the login user.
+ * HallPass user CA and maps principals to the login user.
  */
 export function UserCASetupTip({
   caPublicKey,
@@ -80,7 +80,7 @@ export function UserCASetupTip({
     <Tip title="How to set up the destination for certificate logins">
       <ol className="hp-steps">
         <li>
-          Install the Hallpass user CA public key on the destination
+          Install the HallPass user CA public key on the destination
           {caPublicKey ? '' : ' (copy it from "Public key" in User certificate authorities)'}:
           <CodeBlock code={`echo ${caLine} | sudo tee /etc/ssh/hallpass_user_ca.pub`} />
         </li>

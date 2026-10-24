@@ -68,7 +68,7 @@ type IngestResult struct {
 	Rejections     []Rejection `json:"rejections,omitempty"`
 }
 
-// match is a successful correlation of one record with Hallpass state.
+// match is a successful correlation of one record with HallPass state.
 type match struct {
 	sessionID    string
 	connectionID string
@@ -234,7 +234,7 @@ func (svc *Service) correlateAll(ctx context.Context, c db.DestauditCollector, b
 	return out, nil
 }
 
-// correlate maps one record to an access session using only Hallpass state. It returns a rejection reason when the
+// correlate maps one record to an access session using only HallPass state. It returns a rejection reason when the
 // destination's claims are inconsistent with that state or ambiguous.
 func (svc *Service) correlate(ctx context.Context, c db.DestauditCollector, r *wire.Record, now time.Time) (match, string, error) {
 	switch {
@@ -248,8 +248,8 @@ func (svc *Service) correlate(ctx context.Context, c db.DestauditCollector, r *w
 }
 
 // correlateCert: the certificate key ID names role, grant and connection (internal/credentials issueCert). The
-// destination's sshd verified a certificate signed by the Hallpass user CA before logging it, and each part is
-// checked against Hallpass state here, so a collector cannot point records at an arbitrary session.
+// destination's sshd verified a certificate signed by the HallPass user CA before logging it, and each part is
+// checked against HallPass state here, so a collector cannot point records at an arbitrary session.
 func (svc *Service) correlateCert(ctx context.Context, c db.DestauditCollector, r *wire.Record, now time.Time) (match, string, error) {
 	k, ok := wire.ParseCertKeyID(r.Login.CertKeyID)
 	if !ok || !ids.Valid(ids.Role, k.RoleID) || !ids.Valid(ids.Grant, k.GrantID) || !ids.Valid(ids.Connection, k.ConnectionID) {

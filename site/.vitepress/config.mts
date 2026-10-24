@@ -3,7 +3,7 @@ import { defineConfig } from 'vitepress';
 const repo = 'https://github.com/aurimasniekis/go-hallpass';
 
 export default defineConfig({
-  title: 'Hallpass',
+  title: 'HallPass',
   description:
     'A terminating SSH gateway for AI agents: policy, human approval, credentials agents never see, and encrypted session recording.',
   lang: 'en-US',
@@ -32,7 +32,7 @@ export default defineConfig({
       {
         text: 'Get started',
         items: [
-          { text: 'What is Hallpass?', link: '/guide/what-is-hallpass' },
+          { text: 'What is HallPass?', link: '/guide/what-is-hallpass' },
           { text: 'Concepts', link: '/guide/concepts' },
           { text: 'Try it locally', link: '/guide/try-locally' },
           { text: 'Install with Docker Compose', link: '/guide/install-docker' },
@@ -106,7 +106,7 @@ export default defineConfig({
     outline: { level: [2, 3] },
     footer: {
       message: 'Pre-release software. Licensed under Apache-2.0.',
-      copyright: 'Hallpass contributors',
+      copyright: 'HallPass contributors',
     },
   },
 });

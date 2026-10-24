@@ -12,7 +12,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/obs/redact"
 )
 
-// ECS-aligned field names used across Hallpass logs (HP-OBS-001). See docs/operator/logging.md.
+// ECS-aligned field names used across HallPass logs (HP-OBS-001). See docs/operator/logging.md.
 const (
 	FieldTimestamp     = "@timestamp"
 	FieldLevel         = "log.level"

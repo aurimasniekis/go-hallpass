@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Container smoke test for the Hallpass image (PLAN WP24 "container smoke test", HP-OPS-007).
+# Container smoke test for the HallPass image (PLAN WP24 "container smoke test", HP-OPS-007).
 #
 # Usage: scripts/container-smoke.sh IMAGE
 #

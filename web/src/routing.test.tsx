@@ -64,7 +64,7 @@ describe('routing', () => {
       return Promise.reject(new Error(`unexpected ${url}`));
     });
     const router = renderAt('/requests?state=pending');
-    expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to Hallpass' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to HallPass' })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/login');
     expect(router.state.location.search).toEqual({ next: '/requests?state=pending' });
   });

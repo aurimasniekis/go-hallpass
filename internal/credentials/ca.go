@@ -129,7 +129,7 @@ func (svc *Service) BindRoleCert(ctx context.Context, actor audit.Actor, b CertB
 	}
 	v := &apperr.Validation{}
 	if b.TTL < 30*time.Second || b.TTL > time.Hour {
-		v.Add("ttl", "must be between 30s and 1h; sessions are ended by Hallpass, not by certificate expiry")
+		v.Add("ttl", "must be between 30s and 1h; sessions are ended by HallPass, not by certificate expiry")
 	}
 	b.Principals = slices.Compact(slices.Sorted(slices.Values(b.Principals)))
 	if len(b.Principals) == 0 || len(b.Principals) > 16 {

@@ -1,19 +1,19 @@
 # FAQ
 
-### Is Hallpass ready for production?
+### Is HallPass ready for production?
 
 No. It is pre-release: no version has been tagged and the release gates are not met. See the
 [security model](/security/#release-status).
 
 ### Can the agent see the server's IP address or credentials?
 
-Not from Hallpass. Agents see aliases, role names and descriptions only, and Hallpass logs in with credentials it keeps
+Not from HallPass. Agents see aliases, role names and descriptions only, and HallPass logs in with credentials it keeps
 to itself. But once a shell is open, the destination can print anything it knows, including its own IP addresses or
-application secrets. Hallpass does not redact session content.
+application secrets. HallPass does not redact session content.
 
-### Does Hallpass restrict which commands an agent may run?
+### Does HallPass restrict which commands an agent may run?
 
-No. Capabilities choose between shell, exec and PTY, not commands. Command allowlists are easy to escape, so Hallpass
+No. Capabilities choose between shell, exec and PTY, not commands. Command allowlists are easy to escape, so HallPass
 does not pretend to offer them. Restrict commands on the destination: a dedicated account per role, `command=` in
 `authorized_keys`, `ForceCommand`, narrow `sudoers`. See [destination hardening](/destinations/hardening).
 
@@ -58,11 +58,11 @@ that covers the server and role. Administrators have no implicit approval author
 Nothing changes for the request. It stays pending until someone decides in the web console, or it expires. A failed
 notification never approves anything.
 
-### Does Hallpass support Windows destinations?
+### Does HallPass support Windows destinations?
 
 Not in v1. Command encoding assumes POSIX shells.
 
-### Can I run two Hallpass instances for high availability?
+### Can I run two HallPass instances for high availability?
 
 No. One active instance per data directory, and the data directory must be on a local filesystem. Recovery is a
 restore onto a cold standby. See [Backup and restore](/operators/backup).
@@ -74,4 +74,4 @@ copies, separately from data backups. See [Keys and the KEK](/operators/keys).
 
 ### What is the license?
 
-Hallpass is licensed under the Apache License 2.0.
+HallPass is licensed under the Apache License 2.0.

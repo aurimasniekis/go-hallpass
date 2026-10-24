@@ -66,7 +66,7 @@ func (svc *Service) ReauthTOTP(ctx context.Context, p *Principal, code string, m
 		return "", ErrTOTPStepUpNotAllowed
 	}
 	if !p.Operator.MFAEnrolled {
-		return "", apperr.New(apperr.CodePrecondition, "enroll TOTP in Hallpass to re-authenticate")
+		return "", apperr.New(apperr.CodePrecondition, "enroll TOTP in HallPass to re-authenticate")
 	}
 	ok, _, err := svc.verifySecondFactor(ctx, p.Operator.ID, code, meta.IP, "stepup")
 	if err != nil {

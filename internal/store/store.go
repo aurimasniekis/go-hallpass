@@ -56,7 +56,7 @@ type Options struct {
 	migrations fs.FS
 }
 
-// Store is an open Hallpass database owned exclusively by this process.
+// Store is an open HallPass database owned exclusively by this process.
 type Store struct {
 	dir    string
 	lock   *Lock

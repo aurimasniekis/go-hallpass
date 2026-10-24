@@ -22,7 +22,7 @@ import (
 )
 
 // bundleManifest describes a ciphertext export bundle. The segment files are the HPREC1 files exactly as stored:
-// encrypted, with their data keys wrapped by the gateway's recording key, so reading them needs a Hallpass keyring
+// encrypted, with their data keys wrapped by the gateway's recording key, so reading them needs a HallPass keyring
 // (the KEK). The hashes let a recipient check integrity without keys.
 type bundleManifest struct {
 	Format     string          `json:"format"` // "hallpass-export-bundle/v1"

@@ -42,11 +42,11 @@ Signs: unexpected requests or reasons, access from unusual source addresses, or 
 ## Suspected gateway compromise (§18.13)
 
 Assume an attacker with the running process or the host plus the KEK can read all recordings and credentials and act
-as Hallpass toward every destination ([../security-guarantees.md](../security-guarantees.md)).
+as HallPass toward every destination ([../security-guarantees.md](../security-guarantees.md)).
 
 1. Enable lockdown, if the API is still trustworthy enough to use.
 2. Isolate the host at the network level, keeping its disk for forensics.
-3. On every destination, remove Hallpass `authorized_keys` lines and distrust Hallpass user CAs. These credentials
+3. On every destination, remove HallPass `authorized_keys` lines and distrust HallPass user CAs. These credentials
    must be considered stolen.
 4. Build a clean host. Create a **new KEK** (`hallpass keys init-kek`) and restore the last backup taken before the
    compromise (`hallpass restore`). Because a restore needs the backup's own KEK, first rewrap it under the new KEK
@@ -59,7 +59,7 @@ as Hallpass toward every destination ([../security-guarantees.md](../security-gu
 
 ## Destination host key changed
 
-Signs: `exec`/`connect` fail with exit 88, and a host-key alert is recorded for the server. Hallpass never sends
+Signs: `exec`/`connect` fail with exit 88, and a host-key alert is recorded for the server. HallPass never sends
 credentials to a host whose key does not match.
 
 1. Confirm out of band (console, cloud provider, the host's own administrators) whether the key change is expected.
@@ -85,7 +85,7 @@ refused; established channels continue unless their recording fails, and mandato
 
 Signs: startup refused with `storage corrupt …`, the daily integrity check failing, or readiness `failed`.
 
-1. Stop Hallpass. Keep the data directory as it is for analysis.
+1. Stop HallPass. Keep the data directory as it is for analysis.
 2. Run `hallpass verify` and keep its report.
 3. Restore the latest backup that passes verification (`hallpass backup verify`, then `hallpass restore`), start, and
    let startup reconciliation run.
@@ -104,7 +104,7 @@ Without the KEK, encrypted data (login credentials, recordings, sealed fields) c
 
 ## Locked out of administration (§18.16)
 
-1. On the host, as the service account: stop Hallpass, then run
+1. On the host, as the service account: stop HallPass, then run
    `hallpass admin recover --email EMAIL` or `hallpass admin recover --email EMAIL --new-admin`. This needs the
    data-directory lock and the KEK.
 2. Use the single-use recovery login within 30 minutes and fix the cause (re-enroll MFA, re-enable an account, repair

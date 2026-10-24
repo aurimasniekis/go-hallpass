@@ -114,7 +114,7 @@ func TestRenderContent(t *testing.T) {
 	}
 	checkRendered(t, r, false)
 	for _, want := range []string{
-		"Hallpass access request", "Agent: build-bot (", "Server: db-prod — Primary database", "Role: readonly — Read-only shell",
+		"HallPass access request", "Agent: build-bot (", "Server: db-prod — Primary database", "Role: readonly — Read-only shell",
 		"Capabilities: shell, exec", "Requested duration: 1h", "Request expires: 2026-10-23 12:30 UTC",
 		"Agent-provided reason (untrusted):\nping @" + wj + "admin see https:/" + wj + "/" + wj + "evil.example /" + wj + "link X",
 		"Request " + m.RequestID, "Details: https://hallpass.example/requests/x",

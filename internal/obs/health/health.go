@@ -1,4 +1,4 @@
-// Package health implements /healthz (liveness) and /readyz (readiness) for Hallpass (HP-OPS-001, PLAN §4.5).
+// Package health implements /healthz (liveness) and /readyz (readiness) for HallPass (HP-OPS-001, PLAN §4.5).
 //
 // Readiness is the aggregate of named checks, each run with its own timeout. A failing check either fails
 // readiness (Critical) or degrades it (Degrading). Results are cached for a short TTL so the unauthenticated

@@ -213,7 +213,7 @@ function TrackWarnings({ track }: { track: Track }) {
           type="info"
           showIcon
           title={`${String(track.inputRecords)} keyboard input record(s) are not replayed`}
-          description="Recorded input may contain secrets such as passwords (HP-REC-005). Hallpass does not redact secrets."
+          description="Recorded input may contain secrets such as passwords (HP-REC-005). HallPass does not redact secrets."
         />
       ) : null}
       {track.unknownRecords + track.invalidRecords > 0 ? (

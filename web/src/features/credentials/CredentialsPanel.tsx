@@ -97,7 +97,7 @@ function RevokeButton({ cred, roleId }: { cred: LoginCredential; roleId: string 
       description={
         <>
           <p>
-            Hallpass stops using this key immediately. If it is the active key, connections for this role fail
+            HallPass stops using this key immediately. If it is the active key, connections for this role fail
             until another credential is activated. Also remove its authorized_keys line from the destination.
           </p>
           <Fingerprint value={cred.fingerprint} />
@@ -155,7 +155,7 @@ export function CredentialsPanel({ roleId }: { roleId: string }) {
             title="Generate a new login key"
             confirmLabel="Generate"
             buttonProps={{ size: 'small', type: 'primary' }}
-            description="Hallpass creates a new key pair and keeps the private key encrypted. The key starts as pending: install its authorized_keys line on the destination, probe, then activate."
+            description="HallPass creates a new key pair and keeps the private key encrypted. The key starts as pending: install its authorized_keys line on the destination, probe, then activate."
             onConfirm={({ idempotencyKey }) =>
               api.call('post', '/api/v1/roles/{id}/credentials:generate', {
                 path: { id: roleId },
@@ -304,7 +304,7 @@ export function CredentialsPanel({ roleId }: { roleId: string }) {
             type="warning"
             showIcon
             style={{ marginBottom: 16 }}
-            title="Prefer generating keys in Hallpass"
+            title="Prefer generating keys in HallPass"
             description="An imported key already exists elsewhere. It is encrypted at rest after import and never shown again."
           />
           <Form.Item

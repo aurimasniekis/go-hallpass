@@ -92,7 +92,7 @@ function IntegrationCard({ integration, onEdit }: { integration: Integration; on
         <span>
           {integration.provider === 'slack'
             ? 'Use this URL as the Interactivity Request URL and the slash-command URL of the Slack app.'
-            : 'Hallpass registers this URL with Telegram (setWebhook) when an enabled integration is saved.'}{' '}
+            : 'HallPass registers this URL with Telegram (setWebhook) when an enabled integration is saved.'}{' '}
           Stored secrets:{' '}
           {integration.secrets_set.length ? integration.secrets_set.join(', ') : <strong>none</strong>}.
         </span>

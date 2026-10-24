@@ -155,7 +155,7 @@ export function RoleLoginSetup({
           ) : !focus ? (
             <div>
               <p className="hp-card-intro">
-                Hallpass generates a key pair and keeps the private key encrypted; you install only the public
+                HallPass generates a key pair and keeps the private key encrypted; you install only the public
                 line on the destination.
               </p>
               <ConfirmAction<LoginCredential>

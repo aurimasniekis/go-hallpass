@@ -13,7 +13,7 @@ import (
 )
 
 // GenerateKeyFile creates a new Ed25519 collector key at path (OpenSSH private key format, mode 0600). It refuses to
-// overwrite an existing file. It returns the public key in authorized_keys format for enrollment in Hallpass.
+// overwrite an existing file. It returns the public key in authorized_keys format for enrollment in HallPass.
 func GenerateKeyFile(path, comment string) (string, error) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

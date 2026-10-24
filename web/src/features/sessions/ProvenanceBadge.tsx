@@ -4,7 +4,7 @@ import { StatusBadge } from '../../ds/StatusBadge';
 import type { CommandProvenance } from './replay/track';
 
 /**
- * Command provenance labels (HP-REC-006). Hallpass never claims a command was verified: the gateway can
+ * Command provenance labels (HP-REC-006). HallPass never claims a command was verified: the gateway can
  * only say what it was asked to run (`captured`), what a destination collector reported
  * (`destination-audit`, unverified) or what was derived from keystrokes/output (`inferred`).
  */
@@ -16,7 +16,7 @@ export const PROVENANCE: Record<CommandProvenance, { label: string; title: strin
   'destination-audit': {
     label: 'Destination-reported, unverified',
     title:
-      'Reported by a collector on the destination host. Hallpass cannot verify it; a compromised host can lie.',
+      'Reported by a collector on the destination host. HallPass cannot verify it; a compromised host can lie.',
   },
   inferred: { label: 'Inferred', title: 'Derived from keystrokes or output; may be wrong.' },
 };

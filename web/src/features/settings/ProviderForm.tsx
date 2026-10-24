@@ -181,12 +181,12 @@ export function ProviderFormDrawer({
         <Form.Item
           label="Step-up fallback"
           name="stepup_fallback"
-          extra="When the IdP cannot prove a fresh login (no auth_time), allow confirming with the operator's Hallpass TOTP."
+          extra="When the IdP cannot prove a fresh login (no auth_time), allow confirming with the operator's HallPass TOTP."
         >
           <Radio.Group
             options={[
               { value: 'none', label: 'None (refuse)' },
-              { value: 'local_totp', label: 'Hallpass TOTP' },
+              { value: 'local_totp', label: 'HallPass TOTP' },
             ]}
           />
         </Form.Item>

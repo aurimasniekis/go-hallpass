@@ -1,4 +1,4 @@
-# Hallpass example configuration. Secret-free: the KEK and all credentials live outside this file.
+# HallPass example configuration. Secret-free: the KEK and all credentials live outside this file.
 # Every key can be overridden with HALLPASS_<PATH> environment variables, e.g. HALLPASS_SSH_LISTEN=":22".
 # See docs/operator/configuration.md for every option.
 

@@ -2,7 +2,7 @@
   <img src="site/public/logo.svg" alt="" width="72" height="72">
 </p>
 
-<h1 align="center">Hallpass</h1>
+<h1 align="center">HallPass</h1>
 
 <p align="center">
   <strong>A terminating SSH gateway for AI agents.</strong><br>
@@ -24,7 +24,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="site/public/screenshots/dashboard-dark.png">
-  <img src="site/public/screenshots/dashboard-light.png" alt="Hallpass dashboard with a pending request, active grants and a live session">
+  <img src="site/public/screenshots/dashboard-light.png" alt="HallPass dashboard with a pending request, active grants and a live session">
 </picture>
 
 ## Why
@@ -33,15 +33,15 @@ The quickest way to let an AI agent work on a server is to put its key in `autho
 on every server it was copied to, for any task, without anyone's approval, and leaves little trace of what it did.
 Anything the agent can read can also end up in a prompt or a log.
 
-Hallpass sits in between. The agent keeps **only its own key** and talks to Hallpass with plain `ssh`. Policy and a
-human decide what it may use and for how long. Hallpass logs in to the destination with a credential the agent never
+HallPass sits in between. The agent keeps **only its own key** and talks to HallPass with plain `ssh`. Policy and a
+human decide what it may use and for how long. HallPass logs in to the destination with a credential the agent never
 sees, records the session, and cuts it off when the grant ends.
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    A["AI agent<br/>(own SSH key)"] -- "ssh, agent key" --> H["Hallpass<br/>policy · grants · recording"]
+    A["AI agent<br/>(own SSH key)"] -- "ssh, agent key" --> H["HallPass<br/>policy · grants · recording"]
     H -- "ssh, managed key or<br/>short-lived certificate" --> D["Destination<br/>(pinned host key)"]
     O["Operator<br/>web · Slack · Telegram"] -- "approve / deny / revoke" --> H
 ```
@@ -50,11 +50,11 @@ flowchart LR
 2. The agent runs `ssh center list`, `ssh center exec web1 -- uptime`, `ssh -t center connect web1`.
 3. Policy decides per agent, server and role: hidden, requestable (a human approves), or approved automatically up to
    a limit.
-4. Hallpass opens the destination session itself, records it, and ends it when the grant ends.
+4. HallPass opens the destination session itself, records it, and ends it when the grant ends.
 
 **Key features**
 
-- **No credentials for agents.** Hallpass keeps destination login keys encrypted, or signs OpenSSH certificates that
+- **No credentials for agents.** HallPass keeps destination login keys encrypted, or signs OpenSSH certificates that
   live about two minutes. Destination host keys are pinned; there is no trust on first use.
 - **Default-deny policy** by agent, server and role groups or labels, with an effective-access preview.
 - **Human approval** in the web console, Slack or Telegram. A chat button is never authorization by itself: the
@@ -69,7 +69,7 @@ flowchart LR
 - **One Go binary** with the web UI embedded and SQLite storage. Backup and restore, integrity anchors, Prometheus
   metrics, health checks and optional OpenTelemetry tracing.
 
-Hallpass is **not a sandbox**: an approved shell can do what its remote account can do. Pair it with
+HallPass is **not a sandbox**: an approved shell can do what its remote account can do. Pair it with
 [destination hardening](docs/destination/hardening.md), and run it like a bastion host, because it sees every session
 in plaintext.
 
@@ -178,7 +178,7 @@ To work on the website: `cd site && pnpm install && pnpm dev`.
 
 ## Security
 
-Read [docs/security-guarantees.md](docs/security-guarantees.md) before deploying. It lists what Hallpass guarantees,
+Read [docs/security-guarantees.md](docs/security-guarantees.md) before deploying. It lists what HallPass guarantees,
 what it explicitly does not, and which guarantees are only implemented versus tested. None is externally verified
 yet. Report vulnerabilities privately; see [SECURITY.md](SECURITY.md).
 

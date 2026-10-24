@@ -1,4 +1,4 @@
-// Package backup creates, verifies and restores consistent Hallpass backups and exports integrity-chain anchors
+// Package backup creates, verifies and restores consistent HallPass backups and exports integrity-chain anchors
 // (PLAN §13.8, §13.10, §18.5–18.16, ADR-0023, HP-OPS-003/004, HP-CRY-007/008/009).
 //
 // A backup directory holds a VACUUM INTO copy of the database, the recording segment files the snapshot refers to
@@ -32,7 +32,7 @@ import (
 
 // Backup layout and manifest constants.
 const (
-	// Format identifies a Hallpass backup manifest.
+	// Format identifies a HallPass backup manifest.
 	Format = "hallpass-backup"
 	// FormatVersion is the manifest version written and accepted by this package.
 	FormatVersion = 1

@@ -109,7 +109,7 @@ describe('login modes (HP-UI-006)', () => {
       jsonResponse(200, { mfa_pending: false, must_enroll: true, me: makeMe({ csrf: 'c' }) }),
       jsonResponse(200, {
         secret: 'JBSWY3DPEHPK3PXP',
-        uri: 'otpauth://totp/Hallpass:ada?secret=JBSWY3DPEHPK3PXP',
+        uri: 'otpauth://totp/HallPass:ada?secret=JBSWY3DPEHPK3PXP',
       }),
     );
     renderLogin(config(true, []), client);

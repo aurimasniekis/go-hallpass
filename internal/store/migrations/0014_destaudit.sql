@@ -1,5 +1,5 @@
 -- 0014_destaudit: optional destination-side audit collectors, signed batches, login bindings and ingested exec records
--- (WP25, HP-REC-012). Ingested records are destination-reported: Hallpass verifies the collector signature and the
+-- (WP25, HP-REC-012). Ingested records are destination-reported: HallPass verifies the collector signature and the
 -- correlation with its own session state, never the truth of the record itself.
 
 -- +goose Up

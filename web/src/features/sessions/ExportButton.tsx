@@ -80,7 +80,7 @@ export function ExportButton({ sessionId }: { sessionId: string }) {
           <>
             <p>
               The file contains the <strong>decrypted</strong> terminal output (and input, if it was recorded)
-              of every channel in this session. It may include secrets. Hallpass does not redact it.
+              of every channel in this session. It may include secrets. HallPass does not redact it.
             </p>
             <p>The export is recorded in the audit log. You may be asked to confirm your identity.</p>
           </>

@@ -83,7 +83,7 @@ export function AppShell({ me }: { me: Me }) {
     if (idpLogout) {
       // RP-initiated logout is optional and not a global logout (HP-OIDC-015): offer it as an extra step.
       modal.confirm({
-        title: 'Signed out of Hallpass',
+        title: 'Signed out of HallPass',
         content: 'You are still signed in at your identity provider. Sign out there too?',
         okText: 'Sign out at provider',
         cancelText: 'Not now',
@@ -108,7 +108,7 @@ export function AppShell({ me }: { me: Me }) {
       >
         <div className="hp-shell-brand">
           <Logo size={22} />
-          Hallpass
+          HallPass
         </div>
         <nav aria-label="Main">
           <Menu

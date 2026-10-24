@@ -1,4 +1,4 @@
-# Hallpass — Implementation Plan
+# HallPass — Implementation Plan
 
 > **Status:** active execution plan. Created at WP00 on 2026-10-23.
 > The product contract is `docs/GOAL.md`, and when the two disagree, GOAL.md wins. Fix this plan to match and record the change in DECISIONS.md.
@@ -14,7 +14,7 @@ Contents: 1 Summary · 2 Requirements · 3 Architecture · 4 SQLite · 5 Domain/
 
 ## 1. Summary and assumptions
 
-Hallpass is a single Go binary (`hallpass`) that runs a terminating SSH gateway for AI agents, an operator web console
+HallPass is a single Go binary (`hallpass`) that runs a terminating SSH gateway for AI agents, an operator web console
 and REST API, approval integrations (web/Slack/Telegram), and an encrypted recorder. State lives in a local SQLite
 database. High-volume session content lives in encrypted segment files. Exactly one process owns a data
 directory at a time. The design is a **modular monolith**: internal packages with explicit interfaces, one process,
@@ -32,7 +32,7 @@ R-01 to R-12 in DECISIONS.md §2 and summarized in §20 here.
 | A-3 | Node 24 LTS + pnpm (via corepack) for the frontend. | Adjust in WP19. |
 | A-4 | Destinations run OpenSSH `sshd` ≥ 8.2 on POSIX systems with a POSIX-compatible login shell. | Windows/other sshd are unsupported in v1. |
 | A-5 | Deployments are Linux (amd64/arm64) on local block storage (ext4/xfs/btrfs/zfs). macOS is supported for development only. | Storage checks (HP-DB-007) are Linux-specific. |
-| A-6 | Hallpass's web UI sits behind HTTPS, either native TLS or a TLS-terminating reverse proxy with configured `trusted_proxies`. | Production config refuses an HTTP-only public base URL. |
+| A-6 | HallPass's web UI sits behind HTTPS, either native TLS or a TLS-terminating reverse proxy with configured `trusted_proxies`. | Production config refuses an HTTP-only public base URL. |
 | A-7 | Expected scale for v1 design: ≤ 1,000 agents, ≤ 2,000 servers, ≤ 500 concurrently active channels per instance. | Larger scale needs new measurements, not claims. |
 | A-8 | Operators can provision a KEK file/secret on the host and back it up separately. | Without it, production mode will not start (by design). |
 | A-9 | Slack and Telegram are reachable from the gateway for outbound API calls, and the gateway's webhook endpoints are reachable from them (or the integration stays disabled). | Approvals fall back to web. |
@@ -541,7 +541,7 @@ External anchoring covers a key-holding attacker, §13.8).
 ### 7.1 Invocation model
 
 OpenSSH sends either a `shell` request (`ssh center`, `ssh -t center`) or an `exec` request carrying a single string
-(`ssh center <words…>`; the client joins argv with spaces). Hallpass parses that string with its own tokenizer.
+(`ssh center <words…>`; the client joins argv with spaces). HallPass parses that string with its own tokenizer.
 **It never passes the gateway-command portion to a shell.**
 
 ### 7.2 Tokenizer (HP-SSH-016)
@@ -877,7 +877,7 @@ A token never authorizes by itself. The clicking provider user must map to an op
 - Verification order: body size ≤ 64 KiB → `X-Slack-Request-Timestamp` within ±300 s → compute
   `v0=HMAC_SHA256(signing_secret, "v0:" + ts + ":" + raw_body)` → constant-time compare with `X-Slack-Signature` →
   replay cache insert of `(slack, sha256(signature))` with a 10 min TTL (DB table, so it survives restart) → parse.
-- Identity: `team.id` + `user.id` → `provider_links`. Unlinked user → ephemeral "your Slack account is not linked to a Hallpass approver".
+- Identity: `team.id` + `user.id` → `provider_links`. Unlinked user → ephemeral "your Slack account is not linked to a HallPass approver".
 - Respond within 3 s: ack immediately, decide synchronously (fast tx), update the message via `response_url` or outbox.
 
 ### 10.5 Telegram (WP18, HP-NTF-006)
@@ -915,7 +915,7 @@ polite message). Limits are configurable.
 
 ### 11.2 Destination host identities (HP-SRV-004..007)
 
-- Enroll by paste (operator supplies a known_hosts or `.pub` line), or by scan: Hallpass dials through the egress guard, collects
+- Enroll by paste (operator supplies a known_hosts or `.pub` line), or by scan: HallPass dials through the egress guard, collects
   offered host keys (one handshake per algorithm), and shows fingerprints as `pending`. An operator confirms each against an
   out-of-band source, and the identity becomes `active` (audited with the confirmer). The UI warns that scan-confirm is only as good as the
   out-of-band check.
@@ -933,7 +933,7 @@ polite message). Limits are configurable.
 - **Default: managed Ed25519 key per server-role binding.** Generate with `ed25519.GenerateKey(crypto/rand)` and seal the private key
   with the `credential` purpose key (AAD = `login_credentials|private_enc|<id>|<kid>`). The UI shows the public key and
   `restrict,pty,from="<egress CIDRs>" ssh-ed25519 AAAA… hallpass:<server>/<role>` (drop `pty` if the role lacks the capability).
-- Lifecycle: `generate` → `pending` → `probe` (Hallpass connects with the pending key, verifies host identity and
+- Lifecycle: `generate` → `pending` → `probe` (HallPass connects with the pending key, verifies host identity and
   authentication, then closes without running anything) → `activate` (the previous active one becomes `retiring` with `retire_after`, default 24 h)
   → automatic `retired` → (operator removes it from authorized_keys). `revoke` is immediate and terminates channels using it.
   Only one `active` per role (partial unique index). New channels always use `active`.
@@ -1022,12 +1022,12 @@ that is valid regardless of mode.
   `allow_private_network=true` (explicit, audited). An optional `ca_bundle_pem` adds trust roots and never disables verification.
 - Step-up: `prompt=login&max_age=0` (purpose `stepup`). Accept if `auth_time` ≥ request time - skew. If `acr_values` are configured, verify
   `acr`. If the provider omits `auth_time`, step-up fails unless `stepup.fallback = local_totp` is configured. Then the operator must have
-  TOTP enrolled in Hallpass.
-- Test login: the admin starts the purpose `test` flow from settings, completes the IdP login, and Hallpass shows the claims, the mapping outcome and the
+  TOTP enrolled in HallPass.
+- Test login: the admin starts the purpose `test` flow from settings, completes the IdP login, and HallPass shows the claims, the mapping outcome and the
   role result without creating a session. Stores `test_login_ok_at` (HP-OIDC-014).
 - Outage: discovery/JWKS fetch failures → login error page "identity provider unavailable". Cached JWKS is used for in-flight
   callbacks. Existing sessions are unaffected (HP-OIDC-012).
-- Logout: revoke the Hallpass session. If `end_session_endpoint` exists and is enabled, redirect with `id_token_hint` omitted
+- Logout: revoke the HallPass session. If `end_session_endpoint` exists and is enabled, redirect with `id_token_hint` omitted
   (not retained) and `client_id` + `post_logout_redirect_uri`.
 
 ### 12.5 RBAC matrix (HP-RBAC-*)
@@ -1157,7 +1157,7 @@ writes `verified_at`/`verify_result`.
 
 ### 13.8 Tamper evidence limits and external anchoring (HP-CRY-008)
 
-An attacker with the KEK and write access can forge consistent segments, chain entries and MACs. Hallpass therefore offers
+An attacker with the KEK and write access can forge consistent segments, chain entries and MACs. HallPass therefore offers
 `hallpass anchors export --since <seq>`, which emits chain heads (`seq`, `hash`, timestamp) for shipping to external append-only
 storage (object lock/WORM bucket, transparency log, or a separate log host). A later verification compares local chain heads to the anchors.
 This detects rewriting of history **before** the latest exported anchor. It cannot protect data written after compromise or prevent deletion of
@@ -1293,7 +1293,7 @@ Rules: `internal/` only. `hprec`, `grammar`, `policy` have no I/O dependencies (
 ## 16. Threat model
 
 See `docs/THREAT_MODEL.md` (assets, trust boundaries TB-1..TB-8, adversaries, threats T-01..T-22 covering all 17 brief scenarios
-with requirement-ID mitigations, assumptions, residual risks). Key statement: **Hallpass is a high-value trusted component
+with requirement-ID mitigations, assumptions, residual risks). Key statement: **HallPass is a high-value trusted component
 that can access plaintext proxied session data. Its compromise is equivalent to compromise of all destination access it brokers
 during the compromise window.**
 
@@ -1551,8 +1551,8 @@ Ordering is dependency-driven. Each WP ends with a **local commit** (message via
 #### WP25 — Optional destination-side audit integration
 - **Depends:** WP12, WP21. **Files:** `internal/destaudit`, `docs/destination/*`.
 - **Design:** a small collector mode (`hallpass collector`, separate binary target) on destinations reads auditd `EXECVE` records (or
-  journald), tags them with `auid`/`ses` and the Hallpass key ID from the SSH certificate or the login key comment, signs batches with a
-  per-destination Ed25519 key enrolled in Hallpass, and posts to `/api/v1/destaudit/ingest`. Hallpass correlates by remote user + time window +
+  journald), tags them with `auid`/`ses` and the HallPass key ID from the SSH certificate or the login key comment, signs batches with a
+  per-destination Ed25519 key enrolled in HallPass, and posts to `/api/v1/destaudit/ingest`. HallPass correlates by remote user + time window +
   session markers (`HALLPASS_SESSION` env var allowlisted on destination `AcceptEnv`), and labels results `destination-audit` provenance with
   confidence. Docs explain limits: shell built-ins aren't exec'd, history files are user-writable, kernel audit sees exec but not intent,
   a root user can tamper with destination logs.
@@ -1798,7 +1798,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-REC-003` Idempotent events — WP12 — evidence: U, I — ◐ partial: recorder has no retry path (append failure fails closed); deterministic idempotency keys not implemented
 - [x] `HP-REC-004` Capture fidelity — WP12 — evidence: O, I — ✅ tested: recorder round-trip (exec cmd, stdout/stderr, PTY output, resize, signal, exit)
 - [ ] `HP-REC-005` Input recording opt-in — WP12 — evidence: I, D — ◐ partial: input recording off by default, per-role opt-in tested; UI warning pending WP21
-- [x] `HP-REC-006` No false command claims — WP21 — evidence: E, D — ✅ tested: Hallpass never infers commands from keystrokes; exec commands are labeled captured (from the exec request), destination reports are labeled unverified, and nothing is labeled verified (timeline describe tests, replay tests); docs and guarantees page state no secret redaction
+- [x] `HP-REC-006` No false command claims — WP21 — evidence: E, D — ✅ tested: HallPass never infers commands from keystrokes; exec commands are labeled captured (from the exec request), destination reports are labeled unverified, and nothing is labeled verified (timeline describe tests, replay tests); docs and guarantees page state no secret redaction
 - [x] `HP-REC-007` Mandatory recording fail-closed — WP12 — evidence: FI, O — ✅ tested: segment established before forwarding; failure fails closed (TestRecorderFailureFailsClosed, OpenSSH)
 - [x] `HP-REC-008` Durability guarantee — WP12 — evidence: FI, I — ✅ tested: group commit ≤250 ms / strict mode; crash-recovery tests; fault injection pending WP26
 - [x] `HP-REC-009` Accurate incomplete marking — WP12 — evidence: FI, I — ✅ tested: TestReconcileStartup, TestReconcileUnrecoverableAndVerifyMissing

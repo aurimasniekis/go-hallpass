@@ -100,7 +100,7 @@ export function DestinationRecords({ sessionId }: { sessionId: string }) {
   return (
     <Space orientation="vertical" size={12} style={{ width: '100%' }}>
       <p className="hp-session-timeline__meta" style={{ margin: 0 }}>
-        Reported by a collector on the destination host. Hallpass cannot verify these reports. Opening a
+        Reported by a collector on the destination host. HallPass cannot verify these reports. Opening a
         command is recorded in the audit log.
       </p>
       <DataTable<DestinationRecord>

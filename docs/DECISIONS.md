@@ -1,4 +1,4 @@
-# Hallpass — Architectural Decisions
+# HallPass — Architectural Decisions
 
 > ADR log plus unresolved review items. Format per ADR: **Status · Context · Decision · Alternatives · Consequences**.
 > Statuses: `accepted`, `proposed`, `superseded by ADR-NNNN`, `withdrawn`. ADR numbers are never reused.
@@ -69,10 +69,10 @@
 
 ### ADR-0006 — Destination login: managed Ed25519 key per server-role binding (default), OpenSSH user certificates (alternative)
 - **Status:** accepted
-- **Context:** Hallpass needs gateway-controlled login credentials that agents never see, with safe rotation.
-- **Decision:** Default: a distinct Ed25519 key per server-role binding, generated in Hallpass, sealed at rest, with the public key shown as a
+- **Context:** HallPass needs gateway-controlled login credentials that agents never see, with safe rotation.
+- **Decision:** Default: a distinct Ed25519 key per server-role binding, generated in HallPass, sealed at rest, with the public key shown as a
   `restrict,from="<egress>"` authorized_keys line. Rotation `pending → probe → active → retiring → retired`, with immediate revocation.
-  Alternative: a Hallpass user CA signing per-connection certificates (TTL 120 s, explicit principals, minimal extensions) behind a `Signer`
+  Alternative: a HallPass user CA signing per-connection certificates (TTL 120 s, explicit principals, minimal extensions) behind a `Signer`
   interface. Host keys, login credentials and CAs are separate types, tables, APIs and UI pages. Strict host verification, with
   `InsecureIgnoreHostKey` banned by lint.
 - **Why the per-binding key is the default:** it works with any stock sshd without configuration beyond authorized_keys, gives
@@ -324,10 +324,10 @@
 - **Status:** accepted (WP14). Not security-relevant: each item is stricter than, or equal to, PLAN §12.4.
 - **Decision:**
   - **Library pieces:** `coreos/go-oidc/v3` for discovery and claim verification, `x/oauth2` for the code exchange with
-    PKCE, and a Hallpass key set built on `go-jose/v4`. go-oidc's remote key set refetches on every unknown `kid`; HP-OIDC-004
+    PKCE, and a HallPass key set built on `go-jose/v4`. go-oidc's remote key set refetches on every unknown `kid`; HP-OIDC-004
     requires rate limiting (one refetch per 10 s, cached keys stay usable during outages). The key set accepts only RSA
     ≥ 2048 bits, ECDSA P-256 and Ed25519 keys.
-  - **Clock skew:** go-oidc checks `exp` without leeway. Hallpass verifies with the clock shifted back 60 s, which gives
+  - **Clock skew:** go-oidc checks `exp` without leeway. HallPass verifies with the clock shifted back 60 s, which gives
     60 s skew on `exp`, and checks `iat` and `nbf` itself with ±60 s, tighter than go-oidc's 5-minute `nbf` leeway.
   - **IdP requests:**
     - no HTTP proxy and no redirect following;
@@ -602,7 +602,7 @@
      inside the 5 s overlap window. Until the clock catches up, changes from before the step are re-read on every
      pass; handling them is idempotent.
   2. Grant start, expiry and token windows stay wall-clock UTC, as specified. A backward step of N lengthens the real
-     duration of active grants by N, and a forward step shortens them. Hallpass does not use the monotonic clock for
+     duration of active grants by N, and a forward step shortens them. HallPass does not use the monotonic clock for
      expiry, because grants must survive restarts and be comparable across components.
   3. Operators must run NTP with slewing (no large steps); `docs/operator/install.md` states the requirement.
 - **Consequences:** G-4 holds with the documented clock assumption; under a backward step, the 5 s revocation
@@ -614,7 +614,7 @@
   flagged as a weakening. The WP20 frontend review found the contradiction.
 - **Decision:** `GET /access-sessions/{id}/export` defaults to `format=bundle`: a tar with `manifest.json` (segment
   states, file SHA-256, header hash, frames digest, key ID) and the stored HPREC1 files, never decrypted. Reading
-  them needs a Hallpass keyring. `format=plaintext` keeps the decrypted JSON. Both formats need `recording.export`,
+  them needs a HallPass keyring. `format=plaintext` keeps the decrypted JSON. Both formats need `recording.export`,
   recent authentication and MFA, and are audited as `recording.exported` with the format. The UI offers the bundle
   first and the decrypted export as a separate, warned action.
 - **Consequences:** HP-REC-014 matches GOAL. ADR-0036 item 2 is superseded where it describes the export format.
@@ -770,7 +770,7 @@
 ### ADR-0045 — Apache-2.0 license, backdated to the first commit
 - **Status:** accepted (operator decision, 2026-10-24). Resolves R-01. Not security-relevant.
 - **Decision:**
-  - Hallpass is licensed under Apache-2.0. `LICENSE` holds the canonical text, unmodified. `NOTICE` holds the
+  - HallPass is licensed under Apache-2.0. `LICENSE` holds the canonical text, unmodified. `NOTICE` holds the
     copyright line.
   - At the operator's request, history was rewritten (`git filter-branch --index-filter`) so that `LICENSE` exists
     in every commit from the first one. Trees, authors, author and committer dates and messages are otherwise
@@ -796,7 +796,7 @@
 | R-05 | **Default global grant-duration ceiling.** | 24 h (matches the largest preset). Roles default to a 6 h max and a 30 m default. | — |
 | R-06 | **SFTP/SCP subsystem** as a separately authorized capability. | Out of v1. A future design needs a separate capability, recording of file metadata and policy. | — |
 | R-07 | **Log schema**: ECS-aligned names vs a custom namespace. | ECS-aligned core fields plus a `hallpass.*` namespace. | WP02 |
-| R-08 | **Trademark/name/domain check** for "Hallpass". | Not verified. The operator should check before public release. | Public release |
+| R-08 | **Trademark/name/domain check** for "HallPass". | Not verified. The operator should check before public release. | Public release |
 | R-09 | **Self-approval default.** | Prohibited by default for agent owners. Configurable. | WP08 |
 | R-10 | **Chat approvals for privileged roles.** | Allowed by default, with a per-role `approval_channels` restriction (e.g. web-only for `administrator`-class roles), and optionally require that the approver completed web MFA within N hours. | WP16 |
 | R-11 | **CSP for CSS-in-JS** (Ant Design). | Try nonce or static extraction in WP19. Otherwise accept `style-src 'unsafe-inline'` with strict `script-src`. | WP19 |

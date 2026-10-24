@@ -73,7 +73,7 @@ truncation.
 
 ## Crash reconciliation
 
-At startup, before accepting connections, Hallpass:
+At startup, before accepting connections, HallPass:
 
 1. Verifies final files whose row is still `open` and records them as `finalized`. This covers a crash between the
    rename and the database update. A final file that does not verify (no final frame, a failed frame, or a header that is
@@ -93,7 +93,7 @@ At startup, before accepting connections, Hallpass:
    `verify` reports it.
 
 Quarantined files are listed in the `quarantine_files` table with a reason. Review them and delete them manually.
-Hallpass never deletes quarantined data.
+HallPass never deletes quarantined data.
 
 ## Export
 

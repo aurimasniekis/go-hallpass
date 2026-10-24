@@ -1,6 +1,6 @@
 //go:build oidcinterop
 
-// Package oidcinterop runs Hallpass's OIDC SSO against real identity providers (Keycloak and Dex in Docker), driving
+// Package oidcinterop runs HallPass's OIDC SSO against real identity providers (Keycloak and Dex in Docker), driving
 // the IdP's own login form with a browser-like HTTP client (PLAN WP14 interop smoke tests, ADR-0030). Run with
 // `go test -tags oidcinterop ./test/oidcinterop/` (requires Docker); see README.md.
 package oidcinterop

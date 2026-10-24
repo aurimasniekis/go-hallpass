@@ -101,7 +101,7 @@ func startKeycloak(t *testing.T, hp *hallpass) *idp {
 	realm := render(t, "keycloak-realm.json.tmpl", tmplData{idp: p, RedirectURI: hp.RedirectURI(), PostLogoutURI: hp.PostLogoutURI()})
 	c := startContainer(t, imageRef("HALLPASS_KEYCLOAK_IMAGE", keycloakImage), 8080, 0, nil,
 		[]file{{Dir: "/opt/keycloak/data", Name: "import/hallpass-realm.json", Data: realm}}, "start-dev", "--import-realm")
-	// start-dev derives the issuer from the request host, so it is the URL Hallpass and the browser both use.
+	// start-dev derives the issuer from the request host, so it is the URL HallPass and the browser both use.
 	p.Issuer = "http://localhost:" + strconv.Itoa(c.Port) + "/realms/hallpass"
 	waitHTTP(t, p.Issuer+"/.well-known/openid-configuration", 4*time.Minute)
 	return p
@@ -151,7 +151,7 @@ func discovery(t *testing.T, issuer string) map[string]any {
 	return doc
 }
 
-// login starts an SSO flow at Hallpass, fills in the IdP's login form when it is shown and returns the landing page
+// login starts an SSO flow at HallPass, fills in the IdP's login form when it is shown and returns the landing page
 // and whether the IdP asked for credentials.
 func (p *idp) login(t *testing.T, b *browser, startPath string, u *idpUser) (landing string, prompted bool) {
 	t.Helper()
@@ -166,7 +166,7 @@ func (p *idp) login(t *testing.T, b *browser, startPath string, u *idpUser) (lan
 	}
 	pg = b.submit(pg, f, map[string]string{p.UsernameField: u.Login, "password": u.Password})
 	if pg.Landing == "" {
-		t.Fatalf("%s: login did not return to Hallpass; ended at %s (status %d): %s", p.Name, pg.URL.Redacted(), pg.Status, snippet(pg.Body))
+		t.Fatalf("%s: login did not return to HallPass; ended at %s (status %d): %s", p.Name, pg.URL.Redacted(), pg.Status, snippet(pg.Body))
 	}
 	return pg.Landing, true
 }
@@ -326,7 +326,7 @@ func runScenario(t *testing.T, hp *hallpass, p *idp) {
 		must(t, hp.A.Auth.RequireRecentAuth(pr, false))
 	})
 
-	// HP-OIDC-013: Hallpass compares the IdP's auth_time with the step-up start. Shifting Hallpass's clock 2 minutes
+	// HP-OIDC-013: HallPass compares the IdP's auth_time with the step-up start. Shifting HallPass's clock 2 minutes
 	// ahead makes the IdP's honest, fresh auth_time older than start−60 s, which must be refused.
 	t.Run("step-up with stale auth_time refused", func(t *testing.T) {
 		b := aliceBrowser
@@ -354,7 +354,7 @@ func runScenario(t *testing.T, hp *hallpass, p *idp) {
 		}
 	})
 
-	// HP-OIDC-015: logout revokes the Hallpass session and offers the provider's end_session_endpoint (no id_token_hint).
+	// HP-OIDC-015: logout revokes the HallPass session and offers the provider's end_session_endpoint (no id_token_hint).
 	t.Run("logout", func(t *testing.T) {
 		b := aliceBrowser
 		if _, status := b.me(); status != 200 {

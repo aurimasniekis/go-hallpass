@@ -1,4 +1,4 @@
-Hallpass recovery drill — 2026-10-24T05:02:47Z
+HallPass recovery drill — 2026-10-24T05:02:47Z
 commit:        7f79c4e506b2
 image:         hallpass:local (32793bb42f27)
 host:          Darwin arm64, 10 CPUs (not the RH-1 reference hardware)

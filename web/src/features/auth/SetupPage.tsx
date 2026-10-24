@@ -64,7 +64,7 @@ export function SetupPage({
   };
 
   return (
-    <AuthLayout title="Set up Hallpass" subtitle="Create the first administrator account.">
+    <AuthLayout title="Set up HallPass" subtitle="Create the first administrator account.">
       <Steps
         size="small"
         current={step}

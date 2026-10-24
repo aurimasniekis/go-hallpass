@@ -1,4 +1,4 @@
-# HPREC1 — Hallpass encrypted recording segment format
+# HPREC1 — HallPass encrypted recording segment format
 
 Status: **implemented and tested** (`internal/recording/hprec`). **Not externally reviewed. Needs external cryptographic
 review before 1.0 (DECISIONS.md R-02, release gate RG-9).**

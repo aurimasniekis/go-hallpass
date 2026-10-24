@@ -1,4 +1,4 @@
-# Hallpass gateway command reference
+# HallPass gateway command reference
 
 `ssh <gateway> help` prints the same grammar. `ssh <gateway> help <topic>` gives details per command (topics: cancel,
 connect, exec, exit-codes, json, list, quoting, request, roles, sessions, status, version, whoami).

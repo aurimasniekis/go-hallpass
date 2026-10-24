@@ -1,6 +1,6 @@
 # Connect your first agent
 
-An agent needs three things: its own SSH key pair, a registration in Hallpass, and an SSH client configuration that
+An agent needs three things: its own SSH key pair, a registration in HallPass, and an SSH client configuration that
 pins the gateway's host key.
 
 ## 1. Create the agent's key
@@ -12,7 +12,7 @@ ssh-keygen -t ed25519 -N "" -C my-agent -f ~/.ssh/agent_ed25519
 cat ~/.ssh/agent_ed25519.pub
 ```
 
-The private key never leaves that machine. Hallpass only ever sees the public key.
+The private key never leaves that machine. HallPass only ever sees the public key.
 
 ## 2. Register the agent
 

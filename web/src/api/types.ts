@@ -80,7 +80,7 @@ export type Segment = S['Segment'];
 export type RecordPage = S['RecordPage'];
 export type RecordEntry = RecordPage['records'][number];
 export type SessionExport = S['SessionExport'];
-/** Destination-reported exec record (WP25): never verified by Hallpass; exe/argv/cwd are untrusted text. */
+/** Destination-reported exec record (WP25): never verified by HallPass; exe/argv/cwd are untrusted text. */
 export type DestinationRecord = S['DestinationRecord'];
 export type DestinationCollector = S['DestinationCollector'];
 export type DestinationCollectorInput = S['DestinationCollectorInput'];

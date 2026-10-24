@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Hallpass are documented in this file. The format follows
+All notable changes to HallPass are documented in this file. The format follows
 [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and versions follow the policy in
 [docs/VERSIONING.md](docs/VERSIONING.md) (Semantic Versioning for the binary, with separate versioning for the REST API,
 agent JSON schemas, the recording format and the database schema).
@@ -11,7 +11,7 @@ yet. The authoritative per-work-package status is [docs/PLAN.md](docs/PLAN.md) Â
 
 ## [Unreleased]
 
-No release has been tagged. This section lists what exists on `main`. Hallpass is licensed under Apache-2.0
+No release has been tagged. This section lists what exists on `main`. HallPass is licensed under Apache-2.0
 (LICENSE, NOTICE).
 
 > **Recording format and keyring not externally reviewed** (RG-9, review item R-02). The HPREC1 format, the keyring

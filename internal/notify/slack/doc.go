@@ -13,7 +13,7 @@
 // [Verifier] checks, in this order: body size (64 KiB) → X-Slack-Request-Timestamp within ±5 minutes of the injected
 // clock → v0 signature HMAC-SHA256(signing_secret, "v0:" + ts + ":" + body) compared in constant time → replay cache
 // insert of sha256(decoded signature) for 10 minutes (fail closed if the cache errors). Only then is the body parsed.
-// [ParseBody] accepts block_actions interactions with exactly one Hallpass button and the /hallpass slash command
+// [ParseBody] accepts block_actions interactions with exactly one HallPass button and the /hallpass slash command
 // (link <code>, status <request-id>, help), and rejects payloads from any team other than the configured one.
 //
 // # Outbound (HP-NTF-002..004)

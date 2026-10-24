@@ -1,6 +1,6 @@
 # Access policy
 
-Hallpass is **default deny**: an agent sees and can request nothing until a rule allows it. Policy has two parts:
+HallPass is **default deny**: an agent sees and can request nothing until a rule allows it. Policy has two parts:
 
 - **Rules** decide what agents can see, request or get automatically.
 - **Approver rules** decide which operators may approve which requests.
@@ -61,7 +61,7 @@ rules and the deciding rule. A what-if mode evaluates unsaved rule edits against
 
 ## What policy does not do
 
-- **Capabilities (`shell`, `exec`, `pty`) control SSH channel types, not commands.** Hallpass does not offer command
+- **Capabilities (`shell`, `exec`, `pty`) control SSH channel types, not commands.** HallPass does not offer command
   allowlists as a security boundary: shells, interpreters and many tools can run arbitrary commands, read files or open
   network connections. Reliable restrictions must be enforced **on the destination**: a dedicated account per role with
   least privilege, `sudoers` rules, `ForceCommand` or `authorized_keys` `command=` for single-purpose roles,

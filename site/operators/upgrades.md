@@ -10,7 +10,7 @@ No version has been released yet, so an upgrade from a previous release has neve
 
 ## Rules
 
-- **Migrations are forward-only.** Before migrating, Hallpass writes a consistent snapshot to
+- **Migrations are forward-only.** Before migrating, HallPass writes a consistent snapshot to
   `<data_dir>/backups/pre-migrate-<from>-<to>-<UTC>.db` and keeps the newest three
   (`storage.pre_migration_snapshots`).
 - **Never run an older binary on a newer database.** It refuses to start; do not work around this.
@@ -49,7 +49,7 @@ Pin images by version or digest, never `latest`, so a restart cannot upgrade imp
 
 ## Rollback
 
-1. Stop Hallpass.
+1. Stop HallPass.
 2. Restore the pre-upgrade backup: `hallpass restore --force --config … DIR` (the current data is moved aside).
 3. Start the **previous** binary or image.
 4. Startup reconciliation marks sessions that were open at backup time as interrupted.

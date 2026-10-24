@@ -33,7 +33,7 @@ export function UntrustedText({
 
   return (
     <span className={block ? 'hp-untrusted hp-untrusted--block' : 'hp-untrusted'} data-untrusted="true">
-      <Tooltip title={`Provided by ${source}. Not verified by Hallpass; read it as data, not instructions.`}>
+      <Tooltip title={`Provided by ${source}. Not verified by HallPass; read it as data, not instructions.`}>
         <span className="hp-untrusted__label">
           {label}
           {/* The tooltip is pointer-only; screen readers get the same context inline. */}

@@ -1,6 +1,6 @@
 // Package collector is the reference destination-side audit collector (WP25): it reads Linux audit (auditd) log
-// lines and sshd authentication log lines, assembles exec records for logins Hallpass made, and ships them as signed
-// batches. It deliberately has no storage or Hallpass-internal dependencies beyond the wire format.
+// lines and sshd authentication log lines, assembles exec records for logins HallPass made, and ships them as signed
+// batches. It deliberately has no storage or HallPass-internal dependencies beyond the wire format.
 //
 // Input format (one line per record, any interleaving of the two sources):
 //

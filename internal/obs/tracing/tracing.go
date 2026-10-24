@@ -1,4 +1,4 @@
-// Package tracing sets up OpenTelemetry tracing for Hallpass (HP-OBS-004): an OTLP/HTTP exporter when
+// Package tracing sets up OpenTelemetry tracing for HallPass (HP-OBS-004): an OTLP/HTTP exporter when
 // telemetry.otlp_endpoint is configured, and a no-op provider otherwise.
 //
 // Spans must never carry secrets, reasons, commands, terminal data, tokens or raw URLs. Helpers in this package
@@ -32,7 +32,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/obs/redact"
 )
 
-// TracerName is the instrumentation scope of Hallpass spans.
+// TracerName is the instrumentation scope of HallPass spans.
 const TracerName = "github.com/aurimasniekis/go-hallpass"
 
 // ServiceName is the service.name resource attribute.
@@ -176,7 +176,7 @@ func (p *Provider) TracerProvider() trace.TracerProvider {
 	return p.tp
 }
 
-// Tracer returns the Hallpass tracer of this provider.
+// Tracer returns the HallPass tracer of this provider.
 func (p *Provider) Tracer() trace.Tracer { return p.TracerProvider().Tracer(TracerName) }
 
 // ForceFlush exports buffered spans.

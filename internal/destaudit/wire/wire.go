@@ -1,4 +1,4 @@
-// Package wire defines the signed batch format shared by the Hallpass destination-audit ingestion endpoint and the
+// Package wire defines the signed batch format shared by the HallPass destination-audit ingestion endpoint and the
 // reference collector (WP25, HP-REC-012). It has no storage or network dependencies so the collector binary stays small.
 //
 // A collector posts an Envelope: the exact payload bytes (a JSON Batch) and an Ed25519 signature over
@@ -76,7 +76,7 @@ type Record struct {
 }
 
 // Login identifies the destination login (SSH authentication + audit session) the exec belongs to. Every field is a
-// destination-side claim that Hallpass checks against its own state; none of it is a Hallpass session ID.
+// destination-side claim that HallPass checks against its own state; none of it is a HallPass session ID.
 type Login struct {
 	// Ref is an opaque, per-collector stable reference to the audit session (the reference collector uses
 	// "<login audit stamp>/<ses>").
@@ -210,10 +210,10 @@ func printable(s string) bool {
 	return true
 }
 
-// CertKeyIDPrefix starts every certificate key ID Hallpass issues.
+// CertKeyIDPrefix starts every certificate key ID HallPass issues.
 const CertKeyIDPrefix = "hallpass:"
 
-// CertKeyID is a parsed Hallpass certificate key ID.
+// CertKeyID is a parsed HallPass certificate key ID.
 type CertKeyID struct {
 	RoleID       string
 	GrantID      string

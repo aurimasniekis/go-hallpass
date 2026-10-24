@@ -51,7 +51,7 @@ SELECT * FROM destaudit_records WHERE id = ?;
 -- name: DestauditRecordsForSession :many
 SELECT * FROM destaudit_records WHERE access_session_id = ? ORDER BY reported_at, id LIMIT ?;
 
--- Correlation lookups. A destination-reported identity is only a claim; these return Hallpass's own state to check it.
+-- Correlation lookups. A destination-reported identity is only a claim; these return HallPass's own state to check it.
 
 -- name: DestauditSessionByGrant :one
 SELECT s.id AS session_id, s.opened_at, s.closed_at, g.id AS grant_id, g.server_id, g.role_id, g.remote_user,

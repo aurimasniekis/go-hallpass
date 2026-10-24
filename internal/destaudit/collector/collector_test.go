@@ -86,7 +86,7 @@ func TestAssembleSample(t *testing.T) {
 	if st.Execs != 4 || st.Shipped != 2 || st.NotShipped != 2 || st.Ignored != 1 {
 		t.Fatalf("stats %+v", st)
 	}
-	// Without the fingerprint filter only Hallpass certificate logins ship; an account filter also works.
+	// Without the fingerprint filter only HallPass certificate logins ship; an account filter also works.
 	recs, _ = assemble(t, Filter{}, sample)
 	if len(recs) != 1 || recs[0].Login.CertKeyID == "" {
 		t.Fatalf("%+v", recs)
@@ -237,7 +237,7 @@ func TestShipper(t *testing.T) {
 	if _, err := sh.Send(context.Background(), recs); err != nil {
 		t.Fatal(err)
 	}
-	// Lost state and a clock behind Hallpass: the collector resynchronizes from last_seq.
+	// Lost state and a clock behind HallPass: the collector resynchronizes from last_seq.
 	h.lastSeq += 1000
 	sh2 := &Shipper{URL: srv.URL, CollectorID: "dac_x", Key: priv, Client: srv.Client(), Now: func() time.Time { return clock.Add(-time.Hour) }}
 	if _, err := sh2.Send(context.Background(), recs); err != nil {
@@ -248,7 +248,7 @@ func TestShipper(t *testing.T) {
 	if err := sh3.LoadState(); err != nil || sh3.lastSeq != h.batches[1].Seq {
 		t.Fatalf("state %d %v", sh3.lastSeq, err)
 	}
-	// A key Hallpass does not know is a permanent error.
+	// A key HallPass does not know is a permanent error.
 	_, other, _ := ed25519.GenerateKey(rand.Reader)
 	bad := &Shipper{URL: srv.URL, CollectorID: "dac_x", Key: other, Client: srv.Client()}
 	var pe *PermanentError

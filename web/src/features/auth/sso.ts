@@ -29,9 +29,9 @@ export function oidcStartUrl(
 export function ssoErrorMessage(code: string): string {
   switch (code) {
     case 'mfa_required':
-      return 'Your identity provider could not prove a fresh sign-in. Confirm with your Hallpass authenticator code.';
+      return 'Your identity provider could not prove a fresh sign-in. Confirm with your HallPass authenticator code.';
     case 'reauth_required':
-      return 'Linking an identity needs a recent sign-in. Re-authenticate in Hallpass, then start linking again.';
+      return 'Linking an identity needs a recent sign-in. Re-authenticate in HallPass, then start linking again.';
     case 'forbidden':
       return 'Single sign-on was refused for this account. Ask an administrator to check the provider mapping or your account status.';
     case 'not_found':

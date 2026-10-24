@@ -1,17 +1,17 @@
 # Install with Docker Compose
 
 [`deploy/compose.yaml`](https://github.com/aurimasniekis/go-hallpass/blob/main/deploy/compose.yaml) runs one
-Hallpass instance with a named data volume, the master key (KEK) as a Compose secret, a read-only root filesystem,
+HallPass instance with a named data volume, the master key (KEK) as a Compose secret, a read-only root filesystem,
 all capabilities dropped and `no-new-privileges`. Container details are in
 [container.md](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/operator/container.md).
 
 ## Before you start
 
-- A Linux host with Docker and the Compose plugin. Run **one** Hallpass per data volume; there is no clustering.
+- A Linux host with Docker and the Compose plugin. Run **one** HallPass per data volume; there is no clustering.
 - A clock synchronized by NTP (chrony or systemd-timesyncd). Grant expiry and webhook checks use wall-clock time.
 - A DNS name and a TLS certificate for the web console. The console must sit behind a TLS reverse proxy (or use
   native TLS with `http.tls_cert_file` and `http.tls_key_file`). Production mode requires an `https` `public_url`.
-- Network: agents reach the SSH port (`2222` by default). Hallpass reaches your servers on their SSH port.
+- Network: agents reach the SSH port (`2222` by default). HallPass reaches your servers on their SSH port.
 
 ## 1. Get the image
 
@@ -56,7 +56,7 @@ Set at least:
 |---|---|
 | `public_url` | The https URL of the console, for example `https://hallpass.example.com`. |
 | `egress.allow_cidrs` | The networks your destination servers are in. **Empty means no destination is reachable.** |
-| `egress.source_addresses` | The address(es) your servers see Hallpass connect from. Used in the suggested `from="…"` restriction. |
+| `egress.source_addresses` | The address(es) your servers see HallPass connect from. Used in the suggested `from="…"` restriction. |
 | `http.trusted_proxies` | The CIDR your reverse proxy connects from (for a proxy on the host, the Compose network range). |
 
 The file is secret-free. Every key is listed in the [configuration reference](/reference/configuration).

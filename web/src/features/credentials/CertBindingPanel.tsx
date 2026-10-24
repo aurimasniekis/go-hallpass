@@ -81,7 +81,7 @@ export function CertBindingPanel({
             title="Remove certificate binding"
             confirmLabel="Remove"
             buttonProps={{ size: 'small' }}
-            description="Hallpass stops issuing certificates for this role. Connections then need an active login key."
+            description="HallPass stops issuing certificates for this role. Connections then need an active login key."
             onConfirm={() => api.call('delete', '/api/v1/roles/{id}/cert-binding', { path: { id: roleId } })}
             onSuccess={() => void message.success('Certificate binding removed.')}
           />
@@ -89,7 +89,7 @@ export function CertBindingPanel({
       }
     >
       <p className="hp-card-intro">
-        Instead of a static key, Hallpass can sign a short-lived certificate per connection with a user CA.
+        Instead of a static key, HallPass can sign a short-lived certificate per connection with a user CA.
         The current binding is not reported by the API; binding again replaces it.
       </p>
       <UserCASetupTip remoteUser={remoteUser} />

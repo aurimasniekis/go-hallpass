@@ -135,7 +135,7 @@ PY
 ) || fail "verify after restore: $verify_summary"
 
 {
-  echo "Hallpass recovery drill — $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "HallPass recovery drill — $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "commit:        $(git rev-parse --short HEAD)"
   echo "image:         $image ($(docker image inspect -f '{{.Id}}' "$image" | cut -c8-19))"
   echo "host:          $(uname -sm), $(sysctl -n hw.ncpu 2>/dev/null || nproc) CPUs (not the RH-1 reference hardware)"

@@ -1,6 +1,6 @@
 # Agents and keys
 
-An **agent** is anything that connects to Hallpass with an SSH key: an AI coding agent, a container, a CI job, a VM.
+An **agent** is anything that connects to HallPass with an SSH key: an AI coding agent, a container, a CI job, a VM.
 
 <Shot name="agents" alt="Agents list with three agents" />
 
@@ -41,4 +41,4 @@ Give the agent's owner:
 1. the gateway `known_hosts` line (`hallpass hostkey show`), and
 2. the `~/.ssh/config` block from [Connect your first agent](/guide/first-agent#_3-configure-the-ssh-client).
 
-For AI coding agents, install the [Hallpass skill](/agents/skill) so the agent knows how to request access properly.
+For AI coding agents, install the [HallPass skill](/agents/skill) so the agent knows how to request access properly.

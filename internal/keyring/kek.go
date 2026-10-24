@@ -1,4 +1,4 @@
-// Package keyring implements Hallpass key management (PLAN §13.1–13.2, ADR-0004): a master key-encryption key (KEK)
+// Package keyring implements HallPass key management (PLAN §13.1–13.2, ADR-0004): a master key-encryption key (KEK)
 // wraps purpose-specific data keys that seal sensitive database fields, recording DEKs and MACs.
 package keyring
 

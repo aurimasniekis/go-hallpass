@@ -1,6 +1,6 @@
 # Telegram approvals
 
-Hallpass can post pending access requests to Telegram groups through a bot. Linked approvers decide with inline
+HallPass can post pending access requests to Telegram groups through a bot. Linked approvers decide with inline
 buttons. Requirements: HP-NTF-002..004, HP-NTF-006, HP-NTF-011, PLAN §10.5, ADR-0011.
 
 > **Status.** Implemented and tested end to end against a fake Bot API (`internal/notify` and `internal/notify/telegram`
@@ -10,16 +10,16 @@ buttons. Requirements: HP-NTF-002..004, HP-NTF-006, HP-NTF-011, PLAN §10.5, ADR
 
 ## How it works
 
-1. For each Telegram route (an allowlisted chat) that matches a pending request, Hallpass sends a plain-text message
+1. For each Telegram route (an allowlisted chat) that matches a pending request, HallPass sends a plain-text message
    (no `parse_mode`) with link previews disabled. The message shows the verified agent identity, server and role,
    capabilities, the requested duration, the expiry, and the reason. The reason is labeled **"Agent-provided reason
    (untrusted)"** and truncated to 500 characters. Under the message are inline buttons: *Approve &lt;duration&gt;*
    (up to 5) and *Deny*. The message never contains destination addresses, remote usernames or credentials.
 2. Each button's `callback_data` is only `hp1:<a|d>:<action-token-id>` (28 bytes, at most 64).
-3. When someone presses a button, Telegram delivers an update to the Hallpass webhook. Hallpass checks the secret
+3. When someone presses a button, Telegram delivers an update to the HallPass webhook. HallPass checks the secret
    token, the replay cache, and both allowlists. It then maps the Telegram user to an operator and runs the **same**
    decision checks as the web UI.
-4. Hallpass always answers the button press (a short toast) and edits the message to show the outcome (best effort).
+4. HallPass always answers the button press (a short toast) and edits the message to show the outcome (best effort).
 
 Pressing a button is **never** authorization by itself. See "What chat approval can and cannot guarantee" below.
 
@@ -28,10 +28,10 @@ Pressing a button is **never** authorization by itself. See "What chat approval 
 In a chat with [@BotFather](https://t.me/BotFather):
 
 1. `/newbot`. Choose a name and a username, then copy the **bot token** (`123456789:AA…`). The number before the colon
-   is the **bot ID**. Hallpass uses it as the workspace in account links.
+   is the **bot ID**. HallPass uses it as the workspace in account links.
 2. `/setprivacy` → **Enable**. With privacy mode on, the bot receives only commands and button presses in groups, not
    ordinary chatter.
-3. `/setcommands` → `link - Link your Telegram account to Hallpass`.
+3. `/setcommands` → `link - Link your Telegram account to HallPass`.
 4. After you add the bot to your approval groups (step 2), run `/setjoingroups` → **Disable**. This stops anyone else from
    adding the bot to other groups.
 
@@ -42,11 +42,11 @@ Treat the bot token as an approval credential. Do not paste it into chats, ticke
 1. Create a private group for approvals, add the bot, and keep membership limited. Every member can read the request
    details.
 2. Find the group's **chat ID**. Supergroup IDs look like `-100…`. Once the integration is configured, the easiest way
-   is to send `/start` in the group. Hallpass ignores it, but records the rejected update in the audit log together with
+   is to send `/start` in the group. HallPass ignores it, but records the rejected update in the audit log together with
    the chat ID (audit wiring arrives with WP16). Before that, you can read the ID from the group info screen in Telegram
    clients that display it.
 
-## 3. Configure Hallpass
+## 3. Configure HallPass
 
 Create a Telegram integration in the web console (administrator, reauthentication required):
 
@@ -54,16 +54,16 @@ Create a Telegram integration in the web console (administrator, reauthenticatio
 |---|---|---|
 | Bot token | from BotFather | Encrypted at rest. Write-only. It appears only in the Bot API URL path and is redacted from errors and logs. |
 | Allowed chat IDs | `-100…` | Routes. Button presses from any other chat are ignored and audited. |
-| Webhook secret | generated | 32 random bytes, base64url (43 characters). Hallpass generates it. Never reuse it. |
+| Webhook secret | generated | 32 random bytes, base64url (43 characters). HallPass generates it. Never reuse it. |
 
-When the integration is saved, Hallpass registers the webhook with `setWebhook`:
+When the integration is saved, HallPass registers the webhook with `setWebhook`:
 
 - URL `https://<public_url host>/hooks/telegram/<integration_id>`.
 - `secret_token` set to the webhook secret.
 - `allowed_updates=["callback_query","message"]`.
 
 Telegram requirements for the webhook: HTTPS with a publicly trusted certificate, on port 443, 80, 88 or 8443.
-Hallpass must also be able to reach `https://api.telegram.org`. As defense in depth, your reverse proxy may restrict
+HallPass must also be able to reach `https://api.telegram.org`. As defense in depth, your reverse proxy may restrict
 the webhook path to Telegram's published source ranges (currently `149.154.160.0/20` and `91.108.4.0/22`).
 
 ## 4. Link approver accounts
@@ -71,7 +71,7 @@ the webhook path to Telegram's published source ranges (currently `149.154.160.0
 1. The operator creates a **Telegram link code** in the web console. The code is 8 characters, valid for 10 minutes,
    single use, and bound to that operator.
 2. The operator opens a **private chat** with the bot and sends `/link <code>`.
-3. Hallpass records the bot ID and the sender's numeric Telegram user ID (never the username) as that operator's Telegram
+3. HallPass records the bot ID and the sender's numeric Telegram user ID (never the username) as that operator's Telegram
    identity.
 
 **Never send a link code in a group.** Other members could see the code and use it to link their own account to your
@@ -105,15 +105,15 @@ Telegram's 4096-character limit: if needed, descriptions and capabilities are sh
 
 ## Rotating secrets
 
-- **Webhook secret.** Regenerate it in the integration. Hallpass calls `setWebhook` again with the new secret.
-- **Bot token.** In @BotFather, `/revoke` the token, then save the new one in Hallpass. The bot ID stays the same, so
+- **Webhook secret.** Regenerate it in the integration. HallPass calls `setWebhook` again with the new secret.
+- **Bot token.** In @BotFather, `/revoke` the token, then save the new one in HallPass. The bot ID stays the same, so
   existing links remain valid.
 
 Rotate both immediately if you suspect either was exposed.
 
 ## What chat approval can and cannot guarantee
 
-**Guaranteed by Hallpass:**
+**Guaranteed by HallPass:**
 
 - Only updates that carry the webhook secret, are new, come from allowlisted chats and come from linked users are
   processed.
@@ -145,4 +145,4 @@ Rotate both immediately if you suspect either was exposed.
 | `getWebhookInfo` shows `last_error_message: "Wrong response from the webhook: 401"` | The secret token does not match. Re-save the integration to re-register the webhook. |
 | Button press spins and nothing happens | The chat is not allowlisted or the user is not linked. Check the audit log for `chat_not_allowed` or `user_not_allowed`. |
 | Deliveries go **dead** with `403 Forbidden: bot was kicked` | Add the bot back to the group, or remove the route. |
-| Deliveries retry with `rate limited` | Telegram flood control. Hallpass honors `retry_after`. |
+| Deliveries retry with `rate limited` | Telegram flood control. HallPass honors `retry_after`. |

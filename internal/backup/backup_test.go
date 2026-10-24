@@ -315,7 +315,7 @@ func TestVerifyDetectsTampering(t *testing.T) {
 			rewriteManifest(t, dir, func(m *Manifest) { m.Files[1].Kind = KindDatabase })
 		}, "inconsistent kind"},
 		{"kek claimed", func(t *testing.T, dir string) { rewriteManifest(t, dir, func(m *Manifest) { m.KEKIncluded = true }) }, "never contain"},
-		{"wrong format", func(t *testing.T, dir string) { rewriteManifest(t, dir, func(m *Manifest) { m.Format = "tar" }) }, "not a Hallpass backup"},
+		{"wrong format", func(t *testing.T, dir string) { rewriteManifest(t, dir, func(m *Manifest) { m.Format = "tar" }) }, "not a HallPass backup"},
 		{"wrong version", func(t *testing.T, dir string) { rewriteManifest(t, dir, func(m *Manifest) { m.Version = 9 }) }, "unsupported backup format"},
 		{"wrong kek id", func(t *testing.T, dir string) { rewriteManifest(t, dir, func(m *Manifest) { m.KEKID = "0000" }) }, "wrapped under KEK"},
 		{"wrong chain head", func(t *testing.T, dir string) { rewriteManifest(t, dir, func(m *Manifest) { m.ChainHead.Seq = 1 }) }, "chain head"},

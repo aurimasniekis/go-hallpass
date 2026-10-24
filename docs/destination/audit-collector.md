@@ -1,18 +1,18 @@
 # Destination audit collector (optional)
 
-Hallpass records what crosses the gateway. Inside an interactive shell it cannot tell which programs actually ran, and it
+HallPass records what crosses the gateway. Inside an interactive shell it cannot tell which programs actually ran, and it
 never labels commands inferred from keystrokes or output as verified (HP-REC-006). The optional destination audit
 integration (HP-REC-012) adds a second, independent source: the destination kernel's exec audit records, shipped by a
 small signed collector and attached to the access-session timeline as **destination-reported** events.
 
-> **Trust.** These records come from the destination, which Hallpass treats as untrusted. Hallpass checks that a batch
+> **Trust.** These records come from the destination, which HallPass treats as untrusted. HallPass checks that a batch
 > was signed by the enrolled collector, is not a replay, and is consistent with its own session state. It cannot check
 > that the destination told the truth. Anyone with root on the destination can stop auditd, edit logs, or forge records
 > before they are signed. Treat destination audit as supporting evidence, never as proof.
 
 ## What you get
 
-Each exec record that Hallpass can attribute to an access session becomes a `destination.exec` timeline event (schema
+Each exec record that HallPass can attribute to an access session becomes a `destination.exec` timeline event (schema
 version 1, shown as `destination.exec@1`). Its plaintext data holds metadata only:
 
 | Field | Meaning |
@@ -33,21 +33,21 @@ They are sealed with the field key in `destaudit_records.details_enc` and are on
 which needs the same permission as recording playback. Retention (HP-REC-013) purges them together with the session's
 timeline payloads and leaves a tombstone row.
 
-The timeline position (`seq`) is the time Hallpass ingested the record, which can be later than surrounding events.
+The timeline position (`seq`) is the time HallPass ingested the record, which can be later than surrounding events.
 Use `reported_at` to place it.
 
 ## How correlation works
 
-The collector never sends a Hallpass session ID, and Hallpass would not trust one. It reports what sshd and the kernel
-logged, and Hallpass checks that against its own state:
+The collector never sends a HallPass session ID, and HallPass would not trust one. It reports what sshd and the kernel
+logged, and HallPass checks that against its own state:
 
-1. **Certificates (recommended, `confidence: high`).** When a role uses Hallpass user certificates, each destination
+1. **Certificates (recommended, `confidence: high`).** When a role uses HallPass user certificates, each destination
    login carries a certificate key ID `hallpass:<role>:<grant>:<connection>`, and sshd logs it after it has verified
-   the certificate. Hallpass accepts a record only if the grant exists, belongs to the collector's server and to that
+   the certificate. HallPass accepts a record only if the grant exists, belongs to the collector's server and to that
    role, the destination account equals the grant's remote user, the connection had a channel in that access session,
    and the login and exec times fall inside the session's lifetime (± clock skew).
 2. **Managed login keys (`confidence: medium`).** A managed key is shared by every session of its role, so the key
-   fingerprint only narrows the role. Hallpass accepts the record only if **exactly one** access session had a
+   fingerprint only narrows the role. HallPass accepts the record only if **exactly one** access session had a
    channel using that credential at the login time (± skew). With overlapping sessions on the role the record is
    refused as `ambiguous`; it is never guessed. Use certificates where sessions on a role overlap.
 3. **Login binding.** The first accepted record of a destination login (audit session) binds that login to the access
@@ -55,13 +55,13 @@ logged, and Hallpass checks that against its own state:
    another session is refused (`login_conflict`).
 
 Records from up to 24 hours after the session ended are still attached, flagged `after_session_end: true`: the
-process kept the login's audit session after Hallpass closed the SSH connection. That is the signal for detached
+process kept the login's audit session after HallPass closed the SSH connection. That is the signal for detached
 processes (see the [hardening guide](hardening.md#5-process-lifecycle-after-access-ends)).
 
 The `HALLPASS_SESSION` environment-variable marker that the plan mentioned is **not** used. The agent controls which
 environment variables it sends, so a marker would be agent-forgeable.
 
-Refused records are not stored. Hallpass returns the reason for each one to the collector, which logs it:
+Refused records are not stored. HallPass returns the reason for each one to the collector, which logs it:
 `no_identity`, `invalid_key_id`, `unknown_session`, `unknown_key`, `server_mismatch`, `role_mismatch`, `user_mismatch`,
 `connection_mismatch`, `outside_window`, `no_session`, `ambiguous`, `login_conflict`, `future_timestamp`, `too_old`,
 `duplicate_in_batch`, `too_large`, `invalid_*`.
@@ -93,8 +93,8 @@ Refused records are not stored. Hallpass returns the reason for each one to the 
    ssh-ed25519 AAAAC3Nz… hallpass-collector@web1
    ```
 
-3. In Hallpass, register a collector for the server with that public key (admin permission and recent authentication).
-   Hallpass returns the collector ID (`dac_…`).
+3. In HallPass, register a collector for the server with that public key (admin permission and recent authentication).
+   HallPass returns the collector ID (`dac_…`).
 4. Run the collector as root (it must read the audit log), for example as a systemd service:
 
    ```
@@ -109,24 +109,24 @@ Refused records are not stored. Hallpass returns the reason for each one to the 
    On journald-only systems, replace the auth log with `journalctl -f -o short -u ssh -u sshd`. `-o short` keeps the
    `sshd[<pid>]` prefix that the collector needs.
 
-Logins that began before the collector started cannot be resolved and are skipped. Revoking the collector in Hallpass
+Logins that began before the collector started cannot be resolved and are skipped. Revoking the collector in HallPass
 stops ingestion immediately. Rotate the key by registering a new collector and then revoking the old one.
 
 ### `run` flags
 
 | Flag | Meaning |
 |---|---|
-| `-url` | Hallpass base URL. Records go to `<url>/hooks/destaudit/<collector-id>`. Must be `https://`. |
+| `-url` | HallPass base URL. Records go to `<url>/hooks/destaudit/<collector-id>`. Must be `https://`. |
 | `-collector-id`, `-key` | enrollment ID and private key path (the key file must be mode `0600` or stricter) |
 | `-state` | persists the last accepted batch sequence number |
-| `-ca-file` | PEM bundle to verify Hallpass's TLS certificate (default: system roots) |
+| `-ca-file` | PEM bundle to verify HallPass's TLS certificate (default: system roots) |
 | `-fingerprint SHA256:…` | also ship logins made with this managed login key (repeatable) |
 | `-account NAME` | also ship public-key logins of this account (repeatable) |
 | `-flush-interval` | how often to ship (default 5s) |
 | `-dry-run` | print records as JSON lines and send nothing, useful for checking the rules and inputs |
 | `-allow-insecure-http` | testing only: permits `http://`, which sends exec arguments unencrypted |
 
-By default only logins with a Hallpass certificate key ID are shipped. Managed-key logins are shipped only when you list
+By default only logins with a HallPass certificate key ID are shipped. Managed-key logins are shipped only when you list
 the key's fingerprint (shown on the role's credential page) or the account. Other users' activity stays on the host.
 
 Input files given as arguments are read in order, then the collector ships and exits. Without arguments it reads stdin
@@ -156,7 +156,7 @@ lists are truncated to 256 arguments and 16 KiB, and `truncated` is set when tha
 {"payload": "<base64 of the batch JSON>", "signature": "<base64 Ed25519 signature>"}
 ```
 
-The signature is pure Ed25519 over `"hallpass-destaudit-batch-v1\x00" || payload`. Hallpass verifies it before it parses
+The signature is pure Ed25519 over `"hallpass-destaudit-batch-v1\x00" || payload`. HallPass verifies it before it parses
 the payload. The payload is a strict JSON batch: unknown fields are rejected, and so is any session ID a collector
 might add.
 
@@ -174,7 +174,7 @@ might add.
   accepted batch returns the stored result (`duplicate_batch: true`). Any other batch at or below the last sequence gets
   `409` with `last_seq`, and the collector re-signs above it. Record IDs are unique per collector, and repeats count as
   `duplicates`.
-- **Bounds:** `sent_at` must be within 2 minutes of Hallpass's clock. Records may be at most 24 hours old and no later
+- **Bounds:** `sent_at` must be within 2 minutes of HallPass's clock. Records may be at most 24 hours old and no later
   than now plus 2 minutes. A batch holds at most 500 records.
 - **Responses:** `200` with `{seq, records, accepted, duplicates, rejected, rejections[]}`. `400` for a malformed
   batch, clock skew or a mismatched `collector_id`. `401` for an unknown or revoked collector or a bad signature; the
@@ -201,6 +201,6 @@ signature   253247ae406e02bc28f65571b0da67e5f1a81795d690813927f288eb7a22ab6fa647
   disable, edit or forge them. The collector does not read them.
 - **Root can lie.** A user who can become root can stop auditd, delete rules, edit logs before the collector reads
   them, or read the collector key and sign forged records. Enforce least privilege (no broad `sudo`) and ship logs off
-  the host quickly. Revoke the collector in Hallpass after any suspected compromise.
+  the host quickly. Revoke the collector in HallPass after any suspected compromise.
 - **Gaps are possible.** auditd can drop events under load (`backlog_limit`, `disk_full_action`), the collector skips
   logins it did not see start, and refused records are not stored. A missing record proves nothing.

@@ -1,4 +1,4 @@
-// Command hallpass is the Hallpass SSH access gateway for AI agents.
+// Command hallpass is the HallPass SSH access gateway for AI agents.
 package main
 
 import (

@@ -1,6 +1,6 @@
 # Agent guide
 
-For AI agents, and the people configuring them, that reach servers through a Hallpass gateway. The authoritative
+For AI agents, and the people configuring them, that reach servers through a HallPass gateway. The authoritative
 version is [docs/agent/guide.md](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/agent/guide.md);
 `ssh center help` prints the same help as the gateway.
 
@@ -111,4 +111,4 @@ ssh center 'exec web1 -- echo "$HOME"'                  # $HOME expands on web1
 - If your framework cannot hold a connection open while waiting, use `request … --no-wait --json` and then
   `status <id> --json` or `status <id> --wait`.
 - Never put secrets in `--reason`. Reasons are stored and shown to approvers.
-- AI coding agents: install the [Hallpass skill](/agents/skill), which teaches all of this.
+- AI coding agents: install the [HallPass skill](/agents/skill), which teaches all of this.

@@ -1,6 +1,6 @@
 # Observability
 
-Hallpass emits three kinds of operational telemetry. None of them needs an external service to run, and all of them
+HallPass emits three kinds of operational telemetry. None of them needs an external service to run, and all of them
 leave out secrets, request reasons, exec commands, terminal data and tokens.
 
 | Signal | Where | Requirement |
@@ -178,9 +178,9 @@ Standard checks:
 ## Tracing
 
 Set `telemetry.otlp_endpoint` to the base URL of an OTLP/HTTP collector, for example `http://otel-collector:4318`.
-Hallpass appends `/v1/traces` unless the path already ends with it. `http://` sends data in plain text; use `https://`
+HallPass appends `/v1/traces` unless the path already ends with it. `http://` sends data in plain text; use `https://`
 across untrusted networks. The URL must not contain credentials, a query or a fragment. Leave the setting empty to
-disable tracing. Hallpass then installs a no-op provider: no exporter, no background goroutine, no network traffic.
+disable tracing. HallPass then installs a no-op provider: no exporter, no background goroutine, no network traffic.
 
 - Resource: `service.name=hallpass`, `service.version=<build version>`, plus the OpenTelemetry SDK defaults. The
   standard `OTEL_RESOURCE_ATTRIBUTES` and `OTEL_EXPORTER_OTLP_HEADERS` environment variables are honored.
@@ -208,12 +208,12 @@ groups:
         expr: max(hallpass_readiness_state{state=~"failed|starting"}) == 1
         for: 2m
         labels: {severity: critical}
-        annotations: {summary: "Hallpass readiness is failing; check the admin system status page"}
+        annotations: {summary: "HallPass readiness is failing; check the admin system status page"}
       - alert: HallpassDegraded
         expr: hallpass_readiness_state{state="degraded"} == 1
         for: 5m
         labels: {severity: warning}
-        annotations: {summary: "Hallpass is degraded (storage reserve, busy writer or recording directory)"}
+        annotations: {summary: "HallPass is degraded (storage reserve, busy writer or recording directory)"}
       - alert: HallpassRecordingFailures
         expr: increase(hallpass_recording_failures_total[10m]) > 0
         labels: {severity: critical}

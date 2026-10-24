@@ -1,6 +1,6 @@
 # Logging
 
-Hallpass writes structured JSON logs (one object per line) to stderr using Go's `log/slog`. Field names follow the
+HallPass writes structured JSON logs (one object per line) to stderr using Go's `log/slog`. Field names follow the
 [Elastic Common Schema](https://www.elastic.co/guide/en/ecs/current/index.html) where a matching field exists, and use the
 `hallpass.*` namespace otherwise (review item R-07). Logs can be ingested by OpenSearch, Elasticsearch, Loki or any JSON log
 pipeline without custom parsing, and none of them is required.

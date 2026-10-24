@@ -29,7 +29,7 @@ make image-smoke IMAGE=hallpass:local                      # scripts/container-s
 
 ## KEK provisioning
 
-Hallpass refuses a KEK file that is readable by group or others, owned by a UID other than its own (or root), or located
+HallPass refuses a KEK file that is readable by group or others, owned by a UID other than its own (or root), or located
 inside `data_dir`. In a container that means:
 
 - The KEK lives **outside the data volume**: a Compose/Swarm secret, a Kubernetes Secret volume, or a separate read-only
@@ -43,7 +43,7 @@ inside `data_dir`. In a container that means:
   ```
 
 - Kubernetes is not a documented or tested target yet. Secret volumes are root-owned and `fsGroup` adds group-read bits,
-  and Hallpass refuses both a group-readable KEK and one its UID cannot read. A Secret-backed KEK therefore needs an init
+  and HallPass refuses both a group-readable KEK and one its UID cannot read. A Secret-backed KEK therefore needs an init
   step that copies it into a memory-backed `emptyDir` as `0400 65532:65532`.
 - `kek.file` points at the mount, e.g. `/run/secrets/hallpass_kek` (as in
   [`deploy/examples/hallpass.container.yaml`](../../deploy/examples/hallpass.container.yaml)).

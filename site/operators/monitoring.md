@@ -1,6 +1,6 @@
 # Monitoring
 
-Hallpass needs no external service to run, but it gives you everything to watch it: health endpoints, Prometheus
+HallPass needs no external service to run, but it gives you everything to watch it: health endpoints, Prometheus
 metrics, JSON logs and optional OpenTelemetry traces. None of them contain secrets, request reasons, commands or
 terminal data. Reference:
 [observability.md](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/operator/observability.md) and

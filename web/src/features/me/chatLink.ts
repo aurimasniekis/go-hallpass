@@ -19,7 +19,7 @@ export function linkInstruction(provider: ChatProvider, code: string): LinkInstr
   }
   return {
     command: `/link ${code}`,
-    where: 'Send this message in a private chat with the Hallpass Telegram bot.',
+    where: 'Send this message in a private chat with the HallPass Telegram bot.',
     caution: 'Never post it in a group: a code seen in a group chat is burned and cannot be used.',
   };
 }

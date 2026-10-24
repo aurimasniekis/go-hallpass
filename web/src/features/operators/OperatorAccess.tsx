@@ -77,7 +77,7 @@ export function OperatorAccess({ operator }: { operator: Operator }) {
       <Form.Item
         label="Manual roles"
         name="roles"
-        extra="Roles assigned in Hallpass. Changes take effect at the operator's next request."
+        extra="Roles assigned in HallPass. Changes take effect at the operator's next request."
       >
         <Select
           mode="multiple"

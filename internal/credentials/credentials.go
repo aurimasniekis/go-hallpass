@@ -1,5 +1,5 @@
 // Package credentials manages gateway-held destination login credentials, OpenSSH user CAs and the gateway's own
-// SSH host keys (HP-KEY-*, ADR-0006). Private keys are generated inside Hallpass, sealed with the keyring's
+// SSH host keys (HP-KEY-*, ADR-0006). Private keys are generated inside HallPass, sealed with the keyring's
 // credential key, never exported, and never sent to agents.
 package credentials
 

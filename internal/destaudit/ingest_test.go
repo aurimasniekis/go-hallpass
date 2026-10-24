@@ -233,7 +233,7 @@ func TestIngestClockSkewAndLimits(t *testing.T) {
 	}
 }
 
-// Correlation never trusts destination claims that disagree with Hallpass state.
+// Correlation never trusts destination claims that disagree with HallPass state.
 func TestCertificateCorrelationRefusals(t *testing.T) {
 	f := newFx(t)
 	a := f.activity(f.a1, "ca:ca_test")

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds Hallpass release archives and SHA256SUMS (PLAN WP24, HP-OPS-009).
+# Builds HallPass release archives and SHA256SUMS (PLAN WP24, HP-OPS-009).
 #
 # Usage: scripts/release-build.sh [-o OUTDIR] [PLATFORM...]
 #   PLATFORM is GOOS/GOARCH; default: linux/amd64 linux/arm64 darwin/arm64.

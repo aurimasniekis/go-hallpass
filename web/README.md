@@ -1,7 +1,7 @@
-# Hallpass web UI
+# HallPass web UI
 
-Operator console for Hallpass (docs/PLAN.md §14, requirements `HP-UI-*` in docs/GOAL.md §6).
-React 19 + TypeScript (strict) + Vite, TanStack Router/Query/Store, Ant Design with Hallpass theme
+Operator console for HallPass (docs/PLAN.md §14, requirements `HP-UI-*` in docs/GOAL.md §6).
+React 19 + TypeScript (strict) + Vite, TanStack Router/Query/Store, Ant Design with HallPass theme
 tokens, Apache ECharts, xterm.js.
 
 Status: **WP19 foundation + WP20 operational pages + WP21 timeline/replay, implemented** (not yet

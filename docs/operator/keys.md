@@ -1,6 +1,6 @@
 # Keys and encryption at rest
 
-Hallpass encrypts sensitive data with a two-level key hierarchy (ADR-0004):
+HallPass encrypts sensitive data with a two-level key hierarchy (ADR-0004):
 
 ```
 KEK (master key, 32 bytes, outside data_dir)
@@ -46,7 +46,7 @@ A wrong or rotated-away KEK is detected at startup ("master key (KEK) does not m
 
 ## Limits
 
-Keys exist in process memory while Hallpass runs. Anyone who controls the running process, or holds both the host and the KEK,
+Keys exist in process memory while HallPass runs. Anyone who controls the running process, or holds both the host and the KEK,
 can decrypt everything (see `docs/THREAT_MODEL.md` §1). KMS/HSM-backed wrapping is a review item (R-03).
 
 ## Background re-encryption after purpose-key rotation
@@ -78,7 +78,7 @@ Exceptions:
 
 ### Startup key-slot repair
 
-At every start, before accepting connections, Hallpass checks the key slots of every finalized or interrupted segment. If a
+At every start, before accepting connections, HallPass checks the key slots of every finalized or interrupted segment. If a
 slot no longer unwraps but the database copy of the wrapped segment key does (it is bound to that segment's ID and header
 hash, so it cannot be substituted), the copy is written into the unusable slot (PLAN §13.4). This recovers a file whose
 slots were damaged, a file restored from an older copy after its key was rotated and retired, and refreshes slots that

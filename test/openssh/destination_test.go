@@ -1,6 +1,6 @@
 //go:build openssh
 
-// Package openssh runs Hallpass against real OpenSSH: the stock `ssh` client as the agent and an OpenSSH `sshd`
+// Package openssh runs HallPass against real OpenSSH: the stock `ssh` client as the agent and an OpenSSH `sshd`
 // container as the destination (HP-TST-003). Run with `make test-openssh` (requires Docker).
 package openssh
 

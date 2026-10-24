@@ -54,7 +54,7 @@ Loading a recording decrypts it on the server, and every page read is recorded i
   secrets.
 - Recording is **mandatory by default** and fails closed: nothing is forwarded until the recording is established, and a
   recording failure ends the channel (exit 80).
-- Hallpass never claims to reconstruct "verified" commands from keystrokes. For command-level accounting, use
+- HallPass never claims to reconstruct "verified" commands from keystrokes. For command-level accounting, use
   [destination-side audit](/destinations/audit).
 
 ## Retention and verification

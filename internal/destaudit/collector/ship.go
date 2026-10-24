@@ -18,7 +18,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/destaudit/wire"
 )
 
-// Shipper signs and posts batches to Hallpass.
+// Shipper signs and posts batches to HallPass.
 type Shipper struct {
 	// URL is the full ingestion URL, e.g. https://hallpass.example.com/hooks/destaudit/dac_….
 	URL         string
@@ -27,7 +27,7 @@ type Shipper struct {
 	Client      *http.Client
 	// StatePath, if set, persists the last accepted sequence number (0600, atomic replace).
 	StatePath string
-	// Retries for network errors and 5xx responses (the same signed envelope is resent; Hallpass recognizes an exact
+	// Retries for network errors and 5xx responses (the same signed envelope is resent; HallPass recognizes an exact
 	// resend of an accepted batch). Default 3.
 	Retries int
 	Now     func() time.Time
@@ -104,16 +104,16 @@ func (s *Shipper) now() time.Time {
 	return time.Now()
 }
 
-// Result aggregates Hallpass's answers for one Send.
+// Result aggregates HallPass's answers for one Send.
 type Result struct {
 	Batches  int
 	Accepted int
 	Rejected int
-	// Rejections are per-record reasons reported by Hallpass (e.g. no_session, ambiguous).
+	// Rejections are per-record reasons reported by HallPass (e.g. no_session, ambiguous).
 	Rejections []RecordRejection
 }
 
-// RecordRejection is one record Hallpass did not attach.
+// RecordRejection is one record HallPass did not attach.
 type RecordRejection struct {
 	RecordID string `json:"record_id"`
 	Reason   string `json:"reason"`
@@ -191,7 +191,7 @@ func (s *Shipper) post(ctx context.Context, env *wire.Envelope, recs []wire.Reco
 			s.lastSeq = b.Seq
 			return &r, s.saveState()
 		case err == nil && status == http.StatusConflict && !resynced:
-			// Replay refusal: our sequence is behind Hallpass (lost state, clock behind). Resign above last_seq once.
+			// Replay refusal: our sequence is behind HallPass (lost state, clock behind). Resign above last_seq once.
 			var p struct {
 				LastSeq *int64 `json:"last_seq"`
 			}

@@ -248,7 +248,7 @@ export function ReauthGate({
             }}
             aria-label="Re-authenticate with authenticator code"
           >
-            <p>Enter the code from your Hallpass authenticator app, or a recovery code.</p>
+            <p>Enter the code from your HallPass authenticator app, or a recovery code.</p>
             <Form.Item
               label="Authenticator or recovery code"
               name="code"

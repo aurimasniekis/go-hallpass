@@ -108,7 +108,7 @@ func TestRenderHostile(t *testing.T) {
 		assertSafeBlocks(t, renderStatus(&u))
 		fallback, blocks := renderReply(h)
 		assertSafeBlocks(t, blocks)
-		if fallback != "Hallpass" {
+		if fallback != "HallPass" {
 			t.Fatal("reply fallback must be static")
 		}
 		if strings.Contains(fallbackText(m.RequestID), "<") {

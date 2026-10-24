@@ -18,7 +18,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/clock"
 )
 
-// HP-TST-002, HP-OIDC-005: a sanitized return_to never leaves the Hallpass origin and is idempotent.
+// HP-TST-002, HP-OIDC-005: a sanitized return_to never leaves the HallPass origin and is idempotent.
 func FuzzSanitizeReturnTo(f *testing.F) {
 	for _, s := range []string{"/", "/requests?id=1#x", "//evil.example", "/\\evil.example", "https://evil.example/", "/api/v1/me",
 		"/auth/logout", "/api", "/%2e/x", "/./x", "/a/../b", "/\t/evil.example", "/x\r\nSet-Cookie: a", "/%0d%0a", "javascript:alert(1)",

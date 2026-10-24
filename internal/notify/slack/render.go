@@ -91,14 +91,14 @@ func plainBounded(s string, limit int) textObject {
 
 // fallbackText is the notification text. It never contains untrusted input.
 func fallbackText(requestID string) string {
-	return "Hallpass access request " + requestID + " awaits approval"
+	return "HallPass access request " + requestID + " awaits approval"
 }
 
 // renderApproval builds the Block Kit blocks for a pending request. withActions=false omits the buttons (used when
 // the message is updated after a decision).
 func renderApproval(m *chat.ApprovalMessage, withActions bool) []block {
 	blocks := []block{
-		{Type: "header", Text: &textObject{Type: "plain_text", Text: "Hallpass access request", Emoji: false}},
+		{Type: "header", Text: &textObject{Type: "plain_text", Text: "HallPass access request", Emoji: false}},
 		{Type: "section", Fields: []textObject{
 			plainBounded("Agent: "+untrusted(m.AgentName, chat.MaxNameRunes)+" ("+untrusted(m.AgentID, 64)+")", maxFieldText),
 			plainBounded("Key: "+untrusted(m.AgentKeyFingerprint, 100), maxFieldText),
@@ -201,7 +201,7 @@ func renderStatus(u *chat.StatusUpdate) []block {
 // mrkdwn-interpreted field.
 func renderReply(text string) (string, []block) {
 	t := untrusted(text, chat.MaxReplyRunes)
-	return "Hallpass", []block{{Type: "section", Text: ptr(plainBounded(t, maxSectionText))}}
+	return "HallPass", []block{{Type: "section", Text: ptr(plainBounded(t, maxSectionText))}}
 }
 
 func ptr(t textObject) *textObject { return &t }

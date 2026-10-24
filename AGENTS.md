@@ -1,6 +1,6 @@
-# AGENTS.md — rules for agents working on Hallpass
+# AGENTS.md — rules for agents working on HallPass
 
-Hallpass is a security-sensitive terminating SSH gateway for AI agents. These rules apply to every agent session in this repository.
+HallPass is a security-sensitive terminating SSH gateway for AI agents. These rules apply to every agent session in this repository.
 
 ## Before working
 
@@ -24,7 +24,7 @@ Hallpass is a security-sensitive terminating SSH gateway for AI agents. These ru
 - Do not invent cryptography. Use only Go standard library and `golang.org/x/crypto` primitives as specified in PLAN.md §13.
 - Never use `ssh.InsecureIgnoreHostKey` or an equivalent permissive host-key callback.
 - Never commit secrets, credentials, private production data, private infrastructure details or secret-bearing fixtures. Generate test keys at test time.
-- Hallpass is licensed under Apache-2.0 (LICENSE, NOTICE; DECISIONS.md R-01, ADR-0045). Do not change the license or add
+- HallPass is licensed under Apache-2.0 (LICENSE, NOTICE; DECISIONS.md R-01, ADR-0045). Do not change the license or add
   conflicting license headers without an operator decision.
 
 ## Git workflow (commit locally, never push)

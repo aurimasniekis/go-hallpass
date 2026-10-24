@@ -1,6 +1,6 @@
 # AI agent skill (Claude Code, Codex)
 
-The **`hallpass` skill** teaches an AI coding agent to use a Hallpass gateway correctly: check the connection, list
+The **`hallpass` skill** teaches an AI coding agent to use a HallPass gateway correctly: check the connection, list
 servers and roles, request time-bound access with an honest reason, wait for approval without spamming requests,
 prefer focused `exec` commands, interpret exit codes 80–90, and never try to obtain destination credentials or work
 around a refusal.
@@ -16,7 +16,7 @@ Installing from GitHub needs access to `aurimasniekis/go-hallpass`. You can also
 
 ## Before you install
 
-The agent still needs its own SSH key registered in Hallpass and a pinned gateway entry in `~/.ssh/config`
+The agent still needs its own SSH key registered in HallPass and a pinned gateway entry in `~/.ssh/config`
 ([Connect your first agent](/guide/first-agent)). The skill assumes the host alias `center`; tell your agent if yours
 differs.
 

@@ -2,14 +2,14 @@
 layout: home
 
 hero:
-  name: Hallpass
+  name: HallPass
   text: SSH access for AI agents, on your terms
   tagline: >-
-    Agents connect with their own key. Policy and a human decide what they get, for how long. Hallpass logs in to
+    Agents connect with their own key. Policy and a human decide what they get, for how long. HallPass logs in to
     your servers with credentials the agent never sees, and records every session.
   image:
     src: /logo.svg
-    alt: Hallpass
+    alt: HallPass
   actions:
     - theme: brand
       text: Get started
@@ -24,7 +24,7 @@ hero:
 features:
   - title: Agents never hold server credentials
     details: >-
-      An agent only has its own SSH key, registered with Hallpass. Hallpass keeps the destination login keys
+      An agent only has its own SSH key, registered with HallPass. HallPass keeps the destination login keys
       (or signs short-lived OpenSSH certificates) and verifies every destination host key. No trust on first use.
   - title: Default-deny policy with human approval
     details: >-
@@ -44,7 +44,7 @@ features:
       metrics, health checks and optional OpenTelemetry tracing.
   - title: Honest about its limits
     details: >-
-      Hallpass sees every session in plaintext and is not a sandbox. The security page says exactly what it does and
+      HallPass sees every session in plaintext and is not a sandbox. The security page says exactly what it does and
       does not guarantee, and what is only implemented versus tested.
 ---
 
@@ -53,7 +53,7 @@ features:
 <div class="hp-status">
 
 **Pre-release.** No version has been tagged and the release gates are not met yet. Read the
-[security model](/security/) before you run Hallpass anywhere that matters.
+[security model](/security/) before you run HallPass anywhere that matters.
 
 </div>
 
@@ -63,13 +63,13 @@ features:
 
 1. You register an agent's **public key** and enroll your servers, each with one or more **roles** (a remote account
    plus what the role allows).
-2. The agent runs ordinary `ssh` against Hallpass: `ssh center list`, `ssh center exec web1 -- uptime`.
+2. The agent runs ordinary `ssh` against HallPass: `ssh center list`, `ssh center exec web1 -- uptime`.
 3. Policy decides: the role is hidden, requestable (a human approves), or approved automatically up to a limit.
-4. Hallpass opens the destination session itself, records it, and ends it when the grant ends.
+4. HallPass opens the destination session itself, records it, and ends it when the grant ends.
 
 ## See it
 
-<Shot name="dashboard" themed alt="Hallpass dashboard with pending requests, active grants and a live session" caption="Dashboard: pending requests, active grants and live sessions" />
+<Shot name="dashboard" themed alt="HallPass dashboard with pending requests, active grants and a live session" caption="Dashboard: pending requests, active grants and live sessions" />
 
 <div class="hp-gallery">
 <Shot name="request-pending" themed alt="A pending access request with the agent's untrusted reason" caption="A request waiting for approval" />
@@ -82,7 +82,7 @@ features:
 
 ## Where to go next
 
-- New here? Read [What is Hallpass?](/guide/what-is-hallpass) and the [concepts](/guide/concepts).
+- New here? Read [What is HallPass?](/guide/what-is-hallpass) and the [concepts](/guide/concepts).
 - Ready to install? [Docker Compose](/guide/install-docker) or [the binary with systemd](/guide/install-binary).
 - Setting up an agent? The [agent guide](/agents/) and the [agent skill](/agents/skill).
 

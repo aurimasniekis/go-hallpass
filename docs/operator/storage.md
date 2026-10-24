@@ -1,6 +1,6 @@
 # Storage
 
-Hallpass stores state in a single SQLite database and session content in encrypted recording files, both inside `data_dir`.
+HallPass stores state in a single SQLite database and session content in encrypted recording files, both inside `data_dir`.
 
 ```
 <data_dir>/                 0700, owned by the hallpass service user
@@ -13,7 +13,7 @@ Hallpass stores state in a single SQLite database and session content in encrypt
 
 ## Supported topology
 
-- **Exactly one** running Hallpass per data directory. A second process (or an admin command that mutates state, such as
+- **Exactly one** running HallPass per data directory. A second process (or an admin command that mutates state, such as
   `migrate`, `restore` or `admin recover`) fails immediately with `another hallpass process owns this data directory`.
 - **Local storage only.** On Linux, startup refuses NFS, SMB/CIFS, FUSE, 9p, Ceph, AFS, GFS2, OCFS2, GPFS and Lustre
   filesystems. SQLite locking and durability are not reliable on them.
@@ -35,10 +35,10 @@ Hallpass stores state in a single SQLite database and session content in encrypt
 
 - Migrations are embedded in the binary, applied in order at startup (or with `hallpass migrate`), each in its own transaction,
   and forward-only.
-- Before applying migrations to an existing database, Hallpass writes a `VACUUM INTO` snapshot to `backups/` and keeps the
+- Before applying migrations to an existing database, HallPass writes a `VACUUM INTO` snapshot to `backups/` and keeps the
   last `storage.pre_migration_snapshots` (default 3).
 - A failing migration rolls back, leaving the database at the last successful version, and the process exits with the snapshot location.
-- A database migrated by a newer Hallpass is refused (`database schema is newer than this binary`). Downgrade by restoring
+- A database migrated by a newer HallPass is refused (`database schema is newer than this binary`). Downgrade by restoring
   a backup taken before the upgrade, together with the older binary. Data written after that backup is lost.
 
 ## Failure behavior
@@ -53,7 +53,7 @@ Hallpass stores state in a single SQLite database and session content in encrypt
 
 ## What the database reveals
 
-Sensitive columns (reasons, secrets, private keys, TOTP seeds, provider tokens) are encrypted by Hallpass, and tokens are hashed.
+Sensitive columns (reasons, secrets, private keys, TOTP seeds, provider tokens) are encrypted by HallPass, and tokens are hashed.
 Inventory (aliases, addresses, usernames), policy, identities and timestamps are stored in plaintext. Anyone who can read
 the database file or its backups learns your access topology and history. Use full-disk encryption for `data_dir` and protect
 backups accordingly.

@@ -44,7 +44,7 @@ type Inbound struct {
 }
 
 // HelpText is the slash-command help.
-const HelpText = "Hallpass commands: \"link <code>\" links your Slack account using a code from the Hallpass web UI; " +
+const HelpText = "HallPass commands: \"link <code>\" links your Slack account using a code from the HallPass web UI; " +
 	"\"status <request-id>\" shows a request's status."
 
 type interactionPayload struct {

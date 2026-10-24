@@ -23,7 +23,7 @@ second key first; add its `known_hosts` line before the promotion.
 
 ### Banned source
 
-After repeated failed logins from one address (10 within 10 minutes by default), Hallpass bans that source and drops
+After repeated failed logins from one address (10 within 10 minutes by default), HallPass bans that source and drops
 its connections before the SSH banner. Your client usually reports `Connection closed by …` or
 `kex_exchange_identification`. The first ban lasts 15 minutes and doubles for each further ban within 7 days (up to 24
 hours).
@@ -63,7 +63,7 @@ need access.
 
 ### Exit 88, destination unavailable
 
-Hallpass could not complete the destination login. Typical causes, for the operator:
+HallPass could not complete the destination login. Typical causes, for the operator:
 
 - the destination is down or unreachable, or its address is outside `egress.allow_cidrs`;
 - the destination's host key changed (see [below](#destination-host-key-changed));
@@ -82,12 +82,12 @@ Policy requires a reason and there was no terminal to prompt on. Pass `--reason`
 
 ### Destination host key changed
 
-`exec` and `connect` fail with exit 88 and a host-key alert is recorded. Hallpass refuses to send credentials to a host
+`exec` and `connect` fail with exit 88 and a host-key alert is recorded. HallPass refuses to send credentials to a host
 whose key does not match. Confirm out of band whether the change is expected. If it is, add and confirm the new key on
 the server's **Host identities** tab and retire the old one. If not, keep the server disabled and investigate. See the
 [runbook](/operators/incidents#destination-host-key-changed).
 
-### Hallpass refuses to start
+### HallPass refuses to start
 
 - `master key (KEK) does not match this data directory`: the wrong KEK file, or one rotated away.
 - KEK or data directory permission errors: the KEK must be `0400`/`0600`, owned by the service user, outside

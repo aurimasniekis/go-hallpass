@@ -15,7 +15,7 @@ import { FormModal } from '../servers/FormModal';
 import { UserCASetupTip } from '../servers/SetupTips';
 
 /**
- * User certificate authorities (PLAN §11.3): Hallpass can log in to destinations with short-lived
+ * User certificate authorities (PLAN §11.3): HallPass can log in to destinations with short-lived
  * certificates signed by one of these CAs. Destinations trust the CA via `TrustedUserCAKeys`.
  */
 export function UserCAsPanel() {
@@ -63,7 +63,7 @@ export function UserCAsPanel() {
               { key: 'name', title: 'Name', dataIndex: 'name' },
               { key: 'fp', title: 'Fingerprint', render: (_, c) => <Fingerprint value={c.fingerprint} /> },
               { key: 'alg', title: 'Algorithm', dataIndex: 'algorithm' },
-              { key: 'ext', title: 'Source', render: (_, c) => (c.external ? 'External' : 'Hallpass') },
+              { key: 'ext', title: 'Source', render: (_, c) => (c.external ? 'External' : 'HallPass') },
               {
                 key: 'state',
                 title: 'State',

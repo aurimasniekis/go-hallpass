@@ -10,7 +10,7 @@ import (
 )
 
 // Filter selects which destination logins are shipped. A login is shipped when its certificate key ID was issued by
-// Hallpass ("hallpass:" prefix), or its key fingerprint or account is listed. Everything else (other users' activity)
+// HallPass ("hallpass:" prefix), or its key fingerprint or account is listed. Everything else (other users' activity)
 // stays on the destination.
 type Filter struct {
 	Fingerprints map[string]bool

@@ -30,7 +30,7 @@ function RevokeCollector({ collector, serverId }: { collector: DestinationCollec
       }}
       description={
         <>
-          <p>Hallpass stops accepting reports signed by this collector key.</p>
+          <p>HallPass stops accepting reports signed by this collector key.</p>
           <Fingerprint value={collector.fingerprint} />
           <label htmlFor={`collector-revoke-${collector.id}`} style={{ display: 'block', marginTop: 8 }}>
             Reason (recorded in the audit log)
@@ -62,7 +62,7 @@ function RevokeCollector({ collector, serverId }: { collector: DestinationCollec
 
 /**
  * Destination audit collectors (WP25): agents running on the destination that report process activity to
- * Hallpass. Their reports are destination-reported and never verified by Hallpass (HP-REC-006).
+ * HallPass. Their reports are destination-reported and never verified by HallPass (HP-REC-006).
  */
 export function DestinationCollectors({ serverId, canManage }: { serverId: string; canManage: boolean }) {
   const queryClient = useQueryClient();
@@ -91,7 +91,7 @@ export function DestinationCollectors({ serverId, canManage }: { serverId: strin
           type="info"
           showIcon
           title="Destination-reported, not verified"
-          description="Collector reports come from software on the destination. A compromised destination can omit or forge them, so Hallpass shows them as destination-reported and never as verified (HP-REC-006)."
+          description="Collector reports come from software on the destination. A compromised destination can omit or forge them, so HallPass shows them as destination-reported and never as verified (HP-REC-006)."
         />
         {query.isPending ? (
           <LoadingState />

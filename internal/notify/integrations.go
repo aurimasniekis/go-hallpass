@@ -208,7 +208,7 @@ func (svc *Service) CreateIntegration(ctx context.Context, actor audit.Actor, in
 	return svc.GetIntegration(ctx, id)
 }
 
-// registerWebhook points an enabled Telegram bot at Hallpass (setWebhook with the secret token). It is best effort:
+// registerWebhook points an enabled Telegram bot at HallPass (setWebhook with the secret token). It is best effort:
 // a failure is logged and the operator can retry by saving again or register the webhook manually.
 func (svc *Service) registerWebhook(ctx context.Context, id string) {
 	parts, err := svc.load(ctx, id)

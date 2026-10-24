@@ -124,7 +124,7 @@ func renderApproval(m *chat.ApprovalMessage) (rendered, error) {
 }
 
 func writeApproval(t *textBuilder, m *chat.ApprovalMessage, l limits) {
-	t.styled("bold", "Hallpass access request")
+	t.styled("bold", "HallPass access request")
 	t.plain("\nAgent: ")
 	t.untrusted(m.AgentName, l.name)
 	t.plain(" (")
@@ -243,7 +243,7 @@ func renderStatus(u *chat.StatusUpdate) (rendered, error) {
 		return rendered{}, fmt.Errorf("%w: %w", chat.ErrPermanent, errTooLong)
 	}
 	var t textBuilder
-	t.styled("bold", "Hallpass access request")
+	t.styled("bold", "HallPass access request")
 	t.plain(" " + u.RequestID + "\n")
 	writeStatus(&t, u)
 	return t.result(), nil

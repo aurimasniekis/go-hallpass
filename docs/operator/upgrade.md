@@ -1,6 +1,6 @@
 # Upgrade and rollback
 
-Hallpass upgrades are a binary or image swap. The database schema is migrated at startup (PLAN §18.5, ADR-0023,
+HallPass upgrades are a binary or image swap. The database schema is migrated at startup (PLAN §18.5, ADR-0023,
 HP-OPS-005). Versioning rules are in [../VERSIONING.md](../VERSIONING.md).
 
 > **Status.** Forward-only migrations, the automatic pre-migration snapshot, the newer-schema refusal
@@ -10,7 +10,7 @@ HP-OPS-005). Versioning rules are in [../VERSIONING.md](../VERSIONING.md).
 ## Rules
 
 - **Migrations are forward-only.** There are no down migrations. Each migration runs in its own transaction.
-- **A pre-migration snapshot is automatic.** Before applying migrations to an existing database, Hallpass writes a
+- **A pre-migration snapshot is automatic.** Before applying migrations to an existing database, HallPass writes a
   consistent `VACUUM INTO` copy to `<data_dir>/backups/pre-migrate-<from>-<to>-<UTC>.db` and keeps the newest
   `storage.pre_migration_snapshots` (default 3). A failed migration rolls back and the process exits, naming the snapshot.
 - **Never run an older binary on a newer schema.** It refuses to start with `database schema is newer than this binary`.
@@ -27,7 +27,7 @@ HP-OPS-005). Versioning rules are in [../VERSIONING.md](../VERSIONING.md).
 3. Take a full backup to a location outside the data directory and the host:
    - `hallpass backup create --out DIR` (online and consistent, see [backup.md](backup.md)), then
      `hallpass backup verify DIR`.
-   - Alternatively, stop Hallpass and copy the entire data directory (database, `-wal`/`-shm` files, `recordings/`,
+   - Alternatively, stop HallPass and copy the entire data directory (database, `-wal`/`-shm` files, `recordings/`,
      `backups/`) while it is stopped, preserving modes and ownership (`cp -a` or `tar --numeric-owner`).
      Copying a live data directory is not safe.
 4. Confirm you have an offline copy of the KEK that matches `hallpass keys status` (KEK id).
@@ -65,7 +65,7 @@ Pin images by version (or digest), never by `latest`, so a restart cannot upgrad
 
 Rollback restores state from before the upgrade. Data written after it is lost.
 
-1. Stop Hallpass.
+1. Stop HallPass.
 2. Choose the restore source:
    - the full backup from "Before upgrading" (preferred), or
    - the automatic snapshot `<data_dir>/backups/pre-migrate-<from>-<to>-<UTC>.db` for this upgrade.

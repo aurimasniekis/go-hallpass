@@ -1,10 +1,10 @@
 # OIDC interoperability tests (Keycloak, Dex)
 
-These tests run Hallpass's OIDC SSO against real identity providers in Docker (PLAN WP14 "interop smoke tests",
+These tests run HallPass's OIDC SSO against real identity providers in Docker (PLAN WP14 "interop smoke tests",
 ADR-0030). The tests use the IdP's real login page. A browser-like HTTP client with a cookie jar parses the HTML login
-form, submits the username and password, and follows every redirect back to Hallpass's `/auth/oidc/callback`.
+form, submits the username and password, and follows every redirect back to HallPass's `/auth/oidc/callback`.
 
-Hallpass runs in process, wired like `internal/httpapi`'s test harness: `app.New` plus `httpapi.New`, served on a
+HallPass runs in process, wired like `internal/httpapi`'s test harness: `app.New` plus `httpapi.New`, served on a
 loopback port. The SSO flow therefore goes through the real `/auth/oidc/{provider}/start` and `/auth/oidc/callback`
 handlers, the `hp_oidc` binding cookie, session cookies, `/api/v1/me` and `/api/v1/auth/logout`.
 
@@ -37,7 +37,7 @@ To try a newer version, set `HALLPASS_KEYCLOAK_IMAGE` or `HALLPASS_DEX_IMAGE`. T
 ## Transport: plain HTTP on localhost (no TLS)
 
 - **IdP side:** the IdPs are published on `127.0.0.1` and addressed as `http://localhost:<port>`.
-- **Hallpass side:** Hallpass runs in development mode (`oidc.Options.DevMode`), which accepts `http://` issuers and
+- **HallPass side:** HallPass runs in development mode (`oidc.Options.DevMode`), which accepts `http://` issuers and
   endpoints only on localhost. The provider also has `allow_private_network: true`, because the IdP is on loopback.
 - **Production checks not covered:** https-only issuers, the SSRF guard and the cookies' Secure flag are covered by
   `internal/oidc` unit tests.
@@ -85,11 +85,11 @@ The same scenario runs against each IdP (`runScenario`):
    SSO session, so the step-up re-prompt below is meaningful.
 5. **Step-up:**
    - `purpose=stepup` sends `prompt=login&max_age=0`, and the IdP asks for credentials again despite its session.
-   - Hallpass accepts the IdP's `auth_time`: the session's `auth_at` moves forward, and `RequireRecentAuth` passes.
+   - HallPass accepts the IdP's `auth_time`: the session's `auth_at` moves forward, and `RequireRecentAuth` passes.
 6. **Step-up with a stale `auth_time` is refused:**
-   - Hallpass's clock is shifted 2 minutes ahead, so the IdP's honest `auth_time` falls before step-up start − 60 s.
+   - HallPass's clock is shifted 2 minutes ahead, so the IdP's honest `auth_time` falls before step-up start − 60 s.
    - The callback is refused (`sso_error=forbidden`) and the session is unchanged.
-   - Hallpass's logs show the refusal did not come from the code exchange or the ID-token checks.
+   - HallPass's logs show the refusal did not come from the code exchange or the ID-token checks.
 7. **Logout:**
    - `POST /api/v1/auth/logout` revokes the session and returns `provider_logout_url`.
    - The URL is the discovered `end_session_endpoint` with `client_id` and `post_logout_redirect_uri`, and without
@@ -99,12 +99,12 @@ The same scenario runs against each IdP (`runScenario`):
 
 ## Known differences observed
 
-- **Dex groups need a scope:** Dex sends the groups claim only when the `groups` scope is requested. Hallpass's default
+- **Dex groups need a scope:** Dex sends the groups claim only when the `groups` scope is requested. HallPass's default
   scopes do not include it, so the provider's `scopes` must be set.
 - **Dex logout without `id_token_hint`:**
-  - Dex needs `id_token_hint` to honor `post_logout_redirect_uri`, and Hallpass never sends it, because it does not
+  - Dex needs `id_token_hint` to honor `post_logout_redirect_uri`, and HallPass never sends it, because it does not
     retain ID tokens (HP-OIDC-008).
   - After confirmation, Dex ends its session but shows its own "Logged out" page instead of redirecting back.
   - The test asserts that the Dex session ended and logs the missing redirect.
-- **Keycloak `iss` parameter:** Keycloak adds the RFC 9207 `iss` authorization-response parameter. Hallpass ignores
+- **Keycloak `iss` parameter:** Keycloak adds the RFC 9207 `iss` authorization-response parameter. HallPass ignores
   it, and the provider is bound through the server-side `state` instead.

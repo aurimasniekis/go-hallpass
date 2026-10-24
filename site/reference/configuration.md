@@ -1,6 +1,6 @@
 # Configuration reference
 
-Hallpass reads one YAML file (`--config PATH` or `HALLPASS_CONFIG`), then applies `HALLPASS_*` environment overrides.
+HallPass reads one YAML file (`--config PATH` or `HALLPASS_CONFIG`), then applies `HALLPASS_*` environment overrides.
 An override's name is the upper-cased YAML path joined with `_`: `ssh.listen` → `HALLPASS_SSH_LISTEN`. List values
 are comma-separated (`HALLPASS_EGRESS_ALLOW_CIDRS=10.0.0.0/8,192.168.0.0/16`).
 

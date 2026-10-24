@@ -1,6 +1,6 @@
 # Operator guides
 
-Task-oriented guides for the people who run Hallpass and decide on access. Each guide links to the detailed reference
+Task-oriented guides for the people who run HallPass and decide on access. Each guide links to the detailed reference
 in the repository's [`docs/operator/`](https://github.com/aurimasniekis/go-hallpass/tree/main/docs/operator) where
 there is more to know.
 

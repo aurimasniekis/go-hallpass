@@ -16,7 +16,7 @@ import (
 )
 
 // browser is a minimal browser: a cookie jar, manual redirect following and HTML form submission. It stops as soon
-// as a redirect leaves the IdP for a Hallpass page that is not part of the SSO flow (the "landing" page).
+// as a redirect leaves the IdP for a HallPass page that is not part of the SSO flow (the "landing" page).
 type browser struct {
 	t        *testing.T
 	hc       *http.Client
@@ -31,7 +31,7 @@ type page struct {
 	URL     *url.URL
 	Status  int
 	Body    string
-	Landing string // Hallpass path+query the flow ended on ("" when the navigation ended on a rendered page)
+	Landing string // HallPass path+query the flow ended on ("" when the navigation ended on a rendered page)
 }
 
 func newBrowser(t *testing.T, hallpassBase string) *browser {
@@ -115,7 +115,7 @@ func (b *browser) hop(prefix string) *url.URL {
 	return nil
 }
 
-// apiJSON calls the Hallpass API like the web UI does (same-origin Origin and CSRF header on mutations).
+// apiJSON calls the HallPass API like the web UI does (same-origin Origin and CSRF header on mutations).
 func (b *browser) api(method, path string) (int, []byte) {
 	b.t.Helper()
 	req, err := http.NewRequestWithContext(context.Background(), method, b.hallpass.ResolveReference(&url.URL{Path: path}).String(), nil)
@@ -135,7 +135,7 @@ func (b *browser) api(method, path string) (int, []byte) {
 	return res.StatusCode, data
 }
 
-// cookie returns a cookie value the jar would send to the Hallpass origin.
+// cookie returns a cookie value the jar would send to the HallPass origin.
 func (b *browser) cookie(name string) string {
 	for _, c := range b.hc.Jar.Cookies(b.hallpass) {
 		if c.Name == name {

@@ -70,7 +70,7 @@ func callbackUpdate(mut func(u map[string]any)) []byte {
 			"chat_instance": "-1",
 			"data":          "hp1:a:" + chattest.Token(2),
 			"message": map[string]any{
-				"message_id": 77, "date": 1700000000, "text": "Hallpass access request",
+				"message_id": 77, "date": 1700000000, "text": "HallPass access request",
 				"chat": map[string]any{"id": approvalsChat, "type": "supergroup", "title": "Approvals"},
 			},
 		},

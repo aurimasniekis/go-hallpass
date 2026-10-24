@@ -1,4 +1,4 @@
-# Hallpass documentation
+# HallPass documentation
 
 | Document | Purpose |
 |---|---|
@@ -6,7 +6,7 @@
 | [PLAN.md](PLAN.md) | Architecture and execution plan, work packages, progress and acceptance checklist. |
 | [DECISIONS.md](DECISIONS.md) | Architectural decision records and open review items. |
 | [THREAT_MODEL.md](THREAT_MODEL.md) | Assets, trust boundaries, threats, mitigations, residual risks. |
-| [security-guarantees.md](security-guarantees.md) | What Hallpass does and does not guarantee, with current status (HP-DOC-004). |
+| [security-guarantees.md](security-guarantees.md) | What HallPass does and does not guarantee, with current status (HP-DOC-004). |
 | [TEST_STRATEGY.md](TEST_STRATEGY.md) | Test layers, requirement→test matrix, fault catalog, performance method, release evidence. |
 | [PROMPT.md](PROMPT.md) | Original project brief (verbatim). |
 

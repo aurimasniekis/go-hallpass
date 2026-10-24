@@ -1,7 +1,7 @@
 import { useId } from 'react';
 
 /**
- * The Hallpass mark: a pass with an "H" cut out. Decorative (hidden from assistive technology); the product name
+ * The HallPass mark: a pass with an "H" cut out. Decorative (hidden from assistive technology); the product name
  * next to it carries the meaning. Inline so it needs no extra request and works under the CSP.
  */
 export function Logo({ size = 24, className }: { size?: number; className?: string }) {

@@ -1,6 +1,6 @@
 # Destination-side audit (optional)
 
-Inside an interactive shell, Hallpass cannot tell which programs actually ran, and it never labels commands guessed
+Inside an interactive shell, HallPass cannot tell which programs actually ran, and it never labels commands guessed
 from keystrokes as verified. The optional **`hallpass-collector`** adds a second, independent source: the destination
 kernel's exec audit records, signed by the collector and attached to the session timeline as **destination-reported**
 events. Full reference, including the wire protocol:
@@ -8,7 +8,7 @@ events. Full reference, including the wire protocol:
 
 ::: warning Supporting evidence, not proof
 The records come from the destination. Anyone with root there can stop auditd, edit logs or forge records before they
-are signed. Hallpass shows them as `verified: false` with a correlation method and a confidence level.
+are signed. HallPass shows them as `verified: false` with a correlation method and a confidence level.
 :::
 
 ## Requirements on the destination
@@ -34,7 +34,7 @@ are signed. Hallpass shows them as `verified: false` with a correlation method a
    hallpass-collector keygen -key /etc/hallpass-collector/key
    ```
 
-3. In Hallpass, register a collector for the server (the **Destination audit** tab on the server page) with the
+3. In HallPass, register a collector for the server (the **Destination audit** tab on the server page) with the
    printed public key. Note the collector ID (`dac_…`).
 4. Run it as root, for example from a systemd unit:
 

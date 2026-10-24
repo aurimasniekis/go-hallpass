@@ -95,11 +95,11 @@ func readManifest(dir string) (*Manifest, error) {
 	}
 	switch {
 	case m.Format != Format:
-		return nil, fmt.Errorf("not a Hallpass backup (format %q)", m.Format)
+		return nil, fmt.Errorf("not a HallPass backup (format %q)", m.Format)
 	case m.Version != FormatVersion:
 		return nil, fmt.Errorf("unsupported backup format version %d (this binary reads %d)", m.Version, FormatVersion)
 	case m.KEKIncluded:
-		return nil, errors.New("manifest claims to include the KEK; Hallpass backups never contain it")
+		return nil, errors.New("manifest claims to include the KEK; HallPass backups never contain it")
 	}
 	return &m, nil
 }

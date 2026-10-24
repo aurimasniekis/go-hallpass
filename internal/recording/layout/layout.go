@@ -19,7 +19,7 @@ import (
 // Ext is the file extension of a finalized segment.
 const Ext = ".hprec"
 
-// ErrInvalidID means a session or segment ID is not a well-formed, canonical Hallpass identifier.
+// ErrInvalidID means a session or segment ID is not a well-formed, canonical HallPass identifier.
 var ErrInvalidID = errors.New("recording layout: invalid segment or session id")
 
 func canonical(prefix, id string) bool {

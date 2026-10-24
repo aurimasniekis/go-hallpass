@@ -1,6 +1,6 @@
 # First run
 
-You have a running Hallpass and the one-time setup link from `hallpass admin bootstrap`. This page creates the first
+You have a running HallPass and the one-time setup link from `hallpass admin bootstrap`. This page creates the first
 administrator, enrolls two-factor authentication and onboards your first server.
 
 ## Create the first administrator
@@ -8,14 +8,14 @@ administrator, enrolls two-factor authentication and onboards your first server.
 Open the setup link (`https://<your host>/setup?token=…`). The token is removed from the address bar as soon as the
 page loads. Enter an email, a display name and a password (at least 12 bytes by default).
 
-<Shot name="setup-admin" alt="The Set up Hallpass page with administrator email, display name and password" />
+<Shot name="setup-admin" alt="The Set up HallPass page with administrator email, display name and password" />
 
 If the link expired (30 minutes) or was already used, stop the service and run `hallpass admin bootstrap` again. It
 refuses once an administrator exists.
 
 ## Enroll two-factor authentication
 
-Scan the QR code with an authenticator app (or type the secret), then enter the 6-digit code. Hallpass shows
+Scan the QR code with an authenticator app (or type the secret), then enter the 6-digit code. HallPass shows
 **recovery codes** once: store them somewhere safe and tick *I have stored this securely*. Operators you invite later
 go through the same enrollment when their account requires MFA.
 
@@ -30,7 +30,7 @@ Everything it creates is saved as you go, so you can stop and resume from the se
 
 ### 1. Server
 
-The **alias** is what agents type (`web1`). The address and port stay inside Hallpass. Groups and labels are used by
+The **alias** is what agents type (`web1`). The address and port stay inside HallPass. Groups and labels are used by
 policy selectors; descriptions are shown to agents but never grant anything.
 
 <Shot name="wizard-server" alt="Onboarding wizard, step 1: server alias, description, environment, address and port" />
@@ -44,7 +44,7 @@ Compare the fingerprint with the server itself, out of band:
 ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub     # run on the destination
 ```
 
-Then **Confirm**. Hallpass never trusts on first use: no credential is ever sent to a host whose key does not match.
+Then **Confirm**. HallPass never trusts on first use: no credential is ever sent to a host whose key does not match.
 
 ### 3. Roles
 
@@ -54,13 +54,13 @@ separate, least-privilege account per role on the destination.
 
 ### 4. Login credentials
 
-For each role, **Generate login key**. Hallpass keeps the private key encrypted and shows the line to install on the
+For each role, **Generate login key**. HallPass keeps the private key encrypted and shows the line to install on the
 destination, already restricted with `restrict` and `from="<gateway egress address>"`:
 
 <Shot name="wizard-credentials" alt="Login credential step with the authorized_keys line, a successful login test and the Activate button" />
 
 Install the line in the remote user's `~/.ssh/authorized_keys`, press **Test login**, then **Activate**. Instead of
-keys, you can use **certificates** signed by a Hallpass user CA; see [Servers and roles](/operators/servers).
+keys, you can use **certificates** signed by a HallPass user CA; see [Servers and roles](/operators/servers).
 
 ### 5. Access
 

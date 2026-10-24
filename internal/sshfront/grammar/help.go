@@ -6,7 +6,7 @@ import (
 )
 
 var helpTopics = map[string]string{
-	"": `Hallpass gateway commands (ssh <gateway> <command> …):
+	"": `HallPass gateway commands (ssh <gateway> <command> …):
 
   list [--json] [--server <server>]     visible servers and roles (default with no command)
   roles <server> [--json]               roles of one server

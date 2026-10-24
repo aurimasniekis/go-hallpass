@@ -30,17 +30,17 @@ agent's task.
 
 ## Suspected gateway compromise
 
-Assume the attacker can read all recordings and credentials and act as Hallpass toward every destination.
+Assume the attacker can read all recordings and credentials and act as HallPass toward every destination.
 
 1. Enable lockdown if the console is still trustworthy. Isolate the host; keep its disk for forensics.
-2. On every destination, remove Hallpass `authorized_keys` lines and distrust Hallpass user CAs.
+2. On every destination, remove HallPass `authorized_keys` lines and distrust HallPass user CAs.
 3. Build a clean host with a **new KEK**. Restore the last pre-compromise backup (rewrap it to the new KEK with
    `hallpass keys rotate-kek`), run `hallpass verify`, and compare chain heads with your anchors.
 4. Rotate the gateway host key, every login credential, integration secrets, and force operator password resets.
 
 ## Destination host key changed
 
-`exec` and `connect` fail with exit 88 and a host-key alert is recorded. Hallpass never sends credentials to a host
+`exec` and `connect` fail with exit 88 and a host-key alert is recorded. HallPass never sends credentials to a host
 whose key does not match.
 
 1. Confirm out of band whether the change is expected (reinstall, key rotation).

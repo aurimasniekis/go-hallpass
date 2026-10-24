@@ -12,14 +12,14 @@ easiest way to add a server is the guided wizard (**Servers → New server (guid
 
 - Agents only ever see the **alias** and description. The address and port are shown only to operators with the
   address permission (administrators, and auditors when `rbac.auditor_address_read` is set).
-- Hallpass dials only addresses inside `egress.allow_cidrs`. Loopback, link-local and cloud metadata ranges are denied
+- HallPass dials only addresses inside `egress.allow_cidrs`. Loopback, link-local and cloud metadata ranges are denied
   unless re-allowed with `egress.allow_special_cidrs`. An empty `allow_cidrs` means nothing is reachable.
-- Set `egress.source_addresses` to the address(es) your servers see Hallpass connect from. The suggested
+- Set `egress.source_addresses` to the address(es) your servers see HallPass connect from. The suggested
   `authorized_keys` lines and certificates use it for `from=` / `source-address`.
 
 ## Host identities
 
-Hallpass pins each server's host key, or trusts a host CA bound to the server. On the **Host identities** tab:
+HallPass pins each server's host key, or trusts a host CA bound to the server. On the **Host identities** tab:
 
 - **Scan host keys** fetches what the server offers; **Add key** accepts a pasted key.
 - **Confirm** only after comparing the fingerprint with the server itself (`ssh-keygen -lf
@@ -35,7 +35,7 @@ possible attack until you have confirmed the change out of band. See
 | Setting | Meaning |
 |---|---|
 | Alias, description | What agents see in `ssh center list`. Descriptions are informational. |
-| Remote user | The account Hallpass logs in as. Use a dedicated, least-privilege account per role. |
+| Remote user | The account HallPass logs in as. Use a dedicated, least-privilege account per role. |
 | Capabilities | `shell`, `exec`, `pty`: which SSH channel types are allowed. They do not restrict commands. |
 | Default / maximum duration | Grant length when the agent does not ask, and the role's ceiling. |
 | Approval channels | Restrict decisions for a sensitive role to the web console only. |
@@ -47,21 +47,21 @@ A role name such as `readonly` enforces nothing. Enforce least privilege on the 
 
 ## Login credentials
 
-Each role needs a way for Hallpass to log in.
+Each role needs a way for HallPass to log in.
 
 ### Managed login keys (recommended)
 
-1. **Generate login key**. Hallpass creates the key pair and keeps the private key encrypted with the KEK.
+1. **Generate login key**. HallPass creates the key pair and keeps the private key encrypted with the KEK.
 2. Install the shown line in the remote user's `~/.ssh/authorized_keys`. It already carries `restrict` and
    `from="<egress address>"`, plus `pty` only when the role has the `pty` capability.
 3. **Test login**, then **Activate**.
 
 To rotate: generate a new key, install it, test, activate, and after the overlap remove the old line and retire the
-old key. Importing an existing private key is possible, but generating in Hallpass is preferred.
+old key. Importing an existing private key is possible, but generating in HallPass is preferred.
 
 ### User certificates
 
-Instead of installing keys, create a **user CA** in Hallpass and bind the role to it. On the destination, trust the CA
+Instead of installing keys, create a **user CA** in HallPass and bind the role to it. On the destination, trust the CA
 and allow only the role's explicit principal:
 
 ```

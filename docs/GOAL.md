@@ -1,4 +1,4 @@
-# Hallpass — Product Contract (GOAL)
+# HallPass — Product Contract (GOAL)
 
 > **Status:** canonical product contract. Established at WP00 (planning) on 2026-10-23.
 > Changes to this file are contract changes: they must be recorded in `docs/DECISIONS.md` with justification,
@@ -7,13 +7,13 @@
 
 ## 1. Product statement
 
-Hallpass is a **terminating SSH gateway for AI agents**:
+HallPass is a **terminating SSH gateway for AI agents**:
 
 ```
-Agent ──SSH (agent key)──▶ Hallpass ──SSH (gateway-controlled credential)──▶ Destination server
+Agent ──SSH (agent key)──▶ HallPass ──SSH (gateway-controlled credential)──▶ Destination server
 ```
 
-An agent, container, or VM owns an SSH key pair. An operator registers the agent's public key with Hallpass.
+An agent, container, or VM owns an SSH key pair. An operator registers the agent's public key with HallPass.
 The agent uses only the gateway endpoint (examples use the SSH alias `center`) and its own private key to:
 
 - discover the server aliases and access roles it is permitted to see, with operator-approved descriptions;
@@ -21,11 +21,11 @@ The agent uses only the gateway endpoint (examples use the SSH alias `center`) a
 - obtain human approval through the web UI, Slack, or Telegram (or policy auto-approval within limits);
 - connect, disconnect, reconnect, and execute commands during the approved interval.
 
-Hallpass authenticates agents, enforces visibility and access policy, obtains approvals, resolves destination
+HallPass authenticates agents, enforces visibility and access policy, obtains approvals, resolves destination
 addresses internally, opens outbound SSH connections with credentials the agent never sees, records access
 history and SSH activity into encrypted files, and terminates gateway-managed access at expiry or revocation.
 
-Hallpass is a complete product, not an MVP. Milestones are allowed, and they do not reduce the final scope (§8).
+HallPass is a complete product, not an MVP. Milestones are allowed, and they do not reduce the final scope (§8).
 
 ## 2. Scope
 
@@ -48,15 +48,15 @@ In scope for v1.0:
 
 ## 3. Non-goals (v1.0)
 
-- **Not a sandbox.** Hallpass does not restrict what an allowed shell can do on the destination. Command
+- **Not a sandbox.** HallPass does not restrict what an allowed shell can do on the destination. Command
   allowlists are not offered as a security boundary. Destination-side controls (accounts, sudoers,
   ForceCommand, MAC policies, network egress rules) are required for reliable restriction.
 - **No port, agent, X11 or streamlocal forwarding, and no SFTP/SCP subsystems.** Possible future work is a separately
   authorized capability (review item R-06). An allowed shell can still open network connections and transfer
   files by other means. This is documented, not prevented.
-- **No high availability or active-active clustering.** Hallpass runs as a single active instance with cold-standby recovery.
+- **No high availability or active-active clustering.** HallPass runs as a single active instance with cold-standby recovery.
 - **No writable SQLite on network filesystems** (NFS, SMB/CIFS).
-- **No agent private keys in Hallpass**, and no issuing of destination keys or certificates to agents.
+- **No agent private keys in HallPass**, and no issuing of destination keys or certificates to agents.
 - **No perfect secret redaction** in recordings, and no reconstruction of "verified" commands from keystrokes.
 - **No guarantee that destination processes end** when SSH closes (detached processes survive without
   destination-side controls).
@@ -66,7 +66,7 @@ In scope for v1.0:
 
 ## 4. Security boundaries and guarantees
 
-### 4.1 What Hallpass guarantees (when correctly deployed per the operator guide)
+### 4.1 What HallPass guarantees (when correctly deployed per the operator guide)
 
 | # | Guarantee | Requirement IDs |
 |---|---|---|
@@ -81,9 +81,9 @@ In scope for v1.0:
 | G-9 | Recording content and sensitive fields are encrypted at rest with authenticated encryption, and truncation and tampering by a party without keys are detected. | HP-CRY-002..005 |
 | G-10 | Committed state survives process crashes, and interrupted sessions and recordings are reconciled and labeled accurately. | HP-DB-013, HP-REC-009 |
 
-### 4.2 What Hallpass explicitly does **not** guarantee
+### 4.2 What HallPass explicitly does **not** guarantee
 
-- **Hallpass is a high-value trusted component that can access plaintext proxied session data.** Whoever controls
+- **HallPass is a high-value trusted component that can access plaintext proxied session data.** Whoever controls
   the running gateway process, or holds its host plus the KEK, can read and alter sessions, recordings and credentials.
 - Encrypted history is **not tamper-proof** against a compromised gateway that holds the keys. External anchoring
   (HP-CRY-008) narrows the window but does not eliminate it.
@@ -92,9 +92,9 @@ In scope for v1.0:
 - Role descriptions and usernames (e.g. `readonly`) are not enforcement.
 - Source-CIDR restrictions are defense in depth, not workload attestation.
 - Closing SSH or expiring a grant does not kill detached destination processes.
-- Certificate expiry alone does not end established sessions. Hallpass enforces deadlines itself.
+- Certificate expiry alone does not end established sessions. HallPass enforces deadlines itself.
 - Input recording, when enabled, may capture secrets, and redaction is not guaranteed.
-- Slack, Telegram and the OIDC IdP are trusted to authenticate their own users. Hallpass enforces only the mapping and scope.
+- Slack, Telegram and the OIDC IdP are trusted to authenticate their own users. HallPass enforces only the mapping and scope.
 
 ### 4.3 Trust boundaries (summary; full model in `docs/THREAT_MODEL.md`)
 
@@ -111,7 +111,7 @@ TB-8 host administrator ↔ CLI/break-glass.
 | Server | A destination SSH host with a unique alias, internal address and enrolled host identity. |
 | Role (server role) | A named way to log in to a server: destination username, credential, capabilities, limits. |
 | Host identity | A destination's SSH host public key or host-CA binding. Used to verify the destination, never to log in. |
-| Login credential | A gateway-held private key or CA signer that Hallpass uses to authenticate *to* the destination. |
+| Login credential | A gateway-held private key or CA signer that HallPass uses to authenticate *to* the destination. |
 | Access request | An agent's request for a server+role with a reason and requested duration. |
 | Approval decision | An approve/deny outcome, with actor (operator or `system:policy`) and channel. |
 | Grant | Authoritative permission: agent × server × role × capabilities × [start, expiry) × policy version. |
@@ -168,7 +168,7 @@ Test layers are abbreviated in `docs/PLAN.md` §21 and in `docs/TEST_STRATEGY.md
 | HP-AGT-003 | **Globally unique key ownership.** A key fingerprint (SHA-256 of the wire-format public key) is unique across all agents, including revoked keys, which are tombstoned. The same key can never resolve to more than one agent. |
 | HP-AGT-004 | **Validated key parsing.** Public keys are parsed from authorized_keys or OpenSSH format with strict validation and the algorithm policy of HP-SSH-004. authorized_keys options are rejected and certificates are rejected as agent keys in v1. |
 | HP-AGT-005 | **Immediate key revocation.** Revoking a key blocks new authentications at once and terminates connections authenticated with that key within the enforcement bound (HP-GRT-008). |
-| HP-AGT-006 | **No agent private keys.** Hallpass never accepts, generates or stores agent private keys. API input containing private-key material is rejected and the material is not logged. |
+| HP-AGT-006 | **No agent private keys.** HallPass never accepts, generates or stores agent private keys. API input containing private-key material is rejected and the material is not logged. |
 | HP-AGT-007 | **Source CIDR restriction.** Optional per-agent source CIDRs are enforced at authentication and documented as defense in depth, not workload attestation. |
 | HP-AGT-008 | **Agent disablement.** Disabling an agent rejects new authentication, revokes its active grants (`agent_disabled`), cancels its pending requests and terminates its activity within the enforcement bound. |
 | HP-AGT-009 | **Agent audit history.** All agent and key changes emit audit events with actor, before/after (non-secret) values and timestamps, viewable per agent. |
@@ -192,10 +192,10 @@ Test layers are abbreviated in `docs/PLAN.md` §21 and in `docs/TEST_STRATEGY.md
 
 | ID | Requirement |
 |---|---|
-| HP-KEY-001 | **Managed login key default.** By default each server-role binding gets a distinct Ed25519 login key generated inside Hallpass (`crypto/rand`). The private key is sealed with the credential DEK and is never exportable. |
-| HP-KEY-002 | **Public key installation aid.** Hallpass shows each login public key with a suggested `authorized_keys` line (`restrict,pty,from="<egress CIDRs>" ...`) and a copy action. |
+| HP-KEY-001 | **Managed login key default.** By default each server-role binding gets a distinct Ed25519 login key generated inside HallPass (`crypto/rand`). The private key is sealed with the credential DEK and is never exportable. |
+| HP-KEY-002 | **Public key installation aid.** HallPass shows each login public key with a suggested `authorized_keys` line (`restrict,pty,from="<egress CIDRs>" ...`) and a copy action. |
 | HP-KEY-003 | **Login key rotation.** Login keys move through `pending` → `active` → `retiring` → `retired`/`revoked`. A connection probe confirms a pending key before it is activated. The old key stays valid during an overlap window, and revocation takes effect immediately. |
-| HP-KEY-004 | **OpenSSH user certificates.** As an alternative, a Hallpass user CA signs per-connection certificates. Each has a TTL of 2 minutes by default, explicit principals mapped from the role, a key ID binding grant/connection IDs, and only the extensions the role's capabilities require. |
+| HP-KEY-004 | **OpenSSH user certificates.** As an alternative, a HallPass user CA signs per-connection certificates. Each has a TTL of 2 minutes by default, explicit principals mapped from the role, a key ID binding grant/connection IDs, and only the extensions the role's capabilities require. |
 | HP-KEY-005 | **Signer abstraction.** Credential signing is behind a `Signer` interface. v1 ships a local encrypted-key implementation, and the docs state which external KMS/HSM algorithms can produce valid OpenSSH signatures. |
 | HP-KEY-006 | **Distinct key types.** Host identities, login credentials and certificate authorities are distinct types and tables in code, distinct API resources and distinct UI pages, and are never interchangeable. |
 | HP-KEY-007 | **Credential isolation.** Login private keys, CA keys and certificates are never sent to agents or exposed in API responses, logs or notifications. Imported private keys are flagged `imported` and are never re-exported. |
@@ -217,7 +217,7 @@ Test layers are abbreviated in `docs/PLAN.md` §21 and in `docs/TEST_STRATEGY.md
 | HP-POL-011 | **Approver authority rules.** Approval authority comes from separate approver rules (operator or operator group × target × role selector). It requires the Approver or Administrator internal role plus a matching rule, and no one holds approval authority implicitly. |
 | HP-POL-012 | **Self-approval prohibition.** When enabled (default: enabled; see review item R-09), an operator listed as an owner of the requesting agent cannot approve that agent's requests. |
 | HP-POL-013 | **Auto-approval within limits.** Auto-approval applies only when the requested duration is at most the rule's `max_duration` (and the role maximum). Longer requests need human approval and are never silently clamped. Auto-approvals are recorded as decisions by `system:policy` with the deciding rule ID. |
-| HP-POL-014 | **Command allowlists are not a sandbox.** Hallpass does not present command allowlists as a security boundary. Capabilities control channel types only, and the docs point to destination-side enforcement (ForceCommand, sudoers, restricted accounts). |
+| HP-POL-014 | **Command allowlists are not a sandbox.** HallPass does not present command allowlists as a security boundary. Capabilities control channel types only, and the docs point to destination-side enforcement (ForceCommand, sudoers, restricted accounts). |
 
 ### HP-REQ — Access requests
 
@@ -268,7 +268,7 @@ Test layers are abbreviated in `docs/PLAN.md` §21 and in `docs/TEST_STRATEGY.md
 | HP-REC-003 | **Idempotent events.** Event writers use deterministic idempotency keys, so retries after transient errors do not duplicate events. |
 | HP-REC-004 | **Capture fidelity.** Recording captures exec command strings, PTY output, resize events, separate stdout/stderr for non-PTY sessions, signals, EOF and exit status. |
 | HP-REC-005 | **Input recording opt-in.** Input recording is off by default, configurable per role, and both the UI and docs warn that input may contain secrets. |
-| HP-REC-006 | **No false command claims.** Commands inferred from keystrokes or output are labeled `inferred`, never `verified`, and Hallpass does not promise secret redaction. |
+| HP-REC-006 | **No false command claims.** Commands inferred from keystrokes or output are labeled `inferred`, never `verified`, and HallPass does not promise secret redaction. |
 | HP-REC-007 | **Mandatory recording fail-closed.** With mandatory recording (default), forwarding starts only after the segment is created and its header is durable. Recording failure or exhausted storage terminates the affected channel and marks the recording `failed`. |
 | HP-REC-008 | **Durability guarantee.** Recorded data is durable once its frame is fsynced, at most 250 ms after capture under the default `group` mode. In `strict` mode frames are fsynced before the corresponding bytes are forwarded. |
 | HP-REC-009 | **Accurate incomplete marking.** After a crash, segments without a final frame are `interrupted`, and their authenticated prefix stays replayable and is labeled incomplete. |
@@ -342,7 +342,7 @@ Test layers are abbreviated in `docs/PLAN.md` §21 and in `docs/TEST_STRATEGY.md
 | HP-OIDC-002 | **Code flow with PKCE.** Only Authorization Code with PKCE (S256) is used, never implicit or ROPC. State and nonce are single-use, server-side and expire after 10 minutes. |
 | HP-OIDC-003 | **ID token validation.** ID tokens are checked for signature (JWKS; RS256/ES256/EdDSA, never `none` or HMAC), `iss`, `aud`, `azp` when multiple audiences are present, `exp`/`iat` with ≤ 60 s skew, and `nonce`. |
 | HP-OIDC-004 | **JWKS caching and rotation.** JWKS is cached and refetched on unknown `kid` with rate limiting, and tested with key rotation. |
-| HP-OIDC-005 | **TLS and redirect safety.** HTTPS is required for the issuer and Hallpass base URL in production, with HTTP allowed only for `localhost` in dev mode. TLS verification is never disabled. The redirect URI is exact, and post-login return paths are relative and allowlisted. |
+| HP-OIDC-005 | **TLS and redirect safety.** HTTPS is required for the issuer and HallPass base URL in production, with HTTP allowed only for `localhost` in dev mode. TLS verification is never disabled. The redirect URI is exact, and post-login return paths are relative and allowlisted. |
 | HP-OIDC-006 | **Endpoint validation.** Discovery and endpoints must match the issuer origin unless explicitly allowed. Private-network IdPs require an explicit operator allowance. |
 | HP-OIDC-007 | **Secret handling.** Client secrets are encrypted at rest, write-only in the API and UI, and never sent to the frontend. |
 | HP-OIDC-008 | **Token minimization.** Access and refresh tokens are discarded after login (no documented need to retain them). The ID token is used only for claim extraction. |
@@ -352,7 +352,7 @@ Test layers are abbreviated in `docs/PLAN.md` §21 and in `docs/TEST_STRATEGY.md
 | HP-OIDC-012 | **Provider outage behavior.** When the IdP is down, SSO login fails closed with a clear message, existing sessions continue until expiry, and local or break-glass paths stay available as configured. |
 | HP-OIDC-013 | **Upstream step-up.** Step-up sends `prompt=login` and `max_age` and verifies `auth_time`, plus `acr`/`amr` when mapped. Providers without `auth_time` fail step-up unless configured to require local TOTP instead. |
 | HP-OIDC-014 | **Test-login before enforcement.** An admin must complete a full test login (discovery → login → claim mapping preview → role result) before SSO-only enforcement can be enabled. |
-| HP-OIDC-015 | **Logout semantics.** Logout revokes the Hallpass session. RP-initiated provider logout is optional and is documented as not being a global logout. |
+| HP-OIDC-015 | **Logout semantics.** Logout revokes the HallPass session. RP-initiated provider logout is optional and is documented as not being a global logout. |
 
 ### HP-RBAC — Operator RBAC
 
@@ -429,7 +429,7 @@ Test layers are abbreviated in `docs/PLAN.md` §21 and in `docs/TEST_STRATEGY.md
 | HP-OPS-004 | **Restore onto clean machine.** `hallpass restore` plus `hallpass verify` restores onto a clean host, and a scripted drill proves it. |
 | HP-OPS-005 | **Upgrade and rollback.** Upgrades take a pre-migration snapshot, and the documented rollback restores that snapshot (forward-only migrations, data since the upgrade is lost). |
 | HP-OPS-006 | **Capacity and disk alerts.** Disk usage alerts fire at 80% and 90%, and new sessions are refused below a configurable free-space reserve. The docs include a capacity planning guide. |
-| HP-OPS-007 | **Container and standalone deploy.** Hallpass ships a distroless non-root image, a Compose example and a documented standalone systemd deployment. |
+| HP-OPS-007 | **Container and standalone deploy.** HallPass ships a distroless non-root image, a Compose example and a documented standalone systemd deployment. |
 | HP-OPS-008 | **CI pipeline.** CI runs lint, vet, unit/race tests, fuzz smoke, OpenSSH integration, frontend tests, govulncheck, Trivy and secret scanning. |
 | HP-OPS-009 | **Release provenance.** Releases include an SBOM (syft), checksums and GitHub build provenance attestation. |
 | HP-OPS-010 | **Project documents.** SECURITY.md, CONTRIBUTING.md, architecture and operator docs, and secret-free example configuration are provided. |
@@ -469,7 +469,7 @@ Test layers are abbreviated in `docs/PLAN.md` §21 and in `docs/TEST_STRATEGY.md
 | HP-DOC-001 | **Operator guide.** Operator documentation covers installation, configuration, KEK provisioning, deployment, backup/restore, upgrade, key rotation, break-glass and incident procedures. |
 | HP-DOC-002 | **Agent guide.** The agent guide covers `~/.ssh/config`, `ssh -t`, the command grammar, JSON schemas, exit codes, quoting and gateway host-key pinning. |
 | HP-DOC-003 | **Destination hardening guide.** The destination hardening guide covers `authorized_keys` `restrict`/`from=`, firewalling to gateway egress, sudo/ForceCommand, process-lifecycle controls and audit options. |
-| HP-DOC-004 | **Guarantees and non-guarantees.** A published security guarantees page states what Hallpass does and does not guarantee, consistent with THREAT_MODEL.md. |
+| HP-DOC-004 | **Guarantees and non-guarantees.** A published security guarantees page states what HallPass does and does not guarantee, consistent with THREAT_MODEL.md. |
 | HP-DOC-005 | **Recording format spec.** The `HPREC1` format and the consistency protocol are specified in `docs/formats/hprec1.md`. |
 | HP-DOC-006 | **Changelog and versioning.** A changelog plus versioning policy covers the binary, API, JSON schemas, recording format and DB schema. |
 
@@ -496,7 +496,7 @@ and it is committed locally (WP commit boundary).
 
 ## 8. Release gates (v1.0)
 
-Hallpass may be called **stable** or **production-ready** only when every gate passes with recorded evidence.
+HallPass may be called **stable** or **production-ready** only when every gate passes with recorded evidence.
 Features existing is not evidence.
 
 | Gate | Criterion | Evidence |

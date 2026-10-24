@@ -86,7 +86,7 @@ function SystemStatusCard() {
               ),
             },
             { key: 'policy', label: 'Policy version', value: status.data.policy_version ?? '—' },
-            { key: 'version', label: 'Hallpass version', value: status.data.version },
+            { key: 'version', label: 'HallPass version', value: status.data.version },
             {
               key: 'breakglass',
               label: 'Break-glass',

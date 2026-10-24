@@ -185,7 +185,7 @@ const (
 	EvRecordingFailed = "recording.failed"
 	EvSessionClosed   = "access_session.closed"
 	// EvDestinationExec is a destination-reported exec record ingested from a signed collector (WP25, HP-REC-012).
-	// It is never verified by Hallpass; its data carries provenance "destination-audit" and verified=false.
+	// It is never verified by HallPass; its data carries provenance "destination-audit" and verified=false.
 	EvDestinationExec = "destination.exec"
 )
 

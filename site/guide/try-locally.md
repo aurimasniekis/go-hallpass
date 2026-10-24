@@ -1,6 +1,6 @@
 # Try it locally
 
-This page runs Hallpass on your own machine in **development mode**: plain HTTP on loopback and a generated master
+This page runs HallPass on your own machine in **development mode**: plain HTTP on loopback and a generated master
 key inside the data directory. It is the fastest way to click through the console and connect a test agent. Never
 use development mode for real servers; install with [Docker Compose](/guide/install-docker) or
 [systemd](/guide/install-binary) instead.
@@ -44,7 +44,7 @@ EOF
 hallpass config check --config hallpass.yaml
 ```
 
-Change `egress.allow_cidrs` to the network of the test server you want to reach. Hallpass refuses destinations
+Change `egress.allow_cidrs` to the network of the test server you want to reach. HallPass refuses destinations
 outside these ranges. An empty list means no destination is reachable.
 
 ## 3. Initialize and start

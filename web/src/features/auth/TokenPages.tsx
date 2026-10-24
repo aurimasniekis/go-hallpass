@@ -43,7 +43,7 @@ export function AcceptInvitationPage({
   };
 
   return (
-    <AuthLayout title="Join Hallpass" subtitle="Finish setting up your operator account.">
+    <AuthLayout title="Join HallPass" subtitle="Finish setting up your operator account.">
       {token === '' ? (
         <Alert type="error" showIcon title="This invitation link is incomplete." />
       ) : done ? (

@@ -299,7 +299,7 @@ function ProviderDetail({
             {
               key: 'stepup',
               label: 'Step-up fallback',
-              value: provider.stepup_fallback === 'local_totp' ? 'Hallpass TOTP' : 'None',
+              value: provider.stepup_fallback === 'local_totp' ? 'HallPass TOTP' : 'None',
             },
             {
               key: 'acr',
@@ -311,7 +311,7 @@ function ProviderDetail({
         />
         <Card size="small" title="Test login">
           <p>
-            Signs you in at the provider in a fresh login and shows the claims and the roles Hallpass would
+            Signs you in at the provider in a fresh login and shows the claims and the roles HallPass would
             map, without creating a session. A successful test is required before SSO-only enforcement.
           </p>
           <Button
@@ -377,7 +377,7 @@ function MappingsCard({ provider }: { provider: OIDCProvider }) {
     <Card size="small" title="Group mappings">
       <p>
         Values of the <code className="hp-mono">{provider.groups_claim ?? 'groups'}</code> claim map to an
-        operator role or a Hallpass operator group. SSO-mapped roles are managed by the provider at each
+        operator role or a HallPass operator group. SSO-mapped roles are managed by the provider at each
         login.
       </p>
       {mappings.isPending ? (

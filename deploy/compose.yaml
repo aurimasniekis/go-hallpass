@@ -1,4 +1,4 @@
-# Hallpass on Docker Compose (HP-OPS-007). Single instance: exactly one Hallpass per data volume, no replicas.
+# HallPass on Docker Compose (HP-OPS-007). Single instance: exactly one HallPass per data volume, no replicas.
 # Read docs/operator/container.md first. Quick start from this directory:
 #
 #   1. Create the KEK on the Docker host, owned by the container user (UID 65532) and readable only by it:
@@ -13,7 +13,7 @@
 #   HP_VERSION (required)  HP_IMAGE  HP_CONFIG_FILE  HP_KEK_FILE  HP_SSH_PORT  HP_HTTP_PORT
 #
 # The image runs as UID/GID 65532 with no shell. Compose `secrets:` with `file:` is a bind mount, so the host file's
-# owner and mode are what the container sees: Hallpass refuses a KEK readable by group/others or owned by another UID.
+# owner and mode are what the container sees: HallPass refuses a KEK readable by group/others or owned by another UID.
 
 name: hallpass
 
@@ -59,7 +59,7 @@ services:
         max-file: "5"
 
 volumes:
-  # Local named volume. Do not back it with NFS/SMB/FUSE: Hallpass refuses network filesystems (HP-DB-007).
+  # Local named volume. Do not back it with NFS/SMB/FUSE: HallPass refuses network filesystems (HP-DB-007).
   hallpass-data: {}
 
 secrets:

@@ -60,7 +60,7 @@ func randomUUID(t testing.TB) string {
 }
 
 // shiftClock is the real clock plus an adjustable offset. It lets a test make an honest, fresh IdP login look stale
-// to Hallpass (step-up auth_time refusal) without touching the IdP.
+// to HallPass (step-up auth_time refusal) without touching the IdP.
 type shiftClock struct{ off atomic.Int64 }
 
 func (c *shiftClock) Now() time.Time        { return time.Now().Add(time.Duration(c.off.Load())) }
@@ -96,7 +96,7 @@ func (s *syncBuffer) String() string {
 	return s.b.String()
 }
 
-// hallpass is an in-process Hallpass (development mode, so http://localhost issuers are accepted) serving the real
+// hallpass is an in-process HallPass (development mode, so http://localhost issuers are accepted) serving the real
 // HTTP API and SSO endpoints on a loopback port, exactly like internal/httpapi's test harness.
 type hallpass struct {
 	t    *testing.T
@@ -145,11 +145,11 @@ func startHallpass(t *testing.T) *hallpass {
 // RedirectURI is the single callback URI that must be registered at the IdP.
 func (h *hallpass) RedirectURI() string { return h.A.OIDC.RedirectURI() }
 
-// PostLogoutURI is what Hallpass sends as post_logout_redirect_uri (Logout passes "/login").
+// PostLogoutURI is what HallPass sends as post_logout_redirect_uri (Logout passes "/login").
 func (h *hallpass) PostLogoutURI() string { return h.Base + "/login" }
 
 // createProvider configures a provider like an administrator would: groups claim "groups", loopback IdP allowed
-// (allow_private_network), RP-initiated logout on. scopes nil keeps Hallpass's default (openid profile email).
+// (allow_private_network), RP-initiated logout on. scopes nil keeps HallPass's default (openid profile email).
 func (h *hallpass) createProvider(slug, issuer, clientID, secret string, scopes []string) *oidc.Provider {
 	h.t.Helper()
 	in := oidc.ProviderInput{Slug: ptr(slug), DisplayName: ptr(slug + " interop"), Issuer: ptr(issuer),

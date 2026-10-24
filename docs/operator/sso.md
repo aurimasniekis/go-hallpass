@@ -1,6 +1,6 @@
 # Single sign-on (OIDC)
 
-Hallpass supports any OpenID Connect provider (Keycloak, Dex, Entra ID, Google, Okta, Authentik, …) for operator sign-in.
+HallPass supports any OpenID Connect provider (Keycloak, Dex, Entra ID, Google, Okta, Authentik, …) for operator sign-in.
 Agents never use SSO; they authenticate with SSH keys.
 
 ## How it works
@@ -39,7 +39,7 @@ Agents never use SSO; they authenticate with SSH keys.
 | `end_session_enabled` | Offer RP-initiated logout at the provider (see logout below). |
 
 Discovery runs on first use and after every configuration change. Endpoints must be https and, by default, on the
-issuer's site. Hallpass does not use HTTP proxies or follow redirects for IdP requests.
+issuer's site. HallPass does not use HTTP proxies or follow redirects for IdP requests.
 
 ## Linking operators
 
@@ -64,12 +64,12 @@ the last enabled administrator: the role is kept and the conflict is audited.
 
 ## Step-up (recent authentication)
 
-Sensitive actions need authentication within the last 5 minutes. For SSO sessions, Hallpass sends the user back to the
+Sensitive actions need authentication within the last 5 minutes. For SSO sessions, HallPass sends the user back to the
 IdP with `prompt=login&max_age=0`. It then requires `auth_time` to be at or after the step-up start (minus 60 s skew),
 and `acr` to match when `acr_values` are configured.
 
 If the provider does not send `auth_time`, step-up fails. Set `stepup_fallback: local_totp` to require the operator's
-Hallpass TOTP instead; the operator must have TOTP enrolled.
+HallPass TOTP instead; the operator must have TOTP enrolled.
 
 ## Test login and SSO-only mode
 
@@ -78,7 +78,7 @@ test runs discovery, the IdP login and claim validation, then shows the claims, 
 would get. It creates no session.
 
 Password login can then be disabled when at least one enabled administrator has a linked identity on an enabled provider.
-While SSO-only mode is on, Hallpass refuses changes that would break that path: disabling or deleting the last such
+While SSO-only mode is on, HallPass refuses changes that would break that path: disabling or deleting the last such
 provider, or unlinking the last SSO administrator. The break-glass recovery login (`hallpass admin recover`) always
 keeps working.
 
@@ -92,8 +92,8 @@ JWKS is cached and refetched when an unknown key ID appears, at most once every 
 
 ## Logout
 
-Logout always revokes the Hallpass session. When `end_session_enabled` is set and the provider advertises an
-`end_session_endpoint`, Hallpass also redirects there with `client_id` and `post_logout_redirect_uri`. No `id_token_hint`
+Logout always revokes the HallPass session. When `end_session_enabled` is set and the provider advertises an
+`end_session_endpoint`, HallPass also redirects there with `client_id` and `post_logout_redirect_uri`. No `id_token_hint`
 is sent, because ID tokens are not retained. This ends the session at that provider only. It is **not** a global logout
 from other applications.
 
@@ -120,7 +120,7 @@ Also tested against real **Keycloak 26.7** and **Dex 2.46** containers (`make te
 Provider notes:
 - **Dex** sends the `groups` claim only when the `groups` scope is requested. Set `scopes: [openid, profile, email,
   groups]` and `groups_claim: groups`.
-- **Dex** honours `post_logout_redirect_uri` only together with `id_token_hint`. Hallpass does not keep ID tokens
+- **Dex** honours `post_logout_redirect_uri` only together with `id_token_hint`. HallPass does not keep ID tokens
   (HP-OIDC-008), so after RP-initiated logout the user stays on Dex's "logged out" page. The Dex session does end.
-- **Keycloak** asks the user to confirm RP-initiated logout, then redirects back to Hallpass.
+- **Keycloak** asks the user to confirm RP-initiated logout, then redirects back to HallPass.
 - Logout offers the end-session endpoint of the provider that created the session (`web_sessions.auth_provider`).

@@ -5,15 +5,15 @@ A short glossary of the objects you meet in the console and in the agent's outpu
 ## Inventory
 
 **Agent**
-: An AI agent, container or VM that uses Hallpass. It has a name, optional groups and labels, and one or more
+: An AI agent, container or VM that uses HallPass. It has a name, optional groups and labels, and one or more
   registered **public keys**. The SSH username an agent sends is ignored: identity comes from the key alone.
 
 **Server**
-: A destination host. Agents address it by its **alias** (`web1`). The address and port are known only to Hallpass
+: A destination host. Agents address it by its **alias** (`web1`). The address and port are known only to HallPass
   and to operators allowed to see them. Servers have groups and labels for policy selectors.
 
 **Host identity**
-: The destination's SSH host key (or a host CA) that Hallpass pins. Hallpass never trusts a host key on first use: an
+: The destination's SSH host key (or a host CA) that HallPass pins. HallPass never trusts a host key on first use: an
   operator confirms the fingerprint out of band. A changed key stops every connection until an operator acts.
 
 **Role**
@@ -22,8 +22,8 @@ A short glossary of the objects you meet in the console and in the agent's outpu
   types, not commands.
 
 **Login credential**
-: How Hallpass logs in as the role's remote user: a **managed login key** that you install in that user's
-  `authorized_keys`, or a short-lived **OpenSSH user certificate** signed by a Hallpass user CA. Agents never see
+: How HallPass logs in as the role's remote user: a **managed login key** that you install in that user's
+  `authorized_keys`, or a short-lived **OpenSSH user certificate** signed by a HallPass user CA. Agents never see
   either.
 
 ## Policy

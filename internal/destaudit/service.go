@@ -1,15 +1,15 @@
 // Package destaudit ingests optional destination-side exec audit records from signed collectors and attaches them to
 // access-session timelines (WP25, HP-REC-012).
 //
-// Trust model: a collector runs on a destination host, which Hallpass treats as untrusted (THREAT_MODEL AD-4). The
-// collector signs each batch with its own Ed25519 key, so Hallpass can verify that a batch came from the enrolled
+// Trust model: a collector runs on a destination host, which HallPass treats as untrusted (THREAT_MODEL AD-4). The
+// collector signs each batch with its own Ed25519 key, so HallPass can verify that a batch came from the enrolled
 // collector, was not modified in transit and is not a replay. It cannot verify that the destination reported the
 // truth: a root user on the destination can forge, suppress or alter audit records. Every ingested record is therefore
 // labeled provenance "destination-audit", verified=false, with a correlation method and confidence, and never
-// upgrades any Hallpass-captured fact (HP-REC-006 spirit).
+// upgrades any HallPass-captured fact (HP-REC-006 spirit).
 //
 // Correlation never trusts a collector-supplied session identifier. The collector reports only what sshd and the
-// kernel logged (the certificate key ID or login key fingerprint, the account and times); Hallpass checks those
+// kernel logged (the certificate key ID or login key fingerprint, the account and times); HallPass checks those
 // claims against its own server, role, grant, connection and time-window state and refuses anything ambiguous.
 package destaudit
 
@@ -49,7 +49,7 @@ const (
 const (
 	Provenance = "destination-audit"
 
-	CorrelationCertKeyID   = "certificate_key_id"    // sshd logged a Hallpass certificate key ID naming grant + connection
+	CorrelationCertKeyID   = "certificate_key_id"    // sshd logged a HallPass certificate key ID naming grant + connection
 	CorrelationKeyWindow   = "login_key_time_window" // managed login key fingerprint + exactly one session in the time window
 	CorrelationLoginBinded = "login_binding"         // same destination login as an earlier correlated record
 
@@ -65,7 +65,7 @@ const (
 
 // Options configure the service.
 type Options struct {
-	// MaxSkew bounds the difference between a batch's sent_at and Hallpass's clock, and the slack applied to
+	// MaxSkew bounds the difference between a batch's sent_at and HallPass's clock, and the slack applied to
 	// session time windows during correlation. Default 2m.
 	MaxSkew time.Duration
 	// MaxRecordAge rejects records older than this (relative to now). Default 24h.

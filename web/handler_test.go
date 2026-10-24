@@ -10,7 +10,7 @@ import (
 
 func TestHandler(t *testing.T) {
 	files := fstest.MapFS{
-		"index.html":           {Data: []byte("<!doctype html><title>Hallpass</title>")},
+		"index.html":           {Data: []byte("<!doctype html><title>HallPass</title>")},
 		"favicon.svg":          {Data: []byte("<svg/>")},
 		"assets/app-abc123.js": {Data: []byte("console.log(1)")},
 	}
@@ -20,7 +20,7 @@ func TestHandler(t *testing.T) {
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 		return rec
 	}
-	if r := get("/requests/req_1"); r.Code != 200 || !strings.Contains(r.Body.String(), "Hallpass") || r.Header().Get("Cache-Control") != "no-cache" {
+	if r := get("/requests/req_1"); r.Code != 200 || !strings.Contains(r.Body.String(), "HallPass") || r.Header().Get("Cache-Control") != "no-cache" {
 		t.Fatalf("SPA route: %d %v", r.Code, r.Header())
 	}
 	if r := get("/assets/app-abc123.js"); r.Code != 200 || !strings.Contains(r.Header().Get("Cache-Control"), "immutable") {

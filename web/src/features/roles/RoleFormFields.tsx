@@ -115,7 +115,7 @@ export function RoleFormFields() {
           showIcon
           style={{ marginBottom: 16 }}
           title="Input may contain secrets"
-          description="Typed input (including passwords entered at prompts) will be stored in recordings. Hallpass does not redact secrets (HP-REC-005)."
+          description="Typed input (including passwords entered at prompts) will be stored in recordings. HallPass does not redact secrets (HP-REC-005)."
         />
       ) : null}
       <Form.Item

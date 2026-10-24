@@ -2,7 +2,7 @@
   <figure class="hp-flow">
     <svg viewBox="0 0 900 330" role="img" aria-labelledby="hp-flow-title">
       <title id="hp-flow-title">
-        An agent connects to Hallpass with its own SSH key. Hallpass checks policy and human approval, then opens the
+        An agent connects to HallPass with its own SSH key. HallPass checks policy and human approval, then opens the
         destination session itself with a credential the agent never sees, and records everything.
       </title>
       <defs>
@@ -19,7 +19,7 @@
 
       <!-- hallpass -->
       <rect x="320" y="20" width="260" height="136" rx="14" class="hp-flow-box hp-flow-main" />
-      <text x="450" y="58" class="hp-flow-title">Hallpass</text>
+      <text x="450" y="58" class="hp-flow-title">HallPass</text>
       <text x="450" y="84" class="hp-flow-sub">policy · approvals · grants</text>
       <text x="450" y="106" class="hp-flow-sub">destination credentials</text>
       <text x="450" y="128" class="hp-flow-sub">encrypted recordings · audit chain</text>

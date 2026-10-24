@@ -2169,7 +2169,7 @@ export interface components {
             /** @description ssh-ed25519 key in authorized_keys format (hallpass-collector pubkey) */
             public_key: string;
         };
-        /** @description Destination-reported, never verified by Hallpass. exe, argv and cwd are present only on the single-record endpoint and are untrusted text. */
+        /** @description Destination-reported, never verified by HallPass. exe, argv and cwd are present only on the single-record endpoint and are untrusted text. */
         DestinationRecord: {
             id: string;
             session_id: string;

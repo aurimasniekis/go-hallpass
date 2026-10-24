@@ -31,9 +31,9 @@ linters:
             - "!$test"
           deny:
             - pkg: math/rand
-              desc: use crypto/rand; Hallpass is security-sensitive
+              desc: use crypto/rand; HallPass is security-sensitive
             - pkg: math/rand/v2
-              desc: use crypto/rand; Hallpass is security-sensitive
+              desc: use crypto/rand; HallPass is security-sensitive
         grammar-is-pure:
           # PLAN §15: the agent command grammar does no I/O and depends on no storage or network packages.
           files:

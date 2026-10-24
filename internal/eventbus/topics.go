@@ -1,6 +1,6 @@
 package eventbus
 
-// Topics published by Hallpass services. Payloads carry IDs only; consumers re-read state from the database.
+// Topics published by HallPass services. Payloads carry IDs only; consumers re-read state from the database.
 const (
 	TopicAgentChanged     = "agent.changed"
 	TopicAgentDisabled    = "agent.disabled"

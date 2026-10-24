@@ -1,4 +1,4 @@
-// Package app wires Hallpass components together and runs the process lifecycle (PLAN §3.4).
+// Package app wires HallPass components together and runs the process lifecycle (PLAN §3.4).
 package app
 
 import (

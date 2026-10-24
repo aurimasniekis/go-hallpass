@@ -41,7 +41,7 @@ func must(t *testing.T, err error) {
 	}
 }
 
-// Gateway is an in-process Hallpass in front of a real sshd, driven with the system ssh client.
+// Gateway is an in-process HallPass in front of a real sshd, driven with the system ssh client.
 type Gateway struct {
 	t          *testing.T
 	A          *app.App

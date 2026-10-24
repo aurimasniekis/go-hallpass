@@ -160,7 +160,7 @@ type DestauditSessionByGrantRow struct {
 	EndedAt    sql.NullInt64
 }
 
-// Correlation lookups. A destination-reported identity is only a claim; these return Hallpass's own state to check it.
+// Correlation lookups. A destination-reported identity is only a claim; these return HallPass's own state to check it.
 func (q *Queries) DestauditSessionByGrant(ctx context.Context, id string) (DestauditSessionByGrantRow, error) {
 	row := q.db.QueryRowContext(ctx, destauditSessionByGrant, id)
 	var i DestauditSessionByGrantRow

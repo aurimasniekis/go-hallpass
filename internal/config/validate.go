@@ -176,7 +176,7 @@ func (c *Config) validatePublicURL(v *validator, prod bool) {
 		return
 	}
 	if u.Path != "" && u.Path != "/" {
-		v.add("public_url must not contain a path (serve Hallpass at the origin root)")
+		v.add("public_url must not contain a path (serve HallPass at the origin root)")
 	}
 	switch u.Scheme {
 	case "https":

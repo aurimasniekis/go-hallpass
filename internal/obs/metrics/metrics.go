@@ -1,4 +1,4 @@
-// Package metrics defines the Hallpass Prometheus metric catalog (HP-OBS-004, docs/operator/observability.md).
+// Package metrics defines the HallPass Prometheus metric catalog (HP-OBS-004, docs/operator/observability.md).
 //
 // Every metric lives on a dedicated registry (never the global default). Callers record events through small
 // typed methods; label values are normalized against allowlists or bounded sets, so no call can create an
@@ -23,7 +23,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/obs/internal/httpwrap"
 )
 
-// Namespace prefixes every Hallpass metric.
+// Namespace prefixes every HallPass metric.
 const Namespace = "hallpass"
 
 // Histogram buckets (seconds).
@@ -38,7 +38,7 @@ var (
 	HTTPBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30}
 )
 
-// Metrics holds every Hallpass metric family.
+// Metrics holds every HallPass metric family.
 type Metrics struct {
 	reg *prometheus.Registry
 
@@ -86,7 +86,7 @@ type Metrics struct {
 	handlerInFlight int
 }
 
-// New builds the registry with Go runtime and process collectors, build info, and every Hallpass family.
+// New builds the registry with Go runtime and process collectors, build info, and every HallPass family.
 func New() *Metrics {
 	reg := prometheus.NewRegistry()
 	m := &Metrics{
@@ -578,9 +578,9 @@ func newFSCollector() *fsCollector {
 	return &fsCollector{
 		paths: map[string]string{},
 		size: prometheus.NewDesc(prometheus.BuildFQName(Namespace, "", "storage_filesystem_size_bytes"),
-			"Size of the filesystem holding a Hallpass volume.", []string{"volume"}, nil),
+			"Size of the filesystem holding a HallPass volume.", []string{"volume"}, nil),
 		avail: prometheus.NewDesc(prometheus.BuildFQName(Namespace, "", "storage_filesystem_avail_bytes"),
-			"Space available to Hallpass on the filesystem holding a volume.", []string{"volume"}, nil),
+			"Space available to HallPass on the filesystem holding a volume.", []string{"volume"}, nil),
 	}
 }
 
@@ -603,7 +603,7 @@ func (c *fsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-// factory registers families under the Hallpass namespace.
+// factory registers families under the HallPass namespace.
 type factory struct{ reg prometheus.Registerer }
 
 func (f factory) counter(name, help string) prometheus.Counter {

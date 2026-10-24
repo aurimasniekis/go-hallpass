@@ -187,7 +187,7 @@ type tgUpdate struct {
 }
 
 // HelpText answers /start and /help in a private chat.
-const HelpText = "Hallpass approvals bot. To link your Telegram account, create a link code in the Hallpass web UI and " +
+const HelpText = "HallPass approvals bot. To link your Telegram account, create a link code in the HallPass web UI and " +
 	"send /link <code> here."
 
 // Verify checks the secret token and reads the bounded body. Errors are *chat.RejectError.

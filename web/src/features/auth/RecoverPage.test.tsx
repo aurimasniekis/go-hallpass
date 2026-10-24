@@ -20,7 +20,7 @@ function clientReturning(...responses: Response[]) {
   return { client, calls };
 }
 
-const enrollment = { secret: 'JBSWY3DPEHPK3PXP', uri: 'otpauth://totp/Hallpass:ada?secret=JBSWY3DPEHPK3PXP' };
+const enrollment = { secret: 'JBSWY3DPEHPK3PXP', uri: 'otpauth://totp/HallPass:ada?secret=JBSWY3DPEHPK3PXP' };
 
 describe('break-glass recovery page (HP-AUTH-016, SR-07)', () => {
   it('redeems the token only on confirmation and offers the password reset link', async () => {
@@ -45,7 +45,7 @@ describe('break-glass recovery page (HP-AUTH-016, SR-07)', () => {
     expect(new Headers(calls[0]?.init?.headers).has('X-CSRF-Token')).toBe(false);
     await user.click(screen.getByRole('button', { name: 'Set password' }));
     expect(onResetPassword).toHaveBeenCalledWith('/reset/rst');
-    await user.click(screen.getByRole('button', { name: 'Continue to Hallpass' }));
+    await user.click(screen.getByRole('button', { name: 'Continue to HallPass' }));
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
@@ -62,7 +62,7 @@ describe('break-glass recovery page (HP-AUTH-016, SR-07)', () => {
     expect(await screen.findByText('Set up a new authenticator')).toBeInTheDocument();
     expect(await screen.findByDisplayValue('JBSWY3DPEHPK3PXP')).toBeInTheDocument();
     expect(calls[1]?.url).toBe('/api/v1/me/mfa/totp');
-    expect(screen.queryByRole('button', { name: 'Continue to Hallpass' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Continue to HallPass' })).not.toBeInTheDocument();
   });
 });
 

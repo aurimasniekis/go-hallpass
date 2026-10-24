@@ -23,11 +23,11 @@ never decides twice.
    - Slack: `/hallpass link <code>`.
    - Telegram: `/link <code>` in a **private** chat with the bot. A code posted in a group is burned.
    Administrators can also link accounts directly (audited).
-4. Chat decisions require MFA by default: the approver has TOTP enrolled in Hallpass, or a linked SSO identity whose IdP
+4. Chat decisions require MFA by default: the approver has TOTP enrolled in HallPass, or a linked SSO identity whose IdP
    enforces MFA (R-10). Restrict sensitive roles to web-only approval with the role's `approval_channels`.
 
 For each pending request, each matching route gets one message with up to five approve buttons (allowed durations,
-smallest first) and a deny button. Each button carries a single-use action token. Hallpass stores only a keyed hash of
+smallest first) and a deny button. Each button carries a single-use action token. HallPass stores only a keyed hash of
 the token, bound to the request, the action and the provider, and the token expires with the request.
 
 Pressing a button still requires a linked, enabled operator who passes every decision check. Possession of a button is

@@ -135,7 +135,7 @@ func (c *Client) Update(ctx context.Context, ref chat.MessageRef, u chat.StatusU
 		}
 	}
 	_, err := c.call(ctx, "chat.update", postMessage{
-		Channel: ref.ChatID, TS: ref.MessageID, Text: "Hallpass access request " + u.RequestID + ": " + chat.StateLabel(u.State),
+		Channel: ref.ChatID, TS: ref.MessageID, Text: "HallPass access request " + u.RequestID + ": " + chat.StateLabel(u.State),
 		Blocks: renderStatus(&u), Parse: "none",
 	})
 	return err

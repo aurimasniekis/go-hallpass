@@ -1,4 +1,4 @@
-// Package config loads and validates Hallpass configuration (HP-OPS-013).
+// Package config loads and validates HallPass configuration (HP-OPS-013).
 //
 // Configuration comes from a YAML file plus HALLPASS_* environment overrides. Unknown keys are rejected.
 // The runtime mode is "production" unless explicitly set to "development"; development-only features are
@@ -49,7 +49,7 @@ func (d *Duration) UnmarshalYAML(n *yaml.Node) error {
 // MarshalYAML implements yaml.Marshaler.
 func (d Duration) MarshalYAML() (any, error) { return time.Duration(d).String(), nil }
 
-// Config is the complete Hallpass configuration.
+// Config is the complete HallPass configuration.
 type Config struct {
 	Mode      Mode            `yaml:"mode"`
 	DataDir   string          `yaml:"data_dir"`

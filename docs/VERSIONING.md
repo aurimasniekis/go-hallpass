@@ -1,6 +1,6 @@
 # Versioning policy
 
-Hallpass has several independently versioned interfaces (HP-DOC-006). The binary version says which release you run.
+HallPass has several independently versioned interfaces (HP-DOC-006). The binary version says which release you run.
 Each interface below has its own version and compatibility rules. A release lists every interface change in
 [`CHANGELOG.md`](../CHANGELOG.md).
 

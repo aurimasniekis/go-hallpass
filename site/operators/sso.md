@@ -44,13 +44,13 @@ enabled administrator.
 
 ## Recent authentication (step-up)
 
-Sensitive actions need authentication within the last 5 minutes. For SSO sessions, Hallpass sends the user back to the
+Sensitive actions need authentication within the last 5 minutes. For SSO sessions, HallPass sends the user back to the
 IdP with `prompt=login&max_age=0` and checks `auth_time` (and `acr`, if configured).
 
 ## SSO-only mode
 
 Password login can be turned off once a test login succeeded and at least one enabled administrator has a linked
-identity on an enabled provider. While SSO-only mode is on, Hallpass refuses changes that would lock everyone out.
+identity on an enabled provider. While SSO-only mode is on, HallPass refuses changes that would lock everyone out.
 
 ::: warning Plan for IdP outages
 When the provider is down, SSO logins fail and existing sessions continue until they expire. Keep the

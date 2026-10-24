@@ -1,14 +1,14 @@
 # Destination setup and hardening
 
-Hallpass controls **who** can open a session on a destination, **when**, and records **what passed through it**. It
+HallPass controls **who** can open a session on a destination, **when**, and records **what passed through it**. It
 does not control what an allowed account can do once it is logged in. That is the destination's job, and this page
-lists the controls that pair with Hallpass. Reference:
+lists the controls that pair with HallPass. Reference:
 [hardening.md](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/destination/hardening.md).
 
 ## 1. One account per role, least privilege
 
 ```sh
-useradd --create-home --shell /bin/bash hp-inspect     # one account per Hallpass role
+useradd --create-home --shell /bin/bash hp-inspect     # one account per HallPass role
 passwd -l hp-inspect                                    # key or certificate login only
 usermod -aG adm hp-inspect                              # only the groups the role really needs (e.g. log access)
 ```
@@ -18,7 +18,7 @@ enforces nothing by itself.
 
 ## 2. Install the login key with its restrictions
 
-Hallpass shows a ready-made line per role:
+HallPass shows a ready-made line per role:
 
 ```
 restrict,pty,from="203.0.113.10" ssh-ed25519 AAAA… hallpass:web1/inspect
@@ -26,7 +26,7 @@ restrict,pty,from="203.0.113.10" ssh-ed25519 AAAA… hallpass:web1/inspect
 
 - `restrict` disables forwarding, `~/.ssh/rc` and PTYs; `pty` is added back only for roles with the `pty` capability.
 - `from="…"` limits the key to the gateway's egress addresses. Keep it even behind a firewall.
-- For single-purpose roles, add `command="/usr/local/bin/allowed-action"`. Then the destination, not Hallpass, decides
+- For single-purpose roles, add `command="/usr/local/bin/allowed-action"`. Then the destination, not HallPass, decides
   what runs. This is the only reliable command restriction.
 
 With **certificates** instead of keys:
@@ -41,7 +41,7 @@ and put the role's principal (shown on the role page) into `/etc/ssh/principals/
 
 ## 3. Firewall SSH to the gateway
 
-Allow inbound TCP 22 only from the Hallpass egress addresses. Together with `from=`, a leaked login key is useless
+Allow inbound TCP 22 only from the HallPass egress addresses. Together with `from=`, a leaked login key is useless
 from anywhere else.
 
 ## 4. Privilege escalation
@@ -64,14 +64,14 @@ Ending a channel (expiry, revocation, lockdown) does **not** stop processes star
 
 ## 6. Outbound network
 
-Hallpass refuses SSH forwarding, SFTP and SCP, but an allowed shell can still use `curl`, `nc` or `/dev/tcp`, and
+HallPass refuses SSH forwarding, SFTP and SCP, but an allowed shell can still use `curl`, `nc` or `/dev/tcp`, and
 print data to stdout. Restrict egress from destinations (for example `iptables -m owner --uid-owner`) when
 exfiltration matters.
 
 ## 7. Destination-side audit
 
-Hallpass records what crosses the gateway, but cannot reliably reconstruct every command typed into a shell. For
-command-level accounting, enable `auditd` on the destination and optionally ship records to Hallpass with
+HallPass records what crosses the gateway, but cannot reliably reconstruct every command typed into a shell. For
+command-level accounting, enable `auditd` on the destination and optionally ship records to HallPass with
 [`hallpass-collector`](/destinations/audit).
 
 ## Checklist

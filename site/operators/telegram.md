@@ -1,6 +1,6 @@
 # Telegram approvals
 
-Hallpass can post pending requests to Telegram groups through a bot, with inline **Approve** and **Deny** buttons.
+HallPass can post pending requests to Telegram groups through a bot, with inline **Approve** and **Deny** buttons.
 Linked approvers decide from Telegram; the same checks as in the web console apply at the moment of the press.
 Reference: [telegram.md](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/operator/telegram.md).
 
@@ -10,8 +10,8 @@ Implemented and tested end to end against a fake Bot API. Not yet verified again
 
 ## What you need
 
-- Hallpass reachable from Telegram over HTTPS with a publicly trusted certificate, on port 443, 80, 88 or 8443.
-- Outbound access from Hallpass to `https://api.telegram.org`.
+- HallPass reachable from Telegram over HTTPS with a publicly trusted certificate, on port 443, 80, 88 or 8443.
+- Outbound access from HallPass to `https://api.telegram.org`.
 
 ## 1. Create the bot
 
@@ -19,7 +19,7 @@ In a chat with [@BotFather](https://t.me/BotFather):
 
 1. `/newbot`, choose a name and username, copy the **bot token**.
 2. `/setprivacy` → **Enable**, so the bot only receives commands and button presses in groups.
-3. `/setcommands` → `link - Link your Telegram account to Hallpass`.
+3. `/setcommands` → `link - Link your Telegram account to HallPass`.
 4. After adding the bot to your approval groups, `/setjoingroups` → **Disable**.
 
 Treat the bot token as an approval credential.
@@ -32,7 +32,7 @@ group's **chat ID** (supergroups look like `-100…`).
 ## 3. Create the integration
 
 **Administration → Integrations → New integration → Telegram**, as an administrator. Enter the bot token and the
-allowed chat IDs. Hallpass generates the webhook secret. Saving the integration registers the webhook with Telegram
+allowed chat IDs. HallPass generates the webhook secret. Saving the integration registers the webhook with Telegram
 (`setWebhook` to `https://<public_url host>/hooks/telegram/<integration_id>`).
 
 Add a **route** for each chat under **Integrations → Routes**, with a target selector.

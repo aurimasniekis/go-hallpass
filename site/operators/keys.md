@@ -1,6 +1,6 @@
 # Keys and the KEK
 
-Hallpass encrypts sensitive data with a two-level key hierarchy. The **KEK** (key-encryption key, the master key) is a
+HallPass encrypts sensitive data with a two-level key hierarchy. The **KEK** (key-encryption key, the master key) is a
 32-byte file outside the data directory. It wraps purpose keys stored in the database, which encrypt:
 
 | Purpose | Protects |
@@ -49,5 +49,5 @@ The key agents pin. `hallpass hostkey show` prints it. To rotate without breakin
 
 ## Limits
 
-Keys live in process memory while Hallpass runs. Anyone who controls the running process, or holds both the host and
+Keys live in process memory while HallPass runs. Anyone who controls the running process, or holds both the host and
 the KEK, can decrypt everything. KMS/HSM-backed wrapping is an open review item (R-03).

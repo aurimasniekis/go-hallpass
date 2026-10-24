@@ -1,4 +1,4 @@
-# Hallpass standalone deployment (HP-OPS-007). Install: docs/operator/install.md.
+# HallPass standalone deployment (HP-OPS-007). Install: docs/operator/install.md.
 #
 #   /usr/local/bin/hallpass           binary, root-owned 0755
 #   /etc/hallpass/hallpass.yaml       configuration (secret-free), root:hallpass 0640
@@ -8,11 +8,11 @@
 # Check the sandbox on the target host with: systemd-analyze security hallpass.service
 
 [Unit]
-Description=Hallpass SSH access gateway for AI agents
+Description=HallPass SSH access gateway for AI agents
 Documentation=file:/usr/local/share/doc/hallpass/install.md
 After=network-online.target
 Wants=network-online.target
-# Refuse to start when the KEK is absent (Hallpass would refuse too; this gives a clearer status).
+# Refuse to start when the KEK is absent (HallPass would refuse too; this gives a clearer status).
 AssertPathExists=/etc/hallpass/kek
 
 [Service]

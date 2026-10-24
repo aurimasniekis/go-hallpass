@@ -1,7 +1,7 @@
-// Command hallpass-collector is the reference destination-side audit collector for Hallpass (WP25, HP-REC-012).
+// Command hallpass-collector is the reference destination-side audit collector for HallPass (WP25, HP-REC-012).
 //
 // It runs on a destination host, reads Linux audit (auditd) and sshd log lines, assembles exec records for logins
-// made by Hallpass, signs them with its own Ed25519 key and posts them to Hallpass. Hallpass labels everything it
+// made by HallPass, signs them with its own Ed25519 key and posts them to HallPass. HallPass labels everything it
 // receives as destination-reported: a root user on the destination can forge or suppress these records.
 //
 //	hallpass-collector keygen -key /etc/hallpass-collector/key
@@ -46,9 +46,9 @@ func main() {
 const usage = `usage: hallpass-collector <command> [flags]
 
 commands:
-  keygen   create a new collector key (prints the public key to enroll in Hallpass)
+  keygen   create a new collector key (prints the public key to enroll in HallPass)
   pubkey   print the public key of an existing collector key
-  run      read audit/sshd log lines (files or stdin) and ship exec records to Hallpass
+  run      read audit/sshd log lines (files or stdin) and ship exec records to HallPass
   version  print the version
 `
 
@@ -146,16 +146,16 @@ func cmdRun(ctx context.Context, args []string, stdin io.Reader, stdout, stderr 
 	var c runConfig
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	fs.StringVar(&c.baseURL, "url", "", "Hallpass base URL (https://…); records are posted to <url>/hooks/destaudit/<collector-id>")
-	fs.StringVar(&c.collectorID, "collector-id", "", "collector ID assigned by Hallpass at enrollment (dac_…)")
+	fs.StringVar(&c.baseURL, "url", "", "HallPass base URL (https://…); records are posted to <url>/hooks/destaudit/<collector-id>")
+	fs.StringVar(&c.collectorID, "collector-id", "", "collector ID assigned by HallPass at enrollment (dac_…)")
 	fs.StringVar(&c.keyPath, "key", "", "collector private key (created by keygen)")
 	fs.StringVar(&c.statePath, "state", "", "file that persists the last accepted batch sequence number")
-	fs.StringVar(&c.caFile, "ca-file", "", "PEM CA bundle to verify Hallpass's TLS certificate (default: system roots)")
+	fs.StringVar(&c.caFile, "ca-file", "", "PEM CA bundle to verify HallPass's TLS certificate (default: system roots)")
 	fs.BoolVar(&c.allowHTTP, "allow-insecure-http", false, "allow a plain http:// URL (testing only: exec arguments would cross the network unencrypted)")
 	fs.BoolVar(&c.dryRun, "dry-run", false, "print records as JSON lines instead of sending them (no key or URL needed)")
 	fs.DurationVar(&c.flushEvery, "flush-interval", 5*time.Second, "how often to ship assembled records")
 	fs.Var(&c.accounts, "account", "also ship managed-key logins of this destination account (repeatable)")
-	fs.Var(&c.fingerprints, "fingerprint", "also ship logins with this SHA256 key fingerprint (repeatable; Hallpass managed login keys)")
+	fs.Var(&c.fingerprints, "fingerprint", "also ship logins with this SHA256 key fingerprint (repeatable; HallPass managed login keys)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

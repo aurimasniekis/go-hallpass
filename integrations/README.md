@@ -1,6 +1,6 @@
 # Agent integrations
 
-The **`hallpass` skill** teaches AI coding agents to use a Hallpass gateway correctly:
+The **`hallpass` skill** teaches AI coding agents to use a HallPass gateway correctly:
 - check the connection;
 - list servers and roles;
 - request time-bound access with an honest reason;
@@ -12,7 +12,7 @@ The **`hallpass` skill** teaches AI coding agents to use a Hallpass gateway corr
 The skill is a standard [`SKILL.md`](skills/hallpass/SKILL.md) with one [reference file](skills/hallpass/references/commands.md).
 The same files work in Claude Code and Codex.
 
-The agent still needs an SSH key registered in Hallpass and a pinned gateway host entry in `~/.ssh/config`
+The agent still needs an SSH key registered in HallPass and a pinned gateway host entry in `~/.ssh/config`
 (see [docs/agent/guide.md](../docs/agent/guide.md)). The skill assumes the host alias `center`. Tell your agent if
 yours differs.
 
@@ -49,7 +49,7 @@ Codex loads skills from `~/.codex/skills`:
 mkdir -p ~/.codex/skills && cp -R integrations/skills/hallpass ~/.codex/skills/
 ```
 
-Restart Codex. The skill is picked up when a task mentions Hallpass or running commands on gateway-reached servers.
+Restart Codex. The skill is picked up when a task mentions HallPass or running commands on gateway-reached servers.
 
 ## Other agents
 

@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
-  title: Hallpass operator API
+  title: HallPass operator API
   version: "1.0.0"
   description: |
-    The operator API behind the Hallpass web UI (PLAN §8). JSON only; errors are RFC 9457 problem details.
+    The operator API behind the HallPass web UI (PLAN §8). JSON only; errors are RFC 9457 problem details.
     Authentication uses the `__Host-hp_session` cookie. Mutations require the `X-CSRF-Token` header and a same-origin
     `Origin`. Changes within v1 are additive only (HP-API-002).
 
@@ -2002,7 +2002,7 @@ components:
         public_key: {type: string, maxLength: 512, description: "ssh-ed25519 key in authorized_keys format (hallpass-collector pubkey)"}
     DestinationRecord:
       type: object
-      description: Destination-reported, never verified by Hallpass. exe, argv and cwd are present only on the single-record endpoint and are untrusted text.
+      description: Destination-reported, never verified by HallPass. exe, argv and cwd are present only on the single-record endpoint and are untrusted text.
       required: [id, session_id, collector_id, record_ref, batch_seq, timeline_event_id, provenance, verified, correlation, confidence, after_session_end, reported_at, received_at]
       properties:
         id: {type: string}

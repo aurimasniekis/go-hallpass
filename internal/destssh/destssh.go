@@ -1,5 +1,5 @@
 // Package destssh opens outbound SSH connections to destinations with strict host verification, the egress guard
-// and gateway-held credentials (HP-SSH-011, HP-SRV-009). It is the only outbound SSH dialer in Hallpass.
+// and gateway-held credentials (HP-SSH-011, HP-SRV-009). It is the only outbound SSH dialer in HallPass.
 package destssh
 
 import (

@@ -42,7 +42,7 @@ const (
 // "not provisioned" (PLAN §12.4).
 var (
 	ErrInvalidState    = apperr.New(apperr.CodeInvalid, "sign-in session expired or invalid; start again")
-	ErrNotProvisioned  = apperr.New(apperr.CodeForbidden, "this identity is not provisioned in Hallpass; ask an administrator")
+	ErrNotProvisioned  = apperr.New(apperr.CodeForbidden, "this identity is not provisioned in HallPass; ask an administrator")
 	ErrLoginRejected   = apperr.New(apperr.CodeForbidden, "sign-in was rejected")
 	ErrStepUpFailed    = apperr.New(apperr.CodeForbidden, "the identity provider did not confirm a fresh login")
 	ErrTokenValidation = apperr.New(apperr.CodeUnauthorized, "the identity provider's response could not be validated")
@@ -215,7 +215,7 @@ func (svc *Service) oauthConfig(p *Provider, r *remote, secret string) *oauth2.C
 	return &oauth2.Config{ClientID: p.ClientID, ClientSecret: secret, Endpoint: r.provider.Endpoint(), RedirectURL: svc.RedirectURI(), Scopes: p.Scopes}
 }
 
-// CallbackInput is the provider's redirect back to Hallpass.
+// CallbackInput is the provider's redirect back to HallPass.
 type CallbackInput struct {
 	State, Code         string
 	Error, ErrorDetails string
@@ -235,7 +235,7 @@ type CallbackResult struct {
 	Test         *TestResult
 }
 
-// Claims are the ID-token claims Hallpass uses (everything else is ignored).
+// Claims are the ID-token claims HallPass uses (everything else is ignored).
 type Claims struct {
 	Issuer        string   `json:"iss"`
 	Subject       string   `json:"sub"`
@@ -322,7 +322,7 @@ func (svc *Service) Callback(ctx context.Context, in CallbackInput) (_ *Callback
 		return nil, ErrProviderUnavailable
 	}
 	raw, _ := tok.Extra("id_token").(string)
-	// Access and refresh tokens are dropped here: Hallpass has no use for them (HP-OIDC-008).
+	// Access and refresh tokens are dropped here: HallPass has no use for them (HP-OIDC-008).
 	tok = nil
 	claims, err := svc.verifyIDToken(ctx, p, r, raw, st.NonceHash)
 	if err != nil {
@@ -693,7 +693,7 @@ func (svc *Service) stepUp(ctx context.Context, p *Provider, st db.OidcAuthState
 	}
 	if c.AuthTime == nil {
 		if p.StepUpFallback == StepUpLocalTOTP {
-			return "", apperr.New(apperr.CodeMFARequired, "this identity provider cannot prove a fresh login; confirm with your Hallpass TOTP code")
+			return "", apperr.New(apperr.CodeMFARequired, "this identity provider cannot prove a fresh login; confirm with your HallPass TOTP code")
 		}
 		return "", ErrStepUpFailed
 	}

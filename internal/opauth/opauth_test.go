@@ -199,7 +199,7 @@ func TestTOTPVectors(t *testing.T) {
 	if _, ok := VerifyTOTP(secret, TOTPCode(secret, 1234567890/30-2), now, 0); ok {
 		t.Fatal("2-step-old code accepted")
 	}
-	if !strings.HasPrefix(TOTPURI(secret, "Hallpass", "a@b.c"), "otpauth://totp/Hallpass:a@b.c?") {
+	if !strings.HasPrefix(TOTPURI(secret, "HallPass", "a@b.c"), "otpauth://totp/HallPass:a@b.c?") {
 		t.Fatal("uri")
 	}
 }

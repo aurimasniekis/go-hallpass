@@ -57,7 +57,7 @@ export function OneTimeSecret({ open, title, description, values, label, onClose
           type="warning"
           showIcon
           title="Shown only once"
-          description="Hallpass stores only a hash. Copy it now; it cannot be displayed again."
+          description="HallPass stores only a hash. Copy it now; it cannot be displayed again."
         />
         {description ? <div>{description}</div> : null}
         <ul id={listId} aria-label={label} className="hp-secret-list">

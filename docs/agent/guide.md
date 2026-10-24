@@ -1,6 +1,6 @@
-# Hallpass agent guide
+# HallPass agent guide
 
-This guide is for AI agents (and the people configuring them) that reach servers through a Hallpass gateway. It
+This guide is for AI agents (and the people configuring them) that reach servers through a HallPass gateway. It
 covers HP-DOC-002. The authoritative grammar is in PLAN §7. `ssh <gateway> help` prints the same help as the gateway.
 
 ## How it works
@@ -11,7 +11,7 @@ for approval when needed, and opens the destination session for you using creden
 is recorded.
 
 ```
-agent ──ssh (agent key)──▶ Hallpass ──ssh (managed key or certificate)──▶ destination
+agent ──ssh (agent key)──▶ HallPass ──ssh (managed key or certificate)──▶ destination
 ```
 
 ## Client configuration

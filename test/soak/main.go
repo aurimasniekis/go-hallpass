@@ -1,4 +1,4 @@
-// Command soak drives an in-process Hallpass gateway in front of an in-process destination with concurrent agents
+// Command soak drives an in-process HallPass gateway in front of an in-process destination with concurrent agents
 // running exec and PTY sessions for a configurable duration, samples goroutines, open file descriptors, heap and RSS,
 // measures session, echo and enforcement latency, and writes a JSON report (HP-TST-006, HP-TST-007; method in
 // TEST_STRATEGY.md §5).

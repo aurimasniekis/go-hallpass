@@ -285,7 +285,7 @@ export function LoginForms({
         <Alert
           type="info"
           showIcon
-          title="Hallpass is not set up yet"
+          title="HallPass is not set up yet"
           description="Run `hallpass admin bootstrap` on the server and open the setup link it prints."
           style={{ marginBottom: 16 }}
         />
@@ -351,7 +351,7 @@ export function LoginPage({
   }, [resume, onSignedIn]);
 
   return (
-    <AuthLayout title="Sign in to Hallpass">
+    <AuthLayout title="Sign in to HallPass">
       {config.isPending || session.isPending ? (
         <LoadingState label="Loading sign-in options…" />
       ) : config.isError ? (

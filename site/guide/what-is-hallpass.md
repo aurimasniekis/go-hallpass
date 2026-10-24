@@ -1,12 +1,12 @@
-# What is Hallpass?
+# What is HallPass?
 
-Hallpass is a **terminating SSH gateway for AI agents**. Agents connect to Hallpass with their own SSH key and plain
-`ssh`. Hallpass decides, from policy and human approvals, which servers and roles an agent may use and for how long.
+HallPass is a **terminating SSH gateway for AI agents**. Agents connect to HallPass with their own SSH key and plain
+`ssh`. HallPass decides, from policy and human approvals, which servers and roles an agent may use and for how long.
 It then opens the session to the destination itself, with a credential the agent never sees, and records everything
 that passes through.
 
 ```
-agent ──ssh (agent key)──▶ Hallpass ──ssh (managed key or short-lived certificate)──▶ destination
+agent ──ssh (agent key)──▶ HallPass ──ssh (managed key or short-lived certificate)──▶ destination
                               │
           policy · approvals (web, Slack, Telegram) · grants · encrypted recordings · audit chain
 ```
@@ -22,11 +22,11 @@ The quickest way to let an agent work on a server is to give it a key that is in
   caused it;
 - **can leak**: anything the agent can read can end up in a prompt, a log or a tool call.
 
-## What Hallpass changes
+## What HallPass changes
 
-| Without Hallpass | With Hallpass |
+| Without HallPass | With HallPass |
 |---|---|
-| The agent holds a destination key | The agent holds only its own key. Hallpass keeps destination keys encrypted, or signs certificates that live about two minutes. |
+| The agent holds a destination key | The agent holds only its own key. HallPass keeps destination keys encrypted, or signs certificates that live about two minutes. |
 | Access is permanent | Access is a **grant** with an end time. Reconnecting never extends it. |
 | Nobody decides | Policy decides per agent, server and role: hidden, requestable with human approval, or approved automatically up to a limit. |
 | Approval happens elsewhere, if at all | Agents ask with a reason. Approvers decide in the web console, Slack or Telegram. |
@@ -34,23 +34,23 @@ The quickest way to let an agent work on a server is to give it a key that is in
 | History is a best effort | Every channel is recorded (encrypted, integrity-chained) and replayable, next to a timeline and a hash-chained audit log. |
 | The agent knows server addresses | Agents see aliases and descriptions only. Unknown and hidden servers look the same. |
 
-<Shot name="dashboard" themed alt="Hallpass dashboard" caption="The operator dashboard" />
+<Shot name="dashboard" themed alt="HallPass dashboard" caption="The operator dashboard" />
 
-## What Hallpass is not
+## What HallPass is not
 
-Hallpass controls **who** gets a session, **when**, and records **what passed through it**. It is deliberately not:
+HallPass controls **who** gets a session, **when**, and records **what passed through it**. It is deliberately not:
 
 - **a sandbox.** An approved shell can do whatever its remote account can do. Restrict that on the destination with
   a dedicated account per role, `sudoers`, `ForceCommand` and firewalling. See
   [destination hardening](/destinations/hardening).
 - **a port-forwarding proxy.** Forwarding (`-L`, `-R`, `-D`, `-W`), agent forwarding, X11, SFTP and SCP are refused.
 - **highly available.** One active instance; recovery is restoring a backup onto a standby.
-- **safe from its own host.** Hallpass sees every session in plaintext and holds every destination credential. Run it
+- **safe from its own host.** HallPass sees every session in plaintext and holds every destination credential. Run it
   like a bastion host. See the [security model](/security/).
 
 ## Status
 
-Hallpass is **pre-release**. No version has been tagged. The release gates (24-hour soak, external review of the
+HallPass is **pre-release**. No version has been tagged. The release gates (24-hour soak, external review of the
 recording format, CI on GitHub, a license decision, and more) are not met yet. The current evaluation is in
 [release-gates.md](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/evidence/unreleased/release-gates.md).
 

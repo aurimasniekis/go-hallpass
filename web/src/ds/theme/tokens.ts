@@ -1,7 +1,7 @@
 import { theme, type ThemeConfig } from 'antd';
 
 /**
- * Hallpass design tokens (docs/PLAN.md §14.2, HP-UI-002).
+ * HallPass design tokens (docs/PLAN.md §14.2, HP-UI-002).
  *
  * - Radius 4 (cards and overlays 6, small elements 2). No pill shapes, no gradients.
  * - controlHeight 32; compact tables use 28 px rows.

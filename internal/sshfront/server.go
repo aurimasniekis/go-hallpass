@@ -492,7 +492,7 @@ func (c *Conn) releaseChannel() {
 func (s *Server) acceptChannel(ctx context.Context, c *Conn, nch ssh.NewChannel) bool {
 	if nch.ChannelType() != "session" {
 		s.m.SSHRefused(metrics.RefusedChannelType)
-		_ = nch.Reject(ssh.Prohibited, "channel type not permitted by Hallpass")
+		_ = nch.Reject(ssh.Prohibited, "channel type not permitted by HallPass")
 		s.AuditDenied(ctx, c, "ssh.channel.denied", map[string]any{"channel_type": truncate(nch.ChannelType(), 64)})
 		return false
 	}
