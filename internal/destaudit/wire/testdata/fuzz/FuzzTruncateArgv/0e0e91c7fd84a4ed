@@ -1,0 +1,4 @@
+go test fuzz v1
+string("\xf2\xbe")
+int(88)
+int(38)

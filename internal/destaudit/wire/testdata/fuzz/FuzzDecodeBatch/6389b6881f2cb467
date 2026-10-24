@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"v\":1,\"c\x00llector_id\":\"dac_x\",\"seq\":3,\"sent_at\":\"2026-10-23T12:00:00Z\",\"records\":[],\"x\":1}")

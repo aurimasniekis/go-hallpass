@@ -1,0 +1,3 @@
+go test fuzz v1
+string("l0.")
+int(36)

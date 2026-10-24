@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("channel_id=00&command=%2Fhallpass&response_url=%2F%2F:\"\"\"\"\"\"\"\"&team_id=T0HALLPASS&user_id=00")

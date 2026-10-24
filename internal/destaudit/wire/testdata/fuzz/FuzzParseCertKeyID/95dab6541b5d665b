@@ -1,0 +1,2 @@
+go test fuzz v1
+string("hallpass:0:0:\U000fc211\xcc")

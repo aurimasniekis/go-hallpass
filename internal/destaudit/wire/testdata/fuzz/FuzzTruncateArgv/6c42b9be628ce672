@@ -1,0 +1,4 @@
+go test fuzz v1
+string("𲆟")
+int(-48)
+int(22)

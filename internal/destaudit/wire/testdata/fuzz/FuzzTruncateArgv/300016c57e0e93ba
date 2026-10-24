@@ -1,0 +1,4 @@
+go test fuzz v1
+string("\xf0\xaa\x82")
+int(9092)
+int(76)

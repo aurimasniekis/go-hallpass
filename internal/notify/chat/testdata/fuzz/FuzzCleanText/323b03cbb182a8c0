@@ -1,0 +1,3 @@
+go test fuzz v1
+string("\U00108d82")
+int(88)

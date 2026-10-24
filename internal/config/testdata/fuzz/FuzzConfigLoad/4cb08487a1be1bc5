@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte(" ")
+uint16(69)
+string("A00000000")

@@ -1,0 +1,5 @@
+go test fuzz v1
+string("1800000000")
+string("0")
+[]byte("\x82\xf8\xf8\xf8\x0e\x9c7A")
+bool(true)

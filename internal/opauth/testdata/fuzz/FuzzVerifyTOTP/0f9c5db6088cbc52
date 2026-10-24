@@ -1,0 +1,3 @@
+go test fuzz v1
+string("\U000b7df7\xb7")
+int64(0)

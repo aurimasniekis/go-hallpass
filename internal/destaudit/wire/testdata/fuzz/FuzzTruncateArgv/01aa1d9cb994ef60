@@ -1,0 +1,4 @@
+go test fuzz v1
+string("\U000452fa")
+int(11)
+int(403)

@@ -1,0 +1,4 @@
+go test fuzz v1
+string("\xe6\xa5\xf9")
+int(-154)
+int(6)

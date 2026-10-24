@@ -1,0 +1,3 @@
+go test fuzz v1
+string("\xe3\x85\xe3\x850")
+int(86)

@@ -1,0 +1,4 @@
+go test fuzz v1
+string("\xc6")
+int(9016)
+int(24)

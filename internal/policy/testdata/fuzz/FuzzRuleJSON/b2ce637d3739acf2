@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"effect\":\"\",\"subjects\":{},\"targets\":{},\"aaaa\":{\"00000\":[\"0\"]}}")

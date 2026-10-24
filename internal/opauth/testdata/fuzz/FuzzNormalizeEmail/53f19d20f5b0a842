@@ -1,0 +1,2 @@
+go test fuzz v1
+string("0@\x8f\u0094\xe9\xd0 \x8f\u0094\xe9\xd0")

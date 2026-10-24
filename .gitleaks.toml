@@ -9,6 +9,11 @@ paths = [
   '''docs/PROMPT\.md''',
 ]
 # Exact test literal: an idempotency-key fixture in the grammar tests (also marked gitleaks:allow inline).
+# Slack test fixtures (internal/notify/slack): an obviously fake bot token, Slack's published documentation example
+# signing secret (api.slack.com "Verifying requests"), and a made-up test secret. None is a real credential.
 regexes = [
   '''abc\.DEF_12-3''',
+  '''xoxb-123456789012-SECRETSECRETSECRET''',
+  '''8f742231b10e8888abcd99yyyzzz85a5''',
+  '''test-signing-secret-0123456789abcdef''',
 ]

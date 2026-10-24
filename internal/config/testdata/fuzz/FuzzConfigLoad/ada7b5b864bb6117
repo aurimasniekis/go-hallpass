@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("public_url: 0")
+uint16(69)
+string("0")

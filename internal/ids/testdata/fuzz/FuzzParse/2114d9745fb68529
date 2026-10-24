@@ -1,0 +1,3 @@
+go test fuzz v1
+string("req")
+string("req_00000A0000A0A0A000A0A00A0A")

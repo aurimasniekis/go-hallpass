@@ -1,0 +1,2 @@
+go test fuzz v1
+string("⫁쭃涆䙍샃涆ꂀ某⫁쭃涆䙍쭃涆ꂀ\ue387싸")

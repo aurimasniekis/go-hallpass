@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("!\r\r\r\r\r\r\r\r")
+uint16(217)
+string("0")

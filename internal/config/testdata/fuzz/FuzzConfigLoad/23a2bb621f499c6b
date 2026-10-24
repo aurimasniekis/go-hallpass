@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("\U0004026d\U0004026d")
+uint16(112)
+string("0")

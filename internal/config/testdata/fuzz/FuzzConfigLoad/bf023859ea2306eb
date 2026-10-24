@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte(" ")
+uint16(131)
+string("\n\n\"\n\"\"\r\t\n\"\r\"\t\t\"\"\"\t\r\r")

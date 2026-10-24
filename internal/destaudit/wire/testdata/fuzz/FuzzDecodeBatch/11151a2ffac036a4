@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"v\":0,\"collector_id\":\"\",\"aaa\":0,\"aaaa\":\"\",\"\":[],\"a\":0}")

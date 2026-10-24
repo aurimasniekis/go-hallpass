@@ -1,0 +1,2 @@
+go test fuzz v1
+string("𑫎\xf0\xf0\xf0")

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("%00&%01&user_id&%02&+&user_id")

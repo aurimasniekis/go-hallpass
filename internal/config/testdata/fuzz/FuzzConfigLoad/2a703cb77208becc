@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("-\n0\n-")
+uint16(114)
+string("0")

@@ -1,0 +1,3 @@
+go test fuzz v1
+[]byte("\"\xc4\xec\xcc\xda\xdc\xdc\"")
+bool(true)

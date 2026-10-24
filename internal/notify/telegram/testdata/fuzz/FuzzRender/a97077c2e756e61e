@@ -1,0 +1,2 @@
+go test fuzz v1
+string("\u202c\u20690\u200b")

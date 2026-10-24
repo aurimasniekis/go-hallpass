@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte(">\t\t\t\t\t\t\t")
+uint16(3)
+string("0")
