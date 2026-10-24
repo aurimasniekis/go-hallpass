@@ -273,7 +273,12 @@ export function LoginForms({
           type="warning"
           showIcon
           title="No sign-in method is enabled"
-          description="An administrator can restore access with `hallpass admin recover` on the server."
+          description={
+            <>
+              An administrator can restore access with <code className="hp-mono">hallpass admin recover</code>{' '}
+              on the server.
+            </>
+          }
         />
       </>
     );
@@ -286,7 +291,12 @@ export function LoginForms({
           type="info"
           showIcon
           title="HallPass is not set up yet"
-          description="Run `hallpass admin bootstrap` on the server and open the setup link it prints."
+          description={
+            <>
+              Run <code className="hp-mono">hallpass admin bootstrap</code> on the server and open the setup
+              link it prints.
+            </>
+          }
           style={{ marginBottom: 16 }}
         />
       ) : null}

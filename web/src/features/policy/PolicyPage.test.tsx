@@ -39,6 +39,20 @@ function setup(permissions: string[], prohibit = true) {
     'GET /api/v1/groups': { items: [{ id: 'grp_1', kind: 'agent', name: 'ci' }] },
     'POST /api/v1/policy/rules': (c) => jsonResponse(201, { ...(c.body as object), id: 'pol_2', version: 1 }),
     'DELETE /api/v1/policy/rules/pol_1': () => new Response(null, { status: 204 }),
+    'GET /api/v1/agents/agt_1/effective-access': {
+      policy_version: 7,
+      items: [
+        {
+          agent_id: 'agt_1',
+          server_id: 'srv_1',
+          server_alias: 'web1',
+          role_id: 'rol_1',
+          role_alias: 'deploy',
+          level: 'requestable',
+          rules: ['pol_1'],
+        },
+      ],
+    },
   });
 }
 
@@ -99,6 +113,19 @@ describe('<PolicyPage>', () => {
     });
     expect(post?.headers.get('Idempotency-Key')).toBeTruthy();
     expect(post?.headers.get('X-CSRF-Token')).toBe('csrf-test');
+  });
+
+  it('names the deciding rules in the effective-access preview', async () => {
+    const user = userEvent.setup();
+    setup(['policy.read', 'inventory.read']);
+    renderWithProviders(<PolicyPage />);
+    await user.click(await screen.findByRole('tab', { name: 'Effective access' }));
+    await user.click(screen.getByRole('combobox', { name: 'Agent' }));
+    await user.click(await screen.findByTitle('builder'));
+    const row = (await screen.findByText('web1')).closest('tr');
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByText('ci-deploy')).toBeInTheDocument();
+    expect(within(row as HTMLElement).queryByText('pol_1')).not.toBeInTheDocument();
   });
 
   it('deletes a rule only after confirmation', async () => {

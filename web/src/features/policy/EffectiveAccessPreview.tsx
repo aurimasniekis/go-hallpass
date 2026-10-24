@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Card, Radio, Select, Space, Table, type TableColumnsType } from 'antd';
+import { Alert, Card, Radio, Select, Space, Table, Tag, type TableColumnsType } from 'antd';
 import { useState } from 'react';
 
 import {
   agentEffectiveAccessQueryOptions,
   agentsQueryOptions,
+  policyRulesQueryOptions,
   serverEffectiveAccessQueryOptions,
   serversQueryOptions,
 } from '../../api/queries';
@@ -27,7 +28,10 @@ export function LevelBadge({ level }: { level: string }) {
   return <StatusBadge tone={tone}>{label}</StatusBadge>;
 }
 
-function columns(by: 'agent' | 'server'): TableColumnsType<EffectiveAccessItem> {
+function columns(
+  by: 'agent' | 'server',
+  ruleNames: ReadonlyMap<string, string>,
+): TableColumnsType<EffectiveAccessItem> {
   return [
     by === 'agent'
       ? {
@@ -67,7 +71,18 @@ function columns(by: 'agent' | 'server'): TableColumnsType<EffectiveAccessItem> 
     {
       key: 'rules',
       title: 'Deciding rules',
-      render: (_v, r) => (r.rules?.length ? r.rules.join(', ') : '—'),
+      render: (_v, r) =>
+        r.rules?.length ? (
+          <Space size={4} wrap>
+            {r.rules.map((rule) => (
+              <Tag key={rule} title={rule}>
+                {ruleNames.get(rule) ?? rule}
+              </Tag>
+            ))}
+          </Space>
+        ) : (
+          '—'
+        ),
     },
   ];
 }
@@ -89,6 +104,9 @@ export function EffectiveAccessPreview() {
     ...serverEffectiveAccessQueryOptions(id ?? ''),
     enabled: by === 'server' && !!id,
   });
+  // Deciding rules are shown by name; this page already needs policy.read.
+  const rules = useQuery(policyRulesQueryOptions());
+  const ruleNames = new Map((rules.data?.items ?? []).map((r) => [r.id ?? '', r.name]));
   const access = by === 'agent' ? agentAccess : serverAccess;
   const list = by === 'agent' ? agents : servers;
   const options =
@@ -141,7 +159,7 @@ export function EffectiveAccessPreview() {
             <Table<EffectiveAccessItem>
               size="small"
               rowKey={(r) => `${r.agent_id}|${r.server_id}|${r.role_id}`}
-              columns={columns(by)}
+              columns={columns(by, ruleNames)}
               dataSource={access.data.items}
               pagination={false}
               scroll={{ x: 'max-content' }}

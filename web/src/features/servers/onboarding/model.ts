@@ -185,7 +185,56 @@ export function prepareSshDirCommand(remoteUser: string): string {
 }
 
 /** Does a policy or approver rule's target selector name this server (or all servers)? */
-export function targetsServer(rule: Pick<PolicyRule | ApproverRule, 'targets'>, serverId: string): boolean {
+export interface ServerRef {
+  id: string;
+  groups?: readonly string[] | null;
+  labels?: Readonly<Record<string, string>> | null;
+}
+
+interface LabelRequirement {
+  key?: unknown;
+  operator?: unknown;
+  values?: unknown;
+}
+
+/** Same semantics as the server's label selector: every pair and expression must hold; an empty selector matches nothing. */
+function labelsMatch(selector: unknown, labels: Readonly<Record<string, string>>): boolean {
+  if (!selector || typeof selector !== 'object') {
+    return false;
+  }
+  const { matchLabels, matchExpressions } = selector as {
+    matchLabels?: Record<string, string>;
+    matchExpressions?: LabelRequirement[];
+  };
+  const pairs = Object.entries(matchLabels ?? {});
+  const exprs = matchExpressions ?? [];
+  if (pairs.length === 0 && exprs.length === 0) {
+    return false;
+  }
+  if (pairs.some(([k, v]) => labels[k] !== v)) {
+    return false;
+  }
+  return exprs.every((r) => {
+    const key = typeof r.key === 'string' ? r.key : '';
+    const has = Object.hasOwn(labels, key);
+    const values = Array.isArray(r.values) ? (r.values as unknown[]) : [];
+    switch (r.operator) {
+      case 'In':
+        return has && values.includes(labels[key]);
+      case 'NotIn':
+        return !has || !values.includes(labels[key]);
+      case 'Exists':
+        return has;
+      case 'DoesNotExist':
+        return !has;
+      default:
+        return false;
+    }
+  });
+}
+
+/** Whether a rule's target selector covers the server: all servers, by ID, by group or by labels. */
+export function targetsServer(rule: Pick<PolicyRule | ApproverRule, 'targets'>, server: ServerRef): boolean {
   const t = rule.targets as Record<string, unknown> | undefined;
   if (!t) {
     return false;
@@ -193,7 +242,16 @@ export function targetsServer(rule: Pick<PolicyRule | ApproverRule, 'targets'>, 
   if (t.all === true) {
     return true;
   }
-  return Array.isArray(t.servers) && t.servers.includes(serverId);
+  if (Array.isArray(t.servers) && t.servers.includes(server.id)) {
+    return true;
+  }
+  if (
+    Array.isArray(t.server_groups) &&
+    t.server_groups.some((g) => (server.groups ?? []).includes(g as string))
+  ) {
+    return true;
+  }
+  return labelsMatch(t.server_labels, server.labels ?? {});
 }
 
 export type AccessLevel = 'requestable' | 'auto_approve';

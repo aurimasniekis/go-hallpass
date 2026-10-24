@@ -17,6 +17,7 @@ import { useNow } from '../../lib/useNow';
 import { StateBadge } from '../../shared/StateBadge';
 import { FormModal } from '../servers/FormModal';
 import { credentialActions, credentialNextStep } from './credentialActions';
+import { KeyLineOptionsHint } from './KeyLineOptionsHint';
 
 function ProbeButton({ cred, roleId }: { cred: LoginCredential; roleId: string }) {
   const queryClient = useQueryClient();
@@ -271,8 +272,7 @@ export function CredentialsPanel({ roleId }: { roleId: string }) {
                   <CopyField label="authorized_keys line" value={focus.authorized_keys_line} />
                   <p style={{ margin: 0 }}>
                     Append this line to <code className="hp-mono">~/.ssh/authorized_keys</code> of the
-                    role&apos;s remote user. The <code className="hp-mono">from=</code> and{' '}
-                    <code className="hp-mono">restrict</code> options limit the key to the gateway.
+                    role&apos;s remote user. <KeyLineOptionsHint line={focus.authorized_keys_line} />
                   </p>
                 </Space>
               </Card>

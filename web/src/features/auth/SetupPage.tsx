@@ -69,7 +69,8 @@ export function SetupPage({
         size="small"
         current={step}
         style={{ marginBottom: 24 }}
-        items={[{ title: 'Administrator' }, { title: 'Two-factor authentication' }, { title: 'Verify' }]}
+        // Short titles: the setup card is narrow, and longer ones wrap mid-word.
+        items={[{ title: 'Account' }, { title: 'Two-factor' }, { title: 'Verify' }]}
       />
       {step === 0 ? (
         <Form<SetupValues>
@@ -84,7 +85,12 @@ export function SetupPage({
           <Form.Item
             label="Setup token"
             name="token"
-            extra="Printed by `hallpass admin bootstrap`. Valid only until the first administrator exists."
+            extra={
+              <>
+                Printed by <code className="hp-mono">hallpass admin bootstrap</code>. Valid only until the
+                first administrator exists.
+              </>
+            }
             rules={[{ required: true, message: 'Enter the setup token' }]}
           >
             <Input.Password autoComplete="off" spellCheck={false} />

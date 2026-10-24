@@ -18,6 +18,7 @@ import { useNow } from '../../../lib/useNow';
 import { CertBindingPanel } from '../../credentials/CertBindingPanel';
 import { credentialActions } from '../../credentials/credentialActions';
 import { focusCredential, installCommand, prepareSshDirCommand, type RoleLogin } from './model';
+import { KeyLineOptionsHint } from '../../credentials/KeyLineOptionsHint';
 
 const LOGIN_BADGE: Record<RoleLogin, { tone: 'success' | 'warning' | 'neutral' | 'info'; label: string }> = {
   active: { tone: 'success', label: 'Login ready' },
@@ -187,8 +188,8 @@ export function RoleLoginSetup({
                 <CodeBlock code={prepareSshDirCommand(role.remote_user)} />
                 <CopyField label="authorized_keys line" value={focus.authorized_keys_line} />
                 <p className="hp-legend" style={{ marginTop: 4 }}>
-                  The <code className="hp-mono">from=</code> and <code className="hp-mono">restrict</code>{' '}
-                  options limit the key to the gateway. Fingerprint <Fingerprint value={focus.fingerprint} />
+                  <KeyLineOptionsHint line={focus.authorized_keys_line} /> Fingerprint{' '}
+                  <Fingerprint value={focus.fingerprint} />
                 </p>
               </li>
               <li>

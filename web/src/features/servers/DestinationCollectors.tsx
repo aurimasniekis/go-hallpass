@@ -189,7 +189,12 @@ export function DestinationCollectors({ serverId, canManage }: { serverId: strin
           label="Collector public key"
           name="public_key"
           rules={[{ required: true, message: 'Paste the collector key' }]}
-          extra="The ssh-ed25519 authorized_keys line printed by `hallpass-collector pubkey` on the destination."
+          extra={
+            <>
+              The ssh-ed25519 authorized_keys line printed by{' '}
+              <code className="hp-mono">hallpass-collector pubkey</code> on the destination.
+            </>
+          }
         >
           <Input.TextArea rows={3} spellCheck={false} className="hp-mono" />
         </Form.Item>

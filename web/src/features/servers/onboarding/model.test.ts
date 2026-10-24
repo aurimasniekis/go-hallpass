@@ -188,9 +188,26 @@ describe('access step bodies', () => {
   });
 
   it('recognizes rules that target the server', () => {
-    expect(targetsServer({ targets: { servers: ['srv_1'] } }, 'srv_1')).toBe(true);
-    expect(targetsServer({ targets: { all: true } }, 'srv_1')).toBe(true);
-    expect(targetsServer({ targets: { servers: ['srv_2'] } }, 'srv_1')).toBe(false);
-    expect(targetsServer({ targets: {} }, 'srv_1')).toBe(false);
+    const srv = { id: 'srv_1', groups: ['prod-web'], labels: { env: 'prod', tier: 'web' } };
+    expect(targetsServer({ targets: { servers: ['srv_1'] } }, srv)).toBe(true);
+    expect(targetsServer({ targets: { all: true } }, srv)).toBe(true);
+    expect(targetsServer({ targets: { servers: ['srv_2'] } }, srv)).toBe(false);
+    expect(targetsServer({ targets: {} }, srv)).toBe(false);
+    expect(targetsServer({ targets: { server_groups: ['prod-db', 'prod-web'] } }, srv)).toBe(true);
+    expect(targetsServer({ targets: { server_groups: ['prod-db'] } }, srv)).toBe(false);
+    expect(targetsServer({ targets: { server_labels: { matchLabels: { env: 'prod' } } } }, srv)).toBe(true);
+    expect(targetsServer({ targets: { server_labels: { matchLabels: { env: 'dev' } } } }, srv)).toBe(false);
+    // An empty label selector matches nothing, like on the server.
+    expect(targetsServer({ targets: { server_labels: {} } }, srv)).toBe(false);
+    const expr = (operator: string, values?: string[]) => ({
+      targets: {
+        server_labels: { matchExpressions: [{ key: 'tier', operator, ...(values ? { values } : {}) }] },
+      },
+    });
+    expect(targetsServer(expr('In', ['web', 'db']), srv)).toBe(true);
+    expect(targetsServer(expr('NotIn', ['web']), srv)).toBe(false);
+    expect(targetsServer(expr('Exists'), srv)).toBe(true);
+    expect(targetsServer(expr('DoesNotExist'), srv)).toBe(false);
+    expect(targetsServer(expr('Bogus'), srv)).toBe(false);
   });
 });

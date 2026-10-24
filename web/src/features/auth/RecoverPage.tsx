@@ -82,7 +82,12 @@ export function RecoverPage({
           <Form.Item
             label="Recovery token"
             name="token"
-            extra="Printed by `hallpass admin recover`. Valid once, for 30 minutes."
+            extra={
+              <>
+                Printed by <code className="hp-mono">hallpass admin recover</code>. Valid once, for 30
+                minutes.
+              </>
+            }
             rules={[{ required: true, message: 'Enter the recovery token' }]}
           >
             <Input.Password autoComplete="off" spellCheck={false} />

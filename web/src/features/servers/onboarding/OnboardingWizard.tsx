@@ -255,7 +255,8 @@ export function OnboardingWizard({
   for (const r of roleItems) {
     logins[r.id] = roleLogin(credentialsByRole[r.id], certBound[r.id] ?? false);
   }
-  const serverRules = (rules.data?.items ?? []).filter((r) => serverId && targetsServer(r, serverId));
+  const srv = server.data;
+  const serverRules = srv ? (rules.data?.items ?? []).filter((r) => targetsServer(r, srv)) : [];
   const facts: WizardFacts = {
     server: server.data ?? null,
     identities: identities.data?.items,
