@@ -36,7 +36,7 @@ lint:
 tools-test:
 	cd tools && $(GO) test ./...
 
-# Runs every Fuzz* target for FUZZTIME (HP-TST-002 smoke; release runs use FUZZTIME=10m).
+# Runs every Fuzz* target for FUZZTIME (a smoke run; release runs use FUZZTIME=10m).
 fuzz-smoke:
 	@set -e; for pkg in $$($(GO) list ./...); do \
 	  for fz in $$($(GO) test -list '^Fuzz' $$pkg 2>/dev/null | grep '^Fuzz' || true); do \
@@ -48,11 +48,11 @@ coverage:
 	./scripts/coverage-floor.sh
 
 .PHONY: test-fault soak-smoke
-# HP-TST-005: fault-injection catalog (docs/TEST_STRATEGY.md §4); Go only, no Docker.
+# Fault-injection suite (crashes, disk full, I/O errors, outages); Go only, no Docker.
 test-fault:
 	$(GO) test -tags fault -count=1 -timeout 20m ./test/fault/
 
-# HP-TST-006: short in-process soak; RG-5 needs the 24 h run on reference hardware (-duration 24h -out report.json).
+# Short in-process soak; a release soak runs 24 h on reference hardware (-duration 24h -out report.json).
 soak-smoke:
 	$(GO) run ./test/soak -duration 30s
 
@@ -80,7 +80,7 @@ sqlc-check: bin/sqlc
 	bin/sqlc diff
 
 .PHONY: api api-check
-# HP-API-001: regenerate the operation table / server interface and the UI's TypeScript types from api/openapi.yaml.
+# Regenerate the operation table / server interface and the UI's TypeScript types from api/openapi.yaml.
 api:
 	go run ./internal/tools/apigen -spec api/openapi.yaml -out internal/httpapi/gen/operations.gen.go
 	cd web && pnpm exec openapi-typescript ../api/openapi.yaml -o src/api/schema.gen.ts
@@ -90,23 +90,23 @@ api-check: api
 	git diff --exit-code -- internal/httpapi/gen web/src/api/schema.gen.ts
 
 .PHONY: test-openssh
-# HP-TST-003: real OpenSSH client + in-process gateway + OpenSSH sshd container (requires Docker and ssh).
+# Real OpenSSH client + in-process gateway + OpenSSH sshd container (requires Docker and ssh).
 test-openssh:
 	go test -tags openssh -count=1 -timeout 15m -v ./test/openssh/
 
 .PHONY: test-oidc-interop
-# WP14 / ADR-0030: OIDC SSO against real Keycloak and Dex containers (requires Docker; nightly CI).
+# OIDC single sign-on against real Keycloak and Dex containers (requires Docker; nightly CI).
 test-oidc-interop:
 	go test -tags oidcinterop -count=1 -timeout 20m -v ./test/oidcinterop/
 
 .PHONY: test-netfs
-# HP-DB-007: verify network/FUSE filesystem refusal on Linux (Docker bind mounts are FUSE on Docker Desktop).
+# Verify network/FUSE filesystem refusal on Linux (Docker bind mounts are FUSE on Docker Desktop).
 test-netfs:
 	docker run --rm -v "$(CURDIR)":/src -w /src -e GOTOOLCHAIN=auto -e GOFLAGS=-buildvcs=false \
 	  -e HALLPASS_TEST_NETFS_DIR=/src/.netfs-test golang:1.27 \
 	  sh -c 'mkdir -p /src/.netfs-test && go test -count=1 -run "Filesystem" -v ./internal/store/; rc=$$?; rm -rf /src/.netfs-test; exit $$rc'
 
-# ---- WP24: packaging and release (appended block; docs/operator/install.md, docs/operator/container.md) ----
+# ---- Packaging and release (docs/operator/install.md, docs/operator/container.md) ----
 IMAGE ?= hallpass:local
 
 .PHONY: release-snapshot image image-smoke
@@ -122,4 +122,4 @@ image:
 # Container smoke test against $(IMAGE): non-root, no shell, KEK checks, migrate, serve + SSH banner, clean SIGTERM.
 image-smoke:
 	./scripts/container-smoke.sh $(IMAGE)
-# ---- end WP24 ----
+# ---- end packaging ----

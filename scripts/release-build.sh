@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds HallPass release archives and SHA256SUMS (PLAN WP24, HP-OPS-009).
+# Builds HallPass release archives and SHA256SUMS.
 #
 # Usage: scripts/release-build.sh [-o OUTDIR] [PLATFORM...]
 #   PLATFORM is GOOS/GOARCH; default: linux/amd64 linux/arm64 darwin/arm64.
@@ -89,7 +89,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 archives=()
-# HP-UI-016: release binaries embed the built UI (web/dist) via the embedui build tag.
+# Release binaries embed the built UI (web/dist) via the embedui build tag.
 tags=embedui
 if [[ ! -f web/dist/index.html ]]; then
   if [[ "${ALLOW_NO_UI:-}" != "1" ]]; then
@@ -108,7 +108,7 @@ for platform in "${platforms[@]}"; do
   echo "build $platform -> $name.tar.gz" >&2
   CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch GOFLAGS=-mod=readonly \
     "$go_cmd" build -tags "$tags" -trimpath -buildvcs="$buildvcs" -ldflags "$ldflags" -o "$stage/hallpass" ./cmd/hallpass
-  # Destination-side audit collector (optional, installed on destinations; HP-REC-012).
+  # Destination-side audit collector (optional, installed on destinations).
   CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch GOFLAGS=-mod=readonly \
     "$go_cmd" build -trimpath -buildvcs="$buildvcs" -ldflags "$ldflags" -o "$stage/hallpass-collector" ./cmd/hallpass-collector
   cp deploy/examples/hallpass.example.yaml "$stage/"

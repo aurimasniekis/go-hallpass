@@ -1,6 +1,6 @@
 name: release
 
-# Release pipeline (PLAN WP24, ADR-0022, HP-OPS-009). Runs only for pushed v* tags and manual dispatch; never on PRs.
+# Release pipeline (docs/RELEASING.md). Runs only for pushed v* tags and manual dispatch; never on PRs.
 # Publishing (Docker Hub and GHCR push, attestations, draft GitHub release) happens only when the run's ref is a v* tag.
 # Docker Hub needs the repository secret DOCKERHUB_TOKEN (a Docker Hub access token with Read & Write scope for
 # DOCKERHUB_IMAGE); the publish job fails before pushing anything when it is missing.
@@ -135,7 +135,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      # Placed where the go:embed step of HP-UI-016 will read it (not embedded yet).
+      # The built UI, embedded into the binaries by the embedui build tag.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: web-dist
@@ -243,7 +243,7 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
           format: table
-      # RG-2: unfixed HIGH/CRITICAL findings do not fail the build but must be reviewed and waived in DECISIONS.md.
+      # Unfixed HIGH/CRITICAL findings do not fail the build, but a maintainer reviews them before publishing.
       - name: Trivy report of unfixed HIGH/CRITICAL (non-blocking)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -390,7 +390,7 @@ jobs:
         with:
           name: release-dist
           path: dist
-      # Created as a draft: a maintainer reviews the notes (changelog, RG-9 crypto-review label) and publishes it.
+      # Created as a draft: a maintainer reviews the notes (changelog, "not externally reviewed" label) and publishes it.
       - name: create draft release
         env:
           GH_TOKEN: ${{ github.token }}

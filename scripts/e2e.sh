@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Browser end-to-end run (HP-TST-005, PLAN §18.3): build the UI and an embedui binary, start a fresh development
+# Browser end-to-end run: build the UI and an embedui binary, start a fresh development
 # instance on loopback ports with throwaway data, bootstrap it, and run the Playwright suite against it, including the
 # agent-side SSH request. Every run starts from an empty database, so specs can assert exact effective-access changes.
 #

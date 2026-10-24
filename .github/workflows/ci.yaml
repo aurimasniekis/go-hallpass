@@ -42,18 +42,18 @@ jobs:
       - name: analyzer tests
         run: make tools-test
       - name: race tests
-        # The race detector slows SQLite transactions several-fold on shared runners; the 100 ms HP-DB-004 guard is
+        # The race detector slows SQLite transactions several-fold on shared runners; the 100 ms write-transaction guard is
         # still enforced by the non-race coverage run below.
         env:
           HP_TEST_TX_MAX: 500ms
         run: make race
-      - name: coverage floor (HP-TST-009)
+      - name: coverage floor
         run: make coverage
-      - name: fuzz smoke (HP-TST-002)
+      - name: fuzz smoke
         run: make fuzz-smoke FUZZTIME=${{ github.event_name == 'schedule' && '10m' || '10s' }}
 
   web:
-    name: web (lint, typecheck, unit tests, build) and API drift (HP-API-001)
+    name: web (lint, typecheck, unit tests, build) and API drift
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -106,7 +106,7 @@ jobs:
         run: scripts/e2e.sh --reporter=list
 
   openssh:
-    name: openssh interoperability (HP-TST-003)
+    name: openssh interoperability
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -124,7 +124,7 @@ jobs:
         run: make test-openssh
 
   oidc-interop:
-    name: oidc interoperability (Keycloak, Dex; WP14)
+    name: oidc interoperability (Keycloak, Dex)
     if: github.event_name == 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -156,7 +156,7 @@ jobs:
           go-version-file: go.mod
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
-      - name: gitleaks (HP-OPS-012)
+      - name: gitleaks
         run: |
           go install github.com/zricethezav/gitleaks/v8@v8.30.1
           "$(go env GOPATH)/bin/gitleaks" git --redact --verbose --config .gitleaks.toml .

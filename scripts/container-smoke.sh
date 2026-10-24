@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Container smoke test for the HallPass image (PLAN WP24 "container smoke test", HP-OPS-007).
+# Container smoke test for the HallPass image.
 #
 # Usage: scripts/container-smoke.sh IMAGE
 #
@@ -11,7 +11,7 @@
 #   5. a KEK with group/other permissions is refused
 #   6. `hallpass serve` starts, accepts an SSH connection (server banner), and exits 0 on SIGTERM
 #
-# Not covered yet: /readyz (WP22) and `ssh center list` against a fixture agent (needs agent bootstrap, WP20).
+# Not covered yet: /readyz and `ssh center list` against a fixture agent (needs agent bootstrap).
 set -euo pipefail
 
 image=${1:?usage: $0 IMAGE}

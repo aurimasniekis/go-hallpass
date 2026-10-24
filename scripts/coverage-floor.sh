@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Enforce the statement-coverage floor for security-critical packages (HP-TST-009).
+# Enforce the statement-coverage floor for security-critical packages.
 # Packages that do not exist yet are skipped and reported, so the floor applies as soon as a package lands.
 set -euo pipefail
 

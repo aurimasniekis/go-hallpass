@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Recovery drill (RG-7, HP-OPS-004, HP-DB-014): back up a populated instance, restore it onto a clean machine (a fresh
+# Recovery drill: back up a populated instance, restore it onto a clean machine (a fresh
 # container from the release image, no prior state, no network), verify every recording and the integrity chain,
 # start it, and measure the recovery time objective (RTO) from "restore starts" to "/readyz ready".
 #
