@@ -69,6 +69,38 @@ func (q *Queries) ConfirmHostIdentity(ctx context.Context, arg ConfirmHostIdenti
 	return result.RowsAffected()
 }
 
+const countActiveHostIdentitiesByServer = `-- name: CountActiveHostIdentitiesByServer :many
+SELECT server_id, count(*) AS active FROM host_identities WHERE state = 'active' GROUP BY server_id
+`
+
+type CountActiveHostIdentitiesByServerRow struct {
+	ServerID string
+	Active   int64
+}
+
+func (q *Queries) CountActiveHostIdentitiesByServer(ctx context.Context) ([]CountActiveHostIdentitiesByServerRow, error) {
+	rows, err := q.db.QueryContext(ctx, countActiveHostIdentitiesByServer)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountActiveHostIdentitiesByServerRow{}
+	for rows.Next() {
+		var i CountActiveHostIdentitiesByServerRow
+		if err := rows.Scan(&i.ServerID, &i.Active); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteHostCAPrincipals = `-- name: DeleteHostCAPrincipals :exec
 DELETE FROM host_ca_principals WHERE server_id = ?
 `
@@ -852,6 +884,38 @@ func (q *Queries) ListServers(ctx context.Context) ([]Server, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const reenrollHostIdentity = `-- name: ReenrollHostIdentity :execrows
+UPDATE host_identities SET state = ?, enrolled_via = ?, created_at = ?, created_by = ?, confirmed_at = ?, confirmed_by = ?,
+  retired_at = NULL, retired_by = NULL
+WHERE id = ? AND state = 'retired'
+`
+
+type ReenrollHostIdentityParams struct {
+	State       string
+	EnrolledVia string
+	CreatedAt   int64
+	CreatedBy   string
+	ConfirmedAt sql.NullInt64
+	ConfirmedBy sql.NullString
+	ID          string
+}
+
+func (q *Queries) ReenrollHostIdentity(ctx context.Context, arg ReenrollHostIdentityParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, reenrollHostIdentity,
+		arg.State,
+		arg.EnrolledVia,
+		arg.CreatedAt,
+		arg.CreatedBy,
+		arg.ConfirmedAt,
+		arg.ConfirmedBy,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const retireHostIdentity = `-- name: RetireHostIdentity :execrows

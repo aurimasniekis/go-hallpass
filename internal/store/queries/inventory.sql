@@ -69,11 +69,19 @@ SELECT * FROM host_identities WHERE server_id = ? AND fingerprint_sha256 = ?;
 -- name: ListHostIdentities :many
 SELECT * FROM host_identities WHERE server_id = ? ORDER BY created_at;
 
+-- name: CountActiveHostIdentitiesByServer :many
+SELECT server_id, count(*) AS active FROM host_identities WHERE state = 'active' GROUP BY server_id;
+
 -- name: ActiveHostIdentitiesByFingerprint :many
 SELECT * FROM host_identities WHERE fingerprint_sha256 = ? AND state = 'active';
 
 -- name: ConfirmHostIdentity :execrows
 UPDATE host_identities SET state = 'active', confirmed_at = ?, confirmed_by = ? WHERE id = ? AND state = 'pending';
+
+-- name: ReenrollHostIdentity :execrows
+UPDATE host_identities SET state = ?, enrolled_via = ?, created_at = ?, created_by = ?, confirmed_at = ?, confirmed_by = ?,
+  retired_at = NULL, retired_by = NULL
+WHERE id = ? AND state = 'retired';
 
 -- name: RetireHostIdentity :execrows
 UPDATE host_identities SET state = 'retired', retired_at = ?, retired_by = ? WHERE id = ? AND state != 'retired';

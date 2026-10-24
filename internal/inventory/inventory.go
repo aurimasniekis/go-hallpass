@@ -483,9 +483,18 @@ func (svc *Service) ListServers(ctx context.Context) ([]*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	counts, err := svc.s.R().CountActiveHostIdentitiesByServer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	activeHostIDs := make(map[string]int, len(counts))
+	for _, c := range counts {
+		activeHostIDs[c.ServerID] = int(c.Active)
+	}
 	out := make([]*Server, 0, len(rows))
 	for _, r := range rows {
 		s := serverFromRow(r)
+		s.ActiveHostID = activeHostIDs[r.ID]
 		s.Groups = append(s.Groups, byServer[r.ID]...)
 		if l := labels[r.ID]; l != nil {
 			s.Labels = l

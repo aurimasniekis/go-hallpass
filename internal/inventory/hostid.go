@@ -10,12 +10,14 @@ import (
 	"net"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/crypto/ssh"
 
 	"github.com/aurimasniekis/go-hallpass/internal/apperr"
 	"github.com/aurimasniekis/go-hallpass/internal/audit"
+	"github.com/aurimasniekis/go-hallpass/internal/egress"
 	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
 	"github.com/aurimasniekis/go-hallpass/internal/ids"
 	"github.com/aurimasniekis/go-hallpass/internal/sshalg"
@@ -106,23 +108,38 @@ func (svc *Service) AddHostIdentity(ctx context.Context, actor audit.Actor, serv
 			return err
 		}
 		fp := ssh.FingerprintSHA256(pk)
-		if existing, err := tx.Q.GetHostIdentityByFingerprint(ctx, db.GetHostIdentityByFingerprintParams{ServerID: serverID, FingerprintSha256: fp}); err == nil {
+		existing, err := tx.Q.GetHostIdentityByFingerprint(ctx, db.GetHostIdentityByFingerprintParams{ServerID: serverID, FingerprintSha256: fp})
+		switch {
+		case err == nil && existing.State != "retired":
 			return apperr.New(apperr.CodeAlreadyExists, "host key %s is already enrolled for this server (state %s)", fp, existing.State)
+		case err != nil && !errors.Is(err, sql.ErrNoRows):
+			return err
 		}
 		if err := svc.checkDuplicate(ctx, tx, serverID, fp); err != nil {
 			return err
 		}
-		id = ids.New(ids.HostIdentity)
 		now := sql.NullInt64{Int64: tx.NowMicros(), Valid: true}
-		if err := tx.Q.InsertHostIdentity(ctx, db.InsertHostIdentityParams{
-			ID: id, ServerID: serverID, Algorithm: pk.Type(), PublicKey: marshalKey(pk), FingerprintSha256: fp, State: "active",
-			EnrolledVia: "paste", CreatedAt: tx.NowMicros(), CreatedBy: actorRef(actor), ConfirmedAt: now,
-			ConfirmedBy: sql.NullString{String: actorRef(actor), Valid: true},
-		}); err != nil {
-			return err
+		by := sql.NullString{String: actorRef(actor), Valid: true}
+		reenrolled := err == nil
+		if reenrolled {
+			// A retired key pasted again is trusted again: the same explicit operator step as a first enrollment.
+			id = existing.ID
+			if _, err := tx.Q.ReenrollHostIdentity(ctx, db.ReenrollHostIdentityParams{
+				State: "active", EnrolledVia: "paste", CreatedAt: tx.NowMicros(), CreatedBy: actorRef(actor), ConfirmedAt: now, ConfirmedBy: by, ID: id,
+			}); err != nil {
+				return err
+			}
+		} else {
+			id = ids.New(ids.HostIdentity)
+			if err := tx.Q.InsertHostIdentity(ctx, db.InsertHostIdentityParams{
+				ID: id, ServerID: serverID, Algorithm: pk.Type(), PublicKey: marshalKey(pk), FingerprintSha256: fp, State: "active",
+				EnrolledVia: "paste", CreatedAt: tx.NowMicros(), CreatedBy: actorRef(actor), ConfirmedAt: now, ConfirmedBy: by,
+			}); err != nil {
+				return err
+			}
 		}
-		_, err := svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "server.host_identity.enrolled", Target: audit.Target{Type: "server", ID: serverID},
-			Details: map[string]any{"host_identity_id": id, "fingerprint": fp, "algorithm": pk.Type(), "via": "paste"}})
+		_, err = svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "server.host_identity.enrolled", Target: audit.Target{Type: "server", ID: serverID},
+			Details: map[string]any{"host_identity_id": id, "fingerprint": fp, "algorithm": pk.Type(), "via": "paste", "reenrolled": reenrolled}})
 		svc.publish(tx, eventbus.TopicInventoryChanged, serverID)
 		return err
 	})
@@ -513,12 +530,18 @@ func (svc *Service) ScanHostKeys(ctx context.Context, actor audit.Actor, serverI
 		return nil, apperr.New(apperr.CodeUnavailable, "egress policy not configured")
 	}
 	var found []ssh.PublicKey
+	var lastErr error
 	for _, algo := range []string{ssh.KeyAlgoED25519, ssh.KeyAlgoECDSA256, ssh.KeyAlgoECDSA384, ssh.KeyAlgoECDSA521, ssh.KeyAlgoRSASHA512} {
 		pk, err := svc.scanOne(ctx, srv, algo)
 		if err != nil {
+			lastErr = err
+			if errors.As(err, new(*scanDialError)) {
+				break // every algorithm would fail the same way
+			}
 			continue // the server may not offer this algorithm
 		}
 		if _, err := checkHostKeyType(pk); err != nil {
+			lastErr = err
 			continue // below the algorithm floor (e.g. RSA < 3072): never offered for confirmation
 		}
 		if !slices.ContainsFunc(found, func(k ssh.PublicKey) bool { return bytes.Equal(k.Marshal(), pk.Marshal()) }) {
@@ -526,14 +549,28 @@ func (svc *Service) ScanHostKeys(ctx context.Context, actor audit.Actor, serverI
 		}
 	}
 	if len(found) == 0 {
-		return nil, apperr.New(apperr.CodeUnavailable, "no host keys could be retrieved from %s:%d", srv.Address, srv.Port)
+		return nil, apperr.New(apperr.CodeUnavailable, "no host keys could be retrieved from %s:%d: %s", srv.Address, srv.Port, scanFailure(lastErr))
 	}
 	err = svc.s.W().TxNamed(ctx, "inventory.scan_host_keys", func(tx *store.Tx) error {
-		var fps []string
+		var fps, reenrolled []string
 		for _, pk := range found {
 			fp := ssh.FingerprintSHA256(pk)
-			if _, err := tx.Q.GetHostIdentityByFingerprint(ctx, db.GetHostIdentityByFingerprintParams{ServerID: serverID, FingerprintSha256: fp}); err == nil {
+			existing, err := tx.Q.GetHostIdentityByFingerprint(ctx, db.GetHostIdentityByFingerprintParams{ServerID: serverID, FingerprintSha256: fp})
+			switch {
+			case err == nil && existing.State == "retired":
+				// Offered again for confirmation, like a newly scanned key: never trusted without the operator.
+				if _, err := tx.Q.ReenrollHostIdentity(ctx, db.ReenrollHostIdentityParams{
+					State: "pending", EnrolledVia: "scan", CreatedAt: tx.NowMicros(), CreatedBy: actorRef(actor), ID: existing.ID,
+				}); err != nil {
+					return err
+				}
+				fps = append(fps, fp)
+				reenrolled = append(reenrolled, fp)
 				continue
+			case err == nil:
+				continue // already pending or active
+			case !errors.Is(err, sql.ErrNoRows):
+				return err
 			}
 			if err := tx.Q.InsertHostIdentity(ctx, db.InsertHostIdentityParams{
 				ID: ids.New(ids.HostIdentity), ServerID: serverID, Algorithm: pk.Type(), PublicKey: marshalKey(pk), FingerprintSha256: fp,
@@ -544,7 +581,7 @@ func (svc *Service) ScanHostKeys(ctx context.Context, actor audit.Actor, serverI
 			fps = append(fps, fp)
 		}
 		_, err := svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "server.host_identity.scanned", Target: audit.Target{Type: "server", ID: serverID},
-			Details: map[string]any{"new_pending": fps}})
+			Details: map[string]any{"new_pending": fps, "reenrolled": reenrolled}})
 		return err
 	})
 	if err != nil {
@@ -558,7 +595,7 @@ func (svc *Service) scanOne(ctx context.Context, srv *Server, algo string) (ssh.
 	defer cancel()
 	conn, err := svc.opts.Guard.Dial(dctx, srv.Address, srv.Port)
 	if err != nil {
-		return nil, err
+		return nil, &scanDialError{err}
 	}
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(svc.opts.DialTimeout))
@@ -581,4 +618,35 @@ func (svc *Service) scanOne(ctx context.Context, srv *Server, algo string) (ssh.
 		return captured, nil
 	}
 	return nil, err
+}
+
+// scanDialError is a scan that never reached the server's SSH handshake.
+type scanDialError struct{ err error }
+
+func (e *scanDialError) Error() string { return e.err.Error() }
+func (e *scanDialError) Unwrap() error { return e.err }
+
+// scanFailure explains to the operator why a scan found no usable host key.
+func scanFailure(err error) string {
+	var dnsErr *net.DNSError
+	var ne net.Error
+	switch {
+	case err == nil:
+		return "the server offered no host key"
+	case errors.Is(err, egress.ErrDenied):
+		return err.Error() // names the address and the egress setting to change
+	case errors.As(err, &dnsErr):
+		return "the name did not resolve"
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return "connection refused"
+	case errors.Is(err, syscall.EHOSTUNREACH), errors.Is(err, syscall.ENETUNREACH):
+		return "no route to the server"
+	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &ne) && ne.Timeout():
+		return "connection timed out"
+	case errors.As(err, new(*scanDialError)):
+		return "connection failed"
+	case errors.As(err, new(*apperr.Error)):
+		return err.Error() // checkHostKeyType: an unsupported or too-weak key type
+	}
+	return "the SSH handshake failed"
 }

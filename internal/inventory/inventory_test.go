@@ -285,6 +285,78 @@ func TestScanAndConfirm(t *testing.T) {
 	if v, err := svc.NewVerifier(ctx, srv.ID); err != nil || len(v.Algorithms) != 1 {
 		t.Fatalf("%v %v", v, err)
 	}
+	// The list counts active identities like the detail does (the console's server and git lists show it).
+	list, err := svc.ListServers(ctx)
+	if err != nil || len(list) != 1 || list[0].ActiveHostID != 1 {
+		t.Fatalf("listed active host identities: %+v %v", list, err)
+	}
+}
+
+// A retired host key can be enrolled again, with the same operator step as the first time: a scan offers it as
+// pending, a paste trusts it.
+func TestReenrollRetiredHostKey(t *testing.T) {
+	svc, _ := newSvc(t)
+	ctx := context.Background()
+	hostKey := sshkeys.Ed25519(t)
+	dest := sshtest.Start(t, hostKey)
+	host, port := dest.Addr()
+	srv := mkServer(t, svc, "dest", host, port)
+	scanned, err := svc.ScanHostKeys(ctx, admin, srv.ID)
+	if err != nil || len(scanned) != 1 {
+		t.Fatalf("%+v %v", scanned, err)
+	}
+	id := scanned[0].ID
+	if _, err := svc.ConfirmHostIdentity(ctx, admin, id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.RetireHostIdentity(ctx, admin, id); err != nil {
+		t.Fatal(err)
+	}
+	rescanned, err := svc.ScanHostKeys(ctx, admin, srv.ID)
+	if err != nil || len(rescanned) != 1 || rescanned[0].ID != id || rescanned[0].State != "pending" {
+		t.Fatalf("rescan of a retired key: %+v %v", rescanned, err)
+	}
+	if _, err := svc.NewVerifier(ctx, srv.ID); err == nil {
+		t.Fatal("a re-scanned key must not be trusted before confirmation")
+	}
+	if _, err := svc.ConfirmHostIdentity(ctx, admin, id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.RetireHostIdentity(ctx, admin, id); err != nil {
+		t.Fatal(err)
+	}
+	line := string(ssh.MarshalAuthorizedKey(hostKey.Public))
+	pasted, err := svc.AddHostIdentity(ctx, admin, srv.ID, line)
+	if err != nil || pasted.ID != id || pasted.State != "active" || pasted.EnrolledVia != "paste" {
+		t.Fatalf("paste of a retired key: %+v %v", pasted, err)
+	}
+	if _, err := svc.AddHostIdentity(ctx, admin, srv.ID, line); !errors.Is(err, apperr.ErrAlreadyExists) {
+		t.Fatalf("paste of an active key: %v", err)
+	}
+}
+
+// A failed scan says why, so an operator can tell an egress denial from an unreachable server.
+func TestScanFailureReason(t *testing.T) {
+	svc, _ := newSvc(t)
+	ctx := context.Background()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := l.Addr().(*net.TCPAddr).Port
+	_ = l.Close()
+	srv := mkServer(t, svc, "closed", "127.0.0.1", port)
+	if _, err := svc.ScanHostKeys(ctx, admin, srv.ID); err == nil || !strings.Contains(err.Error(), "connection refused") {
+		t.Fatalf("closed port: %v", err)
+	}
+	narrow, err := egress.New([]string{"10.0.0.0/8"}, nil, nil, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc.opts.Guard = narrow
+	if _, err := svc.ScanHostKeys(ctx, admin, srv.ID); err == nil || !strings.Contains(err.Error(), "egress.allow_cidrs") {
+		t.Fatalf("egress denial: %v", err)
+	}
 }
 
 // Git remotes: access profiles use only git capabilities and need repository patterns; push needs ref rules; the
