@@ -11,6 +11,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/audit"
 	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
 	"github.com/aurimasniekis/go-hallpass/internal/ids"
+	"github.com/aurimasniekis/go-hallpass/internal/inventory"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
 	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/policy"
@@ -141,7 +142,12 @@ func (svc *Service) CreateRequest(ctx context.Context, in CreateRequestInput) (*
 			return err
 		}
 		res = &CreateResult{Request: requestFromRow(row)}
-		if d.AutoApproves(dur) {
+		roleRow, err := tx.Q.GetRole(ctx, in.RoleID)
+		if err != nil {
+			return err
+		}
+		// A role that needs several approvers is never approved by policy alone.
+		if d.AutoApproves(dur) && inventory.RoleFromRow(roleRow).ApprovalsRequired <= 1 {
 			out, err := svc.decideTx(ctx, tx, snap, row, decideParams{
 				approve: true, duration: dur, actorType: "policy", actorID: d.DecidingRule, channel: "policy",
 			})

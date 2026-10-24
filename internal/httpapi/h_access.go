@@ -208,6 +208,10 @@ func (s *Server) decide(c *gen.Call, approve bool) (*gen.Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	if res.Pending {
+		// Recorded, but the role needs more distinct approvers: the request is still pending.
+		return &gen.Result{Status: http.StatusAccepted, Body: decisionDTO{Request: s.request(c, res.Request)}}, nil
+	}
 	return ok(decisionDTO{Request: s.request(c, res.Request), Grant: res.Grant})
 }
 

@@ -89,8 +89,8 @@ SELECT count(*) FROM host_duplicate_exceptions WHERE fingerprint_sha256 = ? AND 
 INSERT INTO server_roles (id, server_id, alias, display_name, description, remote_user, capabilities_json, default_duration_s,
   max_duration_s, max_concurrent, max_concurrent_per_agent, record_input, recording_mode, env_allow_json,
   approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by,
-  git_rules_json)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?);
+  git_rules_json, approvals_required)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?);
 
 -- name: GetRole :one
 SELECT * FROM server_roles WHERE id = ?;
@@ -108,7 +108,7 @@ SELECT * FROM server_roles ORDER BY server_id, alias;
 UPDATE server_roles SET alias = ?, display_name = ?, description = ?, remote_user = ?, capabilities_json = ?,
   default_duration_s = ?, max_duration_s = ?, max_concurrent = ?, max_concurrent_per_agent = ?, record_input = ?,
   recording_mode = ?, env_allow_json = ?, approval_channels_json = ?, restriction_notes = ?, retention_class = ?,
-  git_rules_json = ?, version = version + 1, updated_at = ?, updated_by = ?
+  git_rules_json = ?, approvals_required = ?, version = version + 1, updated_at = ?, updated_by = ?
 WHERE id = ? AND version = ?;
 
 -- name: SetRoleEnabled :execrows

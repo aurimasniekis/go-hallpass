@@ -47,7 +47,11 @@ type RoleInput struct {
 	Labels                *map[string]string `json:"labels,omitempty"`
 	Enabled               *bool              `json:"enabled,omitempty"`
 	Git                   *GitRules          `json:"git,omitempty"`
+	ApprovalsRequired     *int               `json:"approvals_required,omitempty"`
 }
+
+// MaxApprovalsRequired bounds RoleInput.ApprovalsRequired.
+const MaxApprovalsRequired = 5
 
 // GitRules say what an access profile on a git remote covers. Repository patterns are matched case-insensitively
 // against the normalized repository path (no ".git" suffix); push rules apply to git-write only.
@@ -169,6 +173,9 @@ func (svc *Service) validateRole(v *apperr.Validation, r *Role, kind string) {
 			v.Add("approval_channels", "unknown channel %q", c)
 		}
 	}
+	if r.ApprovalsRequired < 1 || r.ApprovalsRequired > MaxApprovalsRequired {
+		v.Add("approvals_required", "must be within 1..%d", MaxApprovalsRequired)
+	}
 	if !retentionClassRE.MatchString(r.RetentionClass) {
 		v.Add("retention_class", "invalid retention class name")
 	}
@@ -192,6 +199,7 @@ func applyRoleInput(r *Role, in RoleInput) {
 	r.RestrictionNotes = deref(in.RestrictionNotes, r.RestrictionNotes)
 	r.RetentionClass = deref(in.RetentionClass, r.RetentionClass)
 	r.Labels = deref(in.Labels, r.Labels)
+	r.ApprovalsRequired = deref(in.ApprovalsRequired, r.ApprovalsRequired)
 	if r.Labels == nil {
 		r.Labels = map[string]string{}
 	}
@@ -235,7 +243,7 @@ func (svc *Service) CreateRole(ctx context.Context, actor audit.Actor, serverID 
 		ServerID: serverID, Capabilities: []string{CapExec, CapPTY, CapShell}, DefaultDuration: 30 * time.Minute,
 		MaxDuration: min(6*time.Hour, svc.opts.MaxGrantDuration), MaxConcurrent: 10, MaxConcurrentPerAgent: 2,
 		RecordingMode: "mandatory", EnvAllow: []string{}, ApprovalChannels: slices.Clone(AllApprovalChannels),
-		RetentionClass: "default", Labels: map[string]string{}, Enabled: deref(in.Enabled, true),
+		RetentionClass: "default", Labels: map[string]string{}, Enabled: deref(in.Enabled, true), ApprovalsRequired: 1,
 	}
 	if srv.Kind == KindGit {
 		// Git hosts take every user as "git" and never open shells: read-only by default.
@@ -269,7 +277,7 @@ func (svc *Service) CreateRole(ctx context.Context, actor audit.Actor, serverID 
 			MaxConcurrentPerAgent: int64(r.MaxConcurrentPerAgent), RecordInput: b2i(r.RecordInput), RecordingMode: r.RecordingMode,
 			EnvAllowJson: jsonList(r.EnvAllow), ApprovalChannelsJson: jsonList(r.ApprovalChannels), RestrictionNotes: r.RestrictionNotes,
 			RetentionClass: r.RetentionClass, Enabled: b2i(r.Enabled), CreatedAt: tx.NowMicros(), UpdatedAt: tx.NowMicros(),
-			UpdatedBy: actorRef(actor), GitRulesJson: gitRulesJSON(r.Git),
+			UpdatedBy: actorRef(actor), GitRulesJson: gitRulesJSON(r.Git), ApprovalsRequired: int64(r.ApprovalsRequired),
 		}); err != nil {
 			return err
 		}
@@ -281,7 +289,8 @@ func (svc *Service) CreateRole(ctx context.Context, actor audit.Actor, serverID 
 		}
 		_, err := svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "role.created", Target: audit.Target{Type: "role", ID: id},
 			Details: map[string]any{"server_id": serverID, "alias": r.Alias, "remote_user": r.RemoteUser, "capabilities": r.Capabilities,
-				"max_duration": r.MaxDuration.String(), "recording_mode": r.RecordingMode, "record_input": r.RecordInput, "git": r.Git}})
+				"max_duration": r.MaxDuration.String(), "recording_mode": r.RecordingMode, "record_input": r.RecordInput, "git": r.Git,
+				"approvals_required": r.ApprovalsRequired}})
 		svc.publish(tx, eventbus.TopicInventoryChanged, serverID)
 		return err
 	})
@@ -321,7 +330,8 @@ func (svc *Service) UpdateRole(ctx context.Context, actor audit.Actor, id string
 			MaxConcurrentPerAgent: int64(next.MaxConcurrentPerAgent), RecordInput: b2i(next.RecordInput),
 			RecordingMode: next.RecordingMode, EnvAllowJson: jsonList(next.EnvAllow), ApprovalChannelsJson: jsonList(next.ApprovalChannels),
 			RestrictionNotes: next.RestrictionNotes, RetentionClass: next.RetentionClass, GitRulesJson: gitRulesJSON(next.Git),
-			UpdatedAt: tx.NowMicros(), UpdatedBy: actorRef(actor), ID: id, Version: in.Version,
+			ApprovalsRequired: int64(next.ApprovalsRequired),
+			UpdatedAt:         tx.NowMicros(), UpdatedBy: actorRef(actor), ID: id, Version: in.Version,
 		})
 		if err != nil {
 			return err
@@ -339,7 +349,8 @@ func (svc *Service) UpdateRole(ctx context.Context, actor audit.Actor, id string
 		}
 		_, err = svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "role.updated", Target: audit.Target{Type: "role", ID: id},
 			Details: map[string]any{"alias": next.Alias, "remote_user": next.RemoteUser, "capabilities": next.Capabilities,
-				"max_duration": next.MaxDuration.String(), "recording_mode": next.RecordingMode, "record_input": next.RecordInput, "git": next.Git}})
+				"max_duration": next.MaxDuration.String(), "recording_mode": next.RecordingMode, "record_input": next.RecordInput, "git": next.Git,
+				"approvals_required": next.ApprovalsRequired}})
 		svc.publish(tx, eventbus.TopicInventoryChanged, cur.ServerID)
 		return err
 	})
@@ -431,6 +442,7 @@ func RoleFromRow(r db.ServerRole) *Role {
 		MaxConcurrentPerAgent: int(r.MaxConcurrentPerAgent), RecordInput: r.RecordInput == 1, RecordingMode: r.RecordingMode,
 		RestrictionNotes: r.RestrictionNotes, RetentionClass: r.RetentionClass, Enabled: r.Enabled == 1, Version: r.Version,
 		CreatedAt: time.UnixMicro(r.CreatedAt).UTC(), UpdatedAt: time.UnixMicro(r.UpdatedAt).UTC(), Labels: map[string]string{},
+		ApprovalsRequired: int(r.ApprovalsRequired),
 	}
 	_ = json.Unmarshal([]byte(r.CapabilitiesJson), &role.Capabilities)
 	_ = json.Unmarshal([]byte(r.EnvAllowJson), &role.EnvAllow)

@@ -1084,6 +1084,38 @@ func (q *Queries) InsertRequest(ctx context.Context, arg InsertRequestParams) er
 	return err
 }
 
+const insertRequestApproval = `-- name: InsertRequestApproval :execrows
+INSERT INTO request_approvals (request_id, operator_id, channel, approved_duration_s, comment_enc, approver_rule_id, approved_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (request_id, operator_id) DO NOTHING
+`
+
+type InsertRequestApprovalParams struct {
+	RequestID         string
+	OperatorID        string
+	Channel           string
+	ApprovedDurationS int64
+	CommentEnc        []byte
+	ApproverRuleID    sql.NullString
+	ApprovedAt        int64
+}
+
+func (q *Queries) InsertRequestApproval(ctx context.Context, arg InsertRequestApprovalParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, insertRequestApproval,
+		arg.RequestID,
+		arg.OperatorID,
+		arg.Channel,
+		arg.ApprovedDurationS,
+		arg.CommentEnc,
+		arg.ApproverRuleID,
+		arg.ApprovedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const insertSession = `-- name: InsertSession :exec
 INSERT INTO access_sessions (id, grant_id, state, seq_reserved, opened_at, retention_class) VALUES (?, ?, 'open', ?, ?, ?)
 `
@@ -1202,6 +1234,41 @@ func (q *Queries) InterruptStaleConnections(ctx context.Context, arg InterruptSt
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const listRequestApprovals = `-- name: ListRequestApprovals :many
+SELECT request_id, operator_id, channel, approved_duration_s, comment_enc, approver_rule_id, approved_at FROM request_approvals WHERE request_id = ? ORDER BY approved_at, operator_id
+`
+
+func (q *Queries) ListRequestApprovals(ctx context.Context, requestID string) ([]RequestApproval, error) {
+	rows, err := q.db.QueryContext(ctx, listRequestApprovals, requestID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RequestApproval{}
+	for rows.Next() {
+		var i RequestApproval
+		if err := rows.Scan(
+			&i.RequestID,
+			&i.OperatorID,
+			&i.Channel,
+			&i.ApprovedDurationS,
+			&i.CommentEnc,
+			&i.ApproverRuleID,
+			&i.ApprovedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listRequestsForAgent = `-- name: ListRequestsForAgent :many

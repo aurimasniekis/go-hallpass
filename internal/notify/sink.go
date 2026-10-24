@@ -202,6 +202,11 @@ func (svc *Service) interaction(ctx context.Context, integrationID string, in ch
 		svc.log.Error("chat decision failed", "error", err.Error())
 		return "HallPass could not record the decision; try the web UI."
 	}
+	if res.Pending {
+		// The role needs more distinct approvers: the buttons stay usable for the others.
+		return fmt.Sprintf("Approval by %s recorded (%d of %d); the request needs %d more approver(s).", op.DisplayName,
+			len(res.Approvals), res.ApprovalsRequired, res.ApprovalsRequired-len(res.Approvals))
+	}
 	outcome := res.Request.State
 	if res.Grant != nil {
 		outcome += " for " + chat.FormatDuration(res.Grant.ExpiresAt.Sub(res.Grant.StartsAt))

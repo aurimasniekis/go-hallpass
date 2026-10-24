@@ -636,6 +636,16 @@ type RecoveryCode struct {
 	CreatedAt  int64
 }
 
+type RequestApproval struct {
+	RequestID         string
+	OperatorID        string
+	Channel           string
+	ApprovedDurationS int64
+	CommentEnc        []byte
+	ApproverRuleID    sql.NullString
+	ApprovedAt        int64
+}
+
 type RoleCertBinding struct {
 	RoleID         string
 	UserCaID       string
@@ -693,6 +703,7 @@ type ServerRole struct {
 	UpdatedAt             int64
 	UpdatedBy             string
 	GitRulesJson          sql.NullString
+	ApprovalsRequired     int64
 }
 
 type Setting struct {

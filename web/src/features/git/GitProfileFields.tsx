@@ -2,6 +2,7 @@ import { Checkbox, Form, Input, Switch } from 'antd';
 
 import { DurationInput } from '../../ds/DurationInput';
 import { TagsInput } from '../../ds/TagsInput';
+import { ApprovalsRequiredField } from '../roles/ApprovalsRequiredField';
 import type { GitProfileFormValues } from './gitForm';
 
 // Patterns contain commas inside braces ({api,web}), so tokens are split on whitespace only.
@@ -99,6 +100,7 @@ export function GitProfileFields() {
           </Form.Item>
         </>
       ) : null}
+      <ApprovalsRequiredField />
       <Form.Item label="Default access duration" name="default_duration" rules={[{ required: true }]}>
         <DurationInput aria-label="Default duration" minSeconds={60} />
       </Form.Item>

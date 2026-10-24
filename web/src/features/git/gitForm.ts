@@ -11,6 +11,7 @@ export interface GitProfileFormValues {
   tags: string[];
   allow_delete: boolean;
   allow_force_push: boolean;
+  approvals_required: number;
   default_duration: number;
   max_duration: number;
 }
@@ -25,6 +26,7 @@ export const GIT_PROFILE_DEFAULTS: GitProfileFormValues = {
   tags: [],
   allow_delete: false,
   allow_force_push: false,
+  approvals_required: 1,
   default_duration: 3600,
   max_duration: 8 * 3600,
 };
@@ -46,6 +48,7 @@ export function toGitProfileInput(v: GitProfileFormValues) {
     description: (v.description ?? '').trim(),
     capabilities: v.write ? ['git-read', 'git-write'] : ['git-read'],
     git,
+    approvals_required: v.approvals_required,
     default_duration: v.default_duration,
     max_duration: v.max_duration,
   };
@@ -63,6 +66,7 @@ export function gitProfileFormValues(r: Role): GitProfileFormValues {
     tags: push?.tags ?? [],
     allow_delete: push?.allow_delete ?? false,
     allow_force_push: push?.allow_force_push ?? false,
+    approvals_required: r.approvals_required ?? 1,
     default_duration: r.default_duration,
     max_duration: r.max_duration,
   };

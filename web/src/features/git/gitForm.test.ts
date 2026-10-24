@@ -12,6 +12,7 @@ describe('git profile form', () => {
       description: '',
       capabilities: ['git-read'],
       git: { repos: ['acme/*'] },
+      approvals_required: 1,
       default_duration: 3600,
       max_duration: 28800,
     });

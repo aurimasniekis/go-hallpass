@@ -3,6 +3,7 @@ import { Alert, Checkbox, Form, Input, InputNumber, Radio, Switch } from 'antd';
 import { DurationInput } from '../../ds/DurationInput';
 import { TagsInput } from '../../ds/TagsInput';
 import { formatDuration } from '../../lib/format';
+import { ApprovalsRequiredField } from './ApprovalsRequiredField';
 import {
   APPROVAL_CHANNELS,
   CAPABILITIES,
@@ -126,6 +127,7 @@ export function RoleFormFields() {
       >
         <Checkbox.Group options={APPROVAL_CHANNELS.map((c) => ({ value: c.value, label: c.label }))} />
       </Form.Item>
+      <ApprovalsRequiredField />
       <Form.Item
         label="Allowed environment variables"
         name="env_allow"

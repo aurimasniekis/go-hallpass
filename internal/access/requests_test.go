@@ -9,6 +9,7 @@ import (
 
 	"github.com/aurimasniekis/go-hallpass/internal/apperr"
 	"github.com/aurimasniekis/go-hallpass/internal/audit"
+	"github.com/aurimasniekis/go-hallpass/internal/inventory"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
 	"github.com/aurimasniekis/go-hallpass/internal/policy"
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
@@ -332,4 +333,55 @@ func TestOperatorRevokeAndCancel(t *testing.T) {
 		t.Fatal("other agent could see the request")
 	}
 	_ = keyring.PurposeField
+}
+
+// A role that needs two approvers: one approval keeps the request pending, the same operator cannot approve twice,
+// the second distinct approver creates the grant with the shortest chosen duration, a denial after a partial approval
+// ends the request, and policy auto-approval does not apply.
+func TestMultipleApprovers(t *testing.T) {
+	f := newFx(t)
+	op2 := insertOperator(t, f.s, "approver")
+	_, err := f.pol.CreateApproverRule(f.ctx, admin, policy.ApproverRule{Name: "second", Enabled: true,
+		Operators: policy.OperatorSelector{Operators: []string{op2}}, Targets: policy.TargetSelector{All: true}, Roles: policy.RoleSelector{All: true}})
+	must(t, err)
+	second := policy.OperatorInfo{ID: op2, Roles: []string{"approver"}, Enabled: true}
+	_, err = f.inv.UpdateRole(f.ctx, admin, f.role.ID, inventory.RoleInput{Version: f.role.Version, ApprovalsRequired: ptr(2)})
+	must(t, err)
+
+	r := f.request("deploy", time.Hour)
+	first := f.approve(r.Request.ID, time.Hour)
+	if !first.Pending || first.Grant != nil || first.Request.State != ReqPending || len(first.Approvals) != 1 || first.ApprovalsRequired != 2 {
+		t.Fatalf("first approval: %+v", first)
+	}
+	if _, err := f.svc.Decide(f.ctx, DecideInput{RequestID: r.Request.ID, Approve: true, Operator: f.approver, Channel: ChannelWeb}); !errors.Is(err, apperr.ErrConflict) {
+		t.Fatalf("same approver twice: %v", err)
+	}
+	if got, _ := f.svc.Approvals(f.ctx, r.Request.ID); len(got) != 1 || got[0].OperatorID != f.approver.ID {
+		t.Fatalf("approvals: %+v", got)
+	}
+	final, err := f.svc.Decide(f.ctx, DecideInput{RequestID: r.Request.ID, Approve: true, Duration: 30 * time.Minute, Operator: second, Channel: ChannelSlack})
+	must(t, err)
+	if final.Pending || final.Grant == nil || final.Request.State != ReqApproved || len(final.Approvals) != 2 {
+		t.Fatalf("final approval: %+v", final)
+	}
+	if d := final.Grant.ExpiresAt.Sub(final.Grant.StartsAt); d != 30*time.Minute {
+		t.Fatalf("grant duration %s, want the shortest chosen (30m)", d)
+	}
+
+	denied := f.request("deploy again", time.Hour)
+	f.approve(denied.Request.ID, time.Hour)
+	res, err := f.svc.Decide(f.ctx, DecideInput{RequestID: denied.Request.ID, Approve: false, Operator: second, Channel: ChannelWeb})
+	if err != nil || res.Request.State != ReqDenied || res.Grant != nil {
+		t.Fatalf("deny after partial approval: %+v %v", res, err)
+	}
+
+	_, err = f.pol.CreateRule(f.ctx, admin, policy.Rule{Name: "auto", Effect: policy.EffectAllow, Level: policy.LevelAutoApprove, AutoMaxDuration: time.Hour,
+		Enabled: true, Subjects: policy.SubjectSelector{All: true}, Targets: policy.TargetSelector{All: true}, Roles: policy.RoleSelector{All: true}})
+	must(t, err)
+	if auto := f.request("quick", 15*time.Minute); auto.AutoApproved || auto.Request.State != ReqPending {
+		t.Fatalf("auto-approved despite two required approvers: %+v", auto)
+	}
+	if res, err := audit.Verify(f.ctx, f.s.R()); err != nil || !res.OK {
+		t.Fatal(err)
+	}
 }

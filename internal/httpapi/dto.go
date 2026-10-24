@@ -204,12 +204,30 @@ func effective(version int64, rows []policy.Access) effectiveDTO {
 // requestDTO carries the reason only for requests.reason.read (HP-RBAC-001; reasons are untrusted agent text).
 type requestDTO struct {
 	*access.Request
-	RequestedDuration seconds `json:"requested_duration"`
-	Reason            *string `json:"reason"`
+	RequestedDuration seconds       `json:"requested_duration"`
+	Reason            *string       `json:"reason"`
+	ApprovalsRequired int           `json:"approvals_required"`
+	Approvals         []approvalDTO `json:"approvals"`
+}
+
+// approvalDTO is one recorded approval of a request whose role needs several approvers.
+type approvalDTO struct {
+	OperatorID string    `json:"operator_id"`
+	Channel    string    `json:"channel"`
+	Duration   seconds   `json:"duration"`
+	ApprovedAt time.Time `json:"approved_at"`
 }
 
 func (s *Server) request(c *gen.Call, r *access.Request) requestDTO {
-	out := requestDTO{Request: r, RequestedDuration: secs(r.RequestedDuration)}
+	out := requestDTO{Request: r, RequestedDuration: secs(r.RequestedDuration), ApprovalsRequired: 1, Approvals: []approvalDTO{}}
+	if role, err := s.d.Inventory.GetRole(c.R.Context(), r.RoleID); err == nil && role.ApprovalsRequired > 1 {
+		out.ApprovalsRequired = role.ApprovalsRequired
+		if as, err := s.d.Access.Approvals(c.R.Context(), r.ID); err == nil {
+			for _, a := range as {
+				out.Approvals = append(out.Approvals, approvalDTO{OperatorID: a.OperatorID, Channel: a.Channel, Duration: secs(a.Duration), ApprovedAt: a.ApprovedAt})
+			}
+		}
+	}
 	if r.HasReason && s.canReadReason(c, r) {
 		if reason, err := s.d.Access.Reason(c.R.Context(), r.ID); err == nil {
 			out.Reason = &reason

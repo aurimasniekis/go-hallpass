@@ -836,6 +836,18 @@
 - **Limits:** multi-approver requests are a separate follow-up. Host-side branch protection remains a good second
   layer.
 
+### ADR-0048 — Requests that need several approvers
+
+- **Status:** accepted (operator request, 2026-10-24). Not security-relevant in the weakening sense: it only adds a
+  stricter option.
+- **Decision:** a role (SSH role or git access profile) has `approvals_required` (1–5, default 1). Each approval is
+  checked exactly like a single approval (approver rule, self-approval, channel, policy, duration) and recorded in
+  `request_approvals`; one operator approves at most once. The request stays pending until the required number of
+  distinct approvers is reached; the last approval writes the decision and creates the grant with the shortest
+  duration any approver chose. Any one authorized denial ends the request. Policy auto-approval never applies to a
+  role that needs more than one approver. The web API answers a partial approval with 202 and the pending request;
+  chat buttons stay usable for the other approvers.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

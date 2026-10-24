@@ -31,6 +31,7 @@ export const ROLE_DEFAULTS: RoleFormValues = {
   recording_mode: 'mandatory',
   record_input: false,
   approval_channels: ['web', 'slack', 'telegram'],
+  approvals_required: 1,
   retention_class: 'default',
   enabled: true,
 };
@@ -51,6 +52,7 @@ export interface RoleFormValues {
   record_input?: boolean;
   env_allow?: string[];
   approval_channels?: string[];
+  approvals_required?: number;
   restriction_notes?: string;
   retention_class?: string;
   labels?: string[];
@@ -68,6 +70,7 @@ export function toRoleInput(v: RoleFormValues, version?: number): RoleInput {
     record_input: v.record_input ?? false,
     env_allow: cleanList(v.env_allow),
     approval_channels: cleanList(v.approval_channels),
+    approvals_required: v.approvals_required ?? 1,
     restriction_notes: (v.restriction_notes ?? '').trim(),
     labels: labelsFromTags(v.labels),
     enabled: v.enabled ?? true,
@@ -112,6 +115,7 @@ export function roleFormValues(r: Role): RoleFormValues {
     record_input: r.record_input ?? false,
     env_allow: r.env_allow ?? [],
     approval_channels: r.approval_channels ?? [],
+    approvals_required: r.approvals_required ?? 1,
     restriction_notes: r.restriction_notes ?? '',
     retention_class: r.retention_class ?? '',
     labels: labelsToTags(r.labels),

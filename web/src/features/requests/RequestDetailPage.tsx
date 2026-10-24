@@ -16,7 +16,7 @@ import { ErrorState, LoadingState, PermissionDenied } from '../../ds/states';
 import { UntrustedText } from '../../ds/UntrustedText';
 import { formatDateTime, formatDuration, formatDurationLong } from '../../lib/format';
 import { usePermissions } from '../../lib/usePermissions';
-import { AgentName, RoleName, ServerName } from '../../shared/names';
+import { AgentName, OperatorName, RoleName, ServerName } from '../../shared/names';
 import { StateBadge } from '../../shared/StateBadge';
 import { approveBody, choiceKey, DURATION_PRESETS, parseChoiceKey, type DurationChoice } from './decision';
 
@@ -138,6 +138,18 @@ function DenyAction({ request, onDecided }: { request: AccessRequest; onDecided:
 
 function DecisionResult({ decision }: { decision: Decision }) {
   const grant = decision.grant ?? null;
+  const need = decision.request.approvals_required;
+  const have = decision.request.approvals.length;
+  if (decision.request.state === 'pending' && need > 1) {
+    return (
+      <Alert
+        type="info"
+        showIcon
+        title={`Your approval is recorded (${String(have)} of ${String(need)})`}
+        description={`The request stays pending until ${String(need - have)} more approver${need - have === 1 ? '' : 's'} approve it. Any denial ends it.`}
+      />
+    );
+  }
   if (decision.request.state === 'approved' && grant) {
     return (
       <Alert
@@ -280,6 +292,26 @@ export function RequestDetailPage({ id }: { id: string }) {
                   </span>
                 ),
               },
+              ...(r.approvals_required > 1
+                ? [
+                    {
+                      span: 2 as const,
+                      key: 'approvals',
+                      label: 'Approvals',
+                      value: (
+                        <span>
+                          {String(r.approvals.length)} of {String(r.approvals_required)}
+                          {r.approvals.map((a) => (
+                            <span key={a.operator_id}>
+                              {' · '}
+                              <OperatorName id={a.operator_id} /> via {a.channel}
+                            </span>
+                          ))}
+                        </span>
+                      ),
+                    },
+                  ]
+                : []),
               { key: 'policy', label: 'Policy version', value: r.policy_version },
               { key: 'created', label: 'Created', value: formatDateTime(r.created_at) },
               { key: 'decided', label: 'Decided', value: r.decided_at ? formatDateTime(r.decided_at) : '—' },

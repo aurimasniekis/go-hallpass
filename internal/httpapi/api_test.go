@@ -32,6 +32,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/aurimasniekis/go-hallpass/internal/access"
+	"github.com/aurimasniekis/go-hallpass/internal/agents"
 	"github.com/aurimasniekis/go-hallpass/internal/app"
 	"github.com/aurimasniekis/go-hallpass/internal/audit"
 	"github.com/aurimasniekis/go-hallpass/internal/buildinfo"
@@ -40,8 +41,10 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
 	"github.com/aurimasniekis/go-hallpass/internal/httpapi"
 	"github.com/aurimasniekis/go-hallpass/internal/httpapi/gen"
+	"github.com/aurimasniekis/go-hallpass/internal/inventory"
 	"github.com/aurimasniekis/go-hallpass/internal/oidc/oidctest"
 	"github.com/aurimasniekis/go-hallpass/internal/opauth"
+	"github.com/aurimasniekis/go-hallpass/internal/policy"
 	"github.com/aurimasniekis/go-hallpass/internal/rbac"
 	"github.com/aurimasniekis/go-hallpass/internal/sshproxy"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
@@ -1239,5 +1242,54 @@ func TestGitRemoteAPI(t *testing.T) {
 	}
 	if r := c.do("PATCH", "/api/v1/servers/"+srv.ID, map[string]any{"kind": "ssh"}, "If-Match", fmt.Sprintf(`"%d"`, srv.Version)); r.status != 422 {
 		t.Fatalf("kind change: %d %s", r.status, r.body)
+	}
+}
+
+// A role needing two approvers through the API: the first approval answers 202 with the request still pending and
+// the approval listed; the second distinct approver answers 200 with the grant.
+func TestMultiApprovalAPI(t *testing.T) {
+	h := newHarness(t)
+	c := h.bootstrapAdmin()
+	second := h.principalClient([]string{opauth.RoleApprover}, opauth.MethodOIDC)
+	key := sshkeys.Ed25519(t)
+	agent, err := h.a.Agents.Create(h.ctx, sysActor, agents.CreateInput{Name: "deploy-bot", Groups: []string{"bots"}, PublicKeys: []string{key.AuthorizedLine("")}})
+	must(t, err)
+	srv, err := h.a.Inventory.CreateServer(h.ctx, sysActor, inventory.ServerInput{Alias: strp("web1"), Address: strp("10.1.2.3")})
+	must(t, err)
+	role, err := h.a.Inventory.CreateRole(h.ctx, sysActor, srv.ID, inventory.RoleInput{Alias: strp("deploy"), RemoteUser: strp("deploy"), ApprovalsRequired: strp(2)})
+	must(t, err)
+	_, err = h.a.Policy.CreateRule(h.ctx, sysActor, policy.Rule{Name: "bots", Effect: policy.EffectAllow, Level: policy.LevelRequestable, Enabled: true,
+		Subjects: policy.SubjectSelector{AgentGroups: []string{"bots"}}, Targets: policy.TargetSelector{All: true}, Roles: policy.RoleSelector{All: true}})
+	must(t, err)
+	_, err = h.a.Policy.CreateApproverRule(h.ctx, sysActor, policy.ApproverRule{Name: "two", Enabled: true,
+		Operators: policy.OperatorSelector{Operators: []string{c.meID(), second.meID()}}, Targets: policy.TargetSelector{All: true}, Roles: policy.RoleSelector{All: true}})
+	must(t, err)
+	keys, _ := h.a.Agents.Keys(h.ctx, agent.ID)
+	res, err := h.a.Access.CreateRequest(h.ctx, accessReq(agent.ID, keys[0].ID, srv.ID, role.ID, "release"))
+	must(t, err)
+
+	r := c.ok("approveRequest", 202, "POST", "/api/v1/requests/"+res.Request.ID+"/approve", map[string]any{}, "Idempotency-Key", "multi-approval-1")
+	var partial struct {
+		Request struct {
+			State             string
+			ApprovalsRequired int `json:"approvals_required"`
+			Approvals         []struct {
+				OperatorID string `json:"operator_id"`
+			}
+		}
+		Grant any
+	}
+	r.json(t, &partial)
+	if partial.Request.State != "pending" || partial.Request.ApprovalsRequired != 2 || len(partial.Request.Approvals) != 1 ||
+		partial.Request.Approvals[0].OperatorID != c.meID() || partial.Grant != nil {
+		t.Fatalf("partial approval: %s", r.body)
+	}
+	if r := c.do("POST", "/api/v1/requests/"+res.Request.ID+"/approve", map[string]any{}, "Idempotency-Key", "multi-approval-2"); r.status != 409 {
+		t.Fatalf("second approval by the same operator: %d %s", r.status, r.body)
+	}
+	c.ok("getRequest", 200, "GET", "/api/v1/requests/"+res.Request.ID, nil)
+	r = second.ok("approveRequest", 200, "POST", "/api/v1/requests/"+res.Request.ID+"/approve", map[string]any{}, "Idempotency-Key", "multi-approval-3")
+	if !strings.Contains(string(r.body), `"state":"approved"`) || !strings.Contains(string(r.body), `"grant":{`) {
+		t.Fatalf("final approval: %s", r.body)
 	}
 }

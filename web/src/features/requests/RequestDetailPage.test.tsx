@@ -20,6 +20,8 @@ function request(overrides: Partial<AccessRequest> = {}): AccessRequest {
     expires_at: new Date(Date.now() + 600_000).toISOString(),
     has_reason: true,
     reason: 'deploy ‮fix',
+    approvals_required: 1,
+    approvals: [],
     ...overrides,
   };
 }
@@ -80,6 +82,44 @@ describe('<RequestDetailPage>', () => {
     const post = seen.find((r) => r.method === 'POST');
     expect(post?.body).toEqual({ duration: 3600, comment: 'looks fine' });
     expect(post?.headers.get('Idempotency-Key')).toMatch(/.+/);
+  });
+
+  it('shows partial approvals and records another approval without granting yet', async () => {
+    const user = userEvent.setup();
+    const partial = request({
+      approvals_required: 3,
+      approvals: [
+        { operator_id: 'opr_1', channel: 'slack', duration: 3600, approved_at: '2026-01-01T00:00:00Z' },
+      ],
+    });
+    mockApi(
+      on(
+        'GET',
+        '/api/v1/me',
+        makeMe({ permissions: ['requests.read', 'requests.decide', 'operators.read'] }),
+      ),
+      on('GET', '/api/v1/requests/req_1', partial),
+      on('GET', '/api/v1/operators', {
+        items: [{ id: 'opr_1', display_name: 'Grace Hopper', email: 'g@example.com' }],
+      }),
+      on('POST', '/api/v1/requests/req_1/approve', {
+        request: {
+          ...partial,
+          approvals: [...partial.approvals, { ...partial.approvals[0], operator_id: 'opr_2' }],
+        },
+      }),
+    );
+    renderInRouter(<RequestDetailPage id="req_1" />);
+    expect(await screen.findByText(/1 of 3/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Approve' }));
+    const dialog = await screen.findByRole('dialog');
+    const confirm = Array.from(dialog.querySelectorAll('button')).find((b) => b.textContent === 'Approve');
+    if (!confirm) {
+      throw new Error('confirm button missing');
+    }
+    await user.click(confirm);
+    expect(await screen.findByText('Your approval is recorded (2 of 3)')).toBeInTheDocument();
+    expect(screen.queryByText('Approved by the server')).not.toBeInTheDocument();
   });
 
   it('hides actions without decide permission and explains a hidden reason', async () => {

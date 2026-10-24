@@ -39,6 +39,7 @@ describe('role form mapping', () => {
       [
         'alias',
         'approval_channels',
+        'approvals_required',
         'capabilities',
         'default_duration',
         'description',

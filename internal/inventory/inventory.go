@@ -102,6 +102,9 @@ type Role struct {
 	UpdatedAt             time.Time         `json:"updated_at"`
 	// Git holds the repository and push rules of a git remote's access profile; nil for SSH roles.
 	Git *GitRules `json:"git,omitempty"`
+	// ApprovalsRequired is how many distinct approvers must approve a request (1..5). Above 1, policy auto-approval
+	// does not apply to the role.
+	ApprovalsRequired int `json:"approvals_required"`
 }
 
 // Has reports whether the role grants capability c.

@@ -566,3 +566,31 @@ func TestDenyStatusExpiryAndLimits(t *testing.T) {
 		t.Fatalf("burned code reused: %s", body)
 	}
 }
+
+// A role that needs two approvers, decided from Slack: the first click records an approval and keeps the button usable;
+// the second approver's click on the same button approves.
+func TestSlackMultipleApprovers(t *testing.T) {
+	f := newFx(t)
+	_, err := f.a.Inventory.UpdateRole(f.ctx, admin, f.roles[1].ID, inventory.RoleInput{Version: f.roles[1].Version, ApprovalsRequired: ptr(2)})
+	must(t, err)
+	bob, err := f.a.Auth.Create(f.ctx, admin, opauth.CreateInput{Email: "bob@example.com", DisplayName: "Bob Approver", Roles: []string{opauth.RoleApprover}})
+	must(t, err)
+	_, err = f.a.Policy.CreateApproverRule(f.ctx, admin, policy.ApproverRule{Name: "bob", Enabled: true,
+		Operators: policy.OperatorSelector{Operators: []string{bob.ID}}, Targets: policy.TargetSelector{All: true}, Roles: policy.RoleSelector{All: true}})
+	must(t, err)
+	prov, err := f.a.OIDC.CreateProvider(f.ctx, admin, oidc.ProviderInput{Slug: ptr("corp"), DisplayName: ptr("Corp"), Issuer: ptr("https://idp.example"),
+		ClientID: ptr("hp")})
+	must(t, err)
+	for user, op := range map[string]string{"U1": f.op.ID, "U2": bob.ID} {
+		must(t, f.a.Notify.LinkProviderUser(f.ctx, admin, op, notify.ProviderLink{Provider: chat.ProviderSlack, Workspace: "T1", ProviderUserID: user}))
+		must(t, f.a.OIDC.LinkIdentity(f.ctx, admin, op, prov.ID, "sub-"+user)) // chat approvals need MFA
+	}
+	r := f.request(1, "release 1.4.4")
+	approve, _ := slackTokens(t, f.api.wait(t, "/api/chat.postMessage", 1)[0])
+	if reply := f.click(chat.ActionApprove, approve, "U1", 1); !strings.Contains(reply, "1 of 2") || f.state(r.ID) != access.ReqPending {
+		t.Fatalf("first approval: %s", reply)
+	}
+	if reply := f.click(chat.ActionApprove, approve, "U2", 2); !strings.Contains(reply, "approved") || f.state(r.ID) != access.ReqApproved {
+		t.Fatalf("second approval: %s", reply)
+	}
+}

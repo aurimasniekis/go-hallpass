@@ -202,3 +202,11 @@ SELECT * FROM grants WHERE agent_id = ? AND (state = 'active' OR ended_at > ?) O
 -- name: CountChannelsForSession :one
 SELECT count(*) AS total, count(*) FILTER (WHERE state IN ('opening', 'active')) AS live
 FROM ssh_channels WHERE access_session_id = ?;
+
+-- name: InsertRequestApproval :execrows
+INSERT INTO request_approvals (request_id, operator_id, channel, approved_duration_s, comment_enc, approver_rule_id, approved_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (request_id, operator_id) DO NOTHING;
+
+-- name: ListRequestApprovals :many
+SELECT * FROM request_approvals WHERE request_id = ? ORDER BY approved_at, operator_id;

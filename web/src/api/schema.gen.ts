@@ -2138,6 +2138,8 @@ export interface components {
             created_at?: components["schemas"]["Timestamp"];
             updated_at?: components["schemas"]["Timestamp"];
             git?: components["schemas"]["GitRules"];
+            /** @description Distinct approvers needed (1-5). Above 1, policy auto-approval does not apply. */
+            approvals_required?: number;
         };
         /** @description What an access profile on a git remote covers. Repository patterns match the repository path without ".git", case-insensitively: * matches within one segment, ** across segments, ? one character, {a,b} alternatives. Push rules apply with the git-write capability; branch and tag patterns are relative to refs/heads/ and refs/tags/. */
         GitRules: {
@@ -2179,6 +2181,7 @@ export interface components {
             };
             enabled?: boolean;
             git?: components["schemas"]["GitRules"];
+            approvals_required?: number;
         };
         HostIdentity: {
             id: string;
@@ -2376,6 +2379,16 @@ export interface components {
             has_reason: boolean;
             /** @description untrusted agent text; only with requests.reason.read */
             reason?: string | null;
+            /** @description Distinct approvers the role needs (1 unless the role asks for more). */
+            approvals_required: number;
+            /** @description Approvals recorded so far when the role needs several approvers. */
+            approvals: {
+                operator_id: string;
+                channel: string;
+                /** @description seconds */
+                duration: number;
+                approved_at: components["schemas"]["Timestamp"];
+            }[];
         };
         RequestPage: {
             items: components["schemas"]["AccessRequest"][];
@@ -4914,6 +4927,15 @@ export interface operations {
         responses: {
             /** @description decision recorded */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Decision"];
+                };
+            };
+            /** @description approval recorded; the role needs more distinct approvers, so the request is still pending */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
