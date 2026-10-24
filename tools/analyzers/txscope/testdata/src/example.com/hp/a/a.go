@@ -40,3 +40,29 @@ func good(w *store.Writer, ch chan int) error {
 	<-ch
 	return notify.Send()
 }
+
+// SR-35: transaction bodies routed through wrappers and helpers that take the transaction handle are checked too.
+func withPolicy(w *store.Writer, fn func(tx *store.Tx, version int) error) error {
+	return w.TxNamed("wrapped", func(tx *store.Tx) error { return fn(tx, 1) })
+}
+
+func viaWrapper(w *store.Writer) error {
+	return withPolicy(w, func(tx *store.Tx, version int) error {
+		time.Sleep(time.Second) // want `time.Sleep inside store transaction`
+		return tx.Q.Insert()
+	})
+}
+
+func helper(tx *store.Tx, ch chan int) error {
+	<-ch // want `channel receive inside store transaction`
+	return tx.Q.Insert()
+}
+
+func hook(fn func(tx *store.Tx) error) {}
+
+func registersHook() {
+	hook(func(tx *store.Tx) error {
+		_ = notify.Send() // want `call to example.com/hp/internal/notify.Send inside store transaction`
+		return nil
+	})
+}

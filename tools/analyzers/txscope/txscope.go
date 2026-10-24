@@ -54,18 +54,57 @@ var bannedInternal = []string{
 
 func run(pass *analysis.Pass) (any, error) {
 	ins := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
-	ins.Preorder([]ast.Node{(*ast.CallExpr)(nil)}, func(n ast.Node) {
-		call := n.(*ast.CallExpr)
-		if !isStoreTx(pass, call) {
-			return
+	checked := map[*ast.BlockStmt]bool{}
+	check := func(body *ast.BlockStmt) {
+		if body != nil && !checked[body] {
+			checked[body] = true
+			checkBody(pass, body)
 		}
-		for _, arg := range call.Args {
-			if lit, ok := arg.(*ast.FuncLit); ok {
-				checkBody(pass, lit.Body)
+	}
+	ins.Preorder([]ast.Node{(*ast.CallExpr)(nil), (*ast.FuncLit)(nil), (*ast.FuncDecl)(nil)}, func(n ast.Node) {
+		switch x := n.(type) {
+		case *ast.CallExpr:
+			// Literals passed directly to a store Tx method.
+			if isStoreTx(pass, x) {
+				for _, arg := range x.Args {
+					if lit, ok := arg.(*ast.FuncLit); ok {
+						check(lit.Body)
+					}
+				}
+			}
+		case *ast.FuncLit:
+			// Any function taking the transaction handle runs inside a transaction: bodies routed through wrappers
+			// (withPolicy), hooks and helpers (SR-35).
+			if isTxBody(pass, x.Type) {
+				check(x.Body)
+			}
+		case *ast.FuncDecl:
+			if isTxBody(pass, x.Type) {
+				check(x.Body)
 			}
 		}
 	})
 	return nil, nil
+}
+
+// isTxBody reports whether a function has a parameter of type *Tx declared in a package whose path ends in
+// "/internal/store".
+func isTxBody(pass *analysis.Pass, ft *ast.FuncType) bool {
+	if ft == nil || ft.Params == nil {
+		return false
+	}
+	for _, f := range ft.Params.List {
+		t := pass.TypesInfo.TypeOf(f.Type)
+		p, ok := t.(*types.Pointer)
+		if !ok {
+			continue
+		}
+		named, ok := p.Elem().(*types.Named)
+		if ok && named.Obj().Name() == "Tx" && named.Obj().Pkg() != nil && strings.HasSuffix(named.Obj().Pkg().Path(), "/internal/store") {
+			return true
+		}
+	}
+	return false
 }
 
 func isStoreTx(pass *analysis.Pass, call *ast.CallExpr) bool {
@@ -155,6 +194,12 @@ func checkCall(pass *analysis.Pass, call *ast.CallExpr) {
 	if takesStoreTx(fn) {
 		// Transaction-scoped helpers receive the transaction explicitly (for example recording.finalizeRowTx or an
 		// outbox enqueue): they are designed to run inside it and do only database work.
+		return
+	}
+	if fn.Pkg() == pass.Pkg {
+		// A package's own helpers: their bodies are checked when they take the transaction; banned-package rules
+		// target calls from other packages (a same-package helper that does I/O without the transaction handle is a
+		// documented blind spot, SR-35).
 		return
 	}
 	for _, b := range bannedInternal {

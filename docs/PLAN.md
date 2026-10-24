@@ -1967,7 +1967,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-TST-005` Fault injection — WP26 — evidence: FI — ◐ make test-fault: catalog FI-01..FI-23 passes (all 9 findings fixed); FI-19 covered by oidc tests; FI-24 power loss needs a VM hard reset (not done)
 - [ ] `HP-TST-006` Soak — WP26 — evidence: S — ◐ soak harness (test/soak, make soak-smoke); 30 s smoke: 1,386 sessions, 0 failures, no goroutine/FD growth; 24 h run on reference hardware pending
 - [ ] `HP-TST-007` Measured performance — WP26 — evidence: S — ◐ smoke numbers only (M1 Max, all in one process): exec p95 437 ms, revoke→closed max 155 ms; reference-hardware benchmarks pending
-- [ ] `HP-TST-008` Security review — WP26 — evidence: SR — ◐ internal review done by AI agents (docs/security/review-2026-10-24.md): HIGH and MEDIUM fixed (848c399, ADR-0042..0044), SR-34 accepted, SR-35 open; not an external review
+- [x] `HP-TST-008` Security review — WP26 — evidence: SR — ✅ done (internal): AI-agent security review of auth, policy, SSH, crypto and webhooks (docs/security/review-2026-10-24.md); all HIGH/MEDIUM/LOW findings fixed (848c399, SR-35 txscope) except SR-34 accepted (ADR-0044); not an external review
 - [ ] `HP-TST-009` Coverage floor — WP01 — evidence: C — ◐ WP01: floor script `scripts/coverage-floor.sh` (80%) in CI; enforced as each listed package lands
 
 #### HP-DOC — Documentation
