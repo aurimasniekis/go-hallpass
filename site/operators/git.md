@@ -4,6 +4,8 @@ Agents can clone, fetch and push with plain git through HallPass, with the same 
 grants as for servers. HallPass holds the key that logs in to the git host, decides which repositories and branches
 an agent may touch, and records what was pushed. Git remotes live on their own **Git** page, separate from servers.
 
+<Shot name="git-remotes" themed alt="The Git page listing a git remote" />
+
 ## How it works
 
 ```
@@ -38,6 +40,8 @@ server. The name you choose (for example `github`) is the first part of every re
 An access profile is like a server role: agents request it, policy rules decide who may use it, and it has its own
 login key. Instead of a remote account and shell capabilities it has:
 
+<Shot name="git-remote" themed alt="A git remote with a read profile for every acme repository and a push profile limited to agent branches" />
+
 | Setting | Meaning |
 |---|---|
 | **Repositories** | Patterns for the repositories it covers, matched without `.git` and case-insensitively. |
@@ -61,7 +65,7 @@ login key. Instead of a remote account and shell capabilities it has:
 
 ### Login keys
 
-Expand a profile to generate its key, then install it on the host:
+Expand a profile and **Generate key**, then install it on the host:
 
 - **GitHub:** add it as a **deploy key** on each repository (tick *Allow write access* for push profiles), or to a
   machine user that has access to the repositories.
@@ -69,8 +73,8 @@ Expand a profile to generate its key, then install it on the host:
 - **Bitbucket:** an access key per repository (read-only), or a bot account for pushing.
 - **Your own host:** the `authorized_keys` of the account that owns the repositories.
 
-Paste only the key itself (`ssh-ed25519 AAAA… hallpass:…`): git hosts ignore `authorized_keys` options. **Test login**
-checks that the host accepts the key before you activate it.
+The profile shows the **Public key** to copy (`ssh-ed25519 AAAA… hallpass:<remote>/<profile>`), without the
+`authorized_keys` options that git hosts reject. **Probe** checks that the host accepts the key; then **Activate** it.
 
 ## Push rules
 
@@ -120,6 +124,8 @@ Git operations are recorded as metadata, not as byte streams:
 
 These appear in the session timeline and the audit log. The pushed code itself is not stored by HallPass: it is in the
 repository.
+
+<Shot name="git-timeline" themed alt="Session timeline: a push of a new agent branch, then a refused push to the protected main branch" />
 
 ## Agents
 

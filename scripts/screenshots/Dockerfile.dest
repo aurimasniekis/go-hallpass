@@ -2,7 +2,7 @@
 # scripts/screenshots.sh assembles the build context. Host keys are generated at container start; every file and log
 # line here is invented demo content.
 FROM alpine:3.22
-RUN apk add --no-cache openssh-server bash coreutils procps \
+RUN apk add --no-cache openssh-server bash coreutils procps git \
  && for u in ro deploy; do adduser -D -s /bin/bash "$u" && passwd -u "$u" >/dev/null 2>&1 || true; \
       mkdir -p "/home/$u/.ssh" && chmod 700 "/home/$u/.ssh" && touch "/home/$u/.ssh/authorized_keys" \
       && chmod 600 "/home/$u/.ssh/authorized_keys" && chown -R "$u:$u" "/home/$u/.ssh"; done \

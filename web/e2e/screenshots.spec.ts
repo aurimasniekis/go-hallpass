@@ -1,5 +1,7 @@
-import { execFileSync, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { expect, test, type Browser, type Locator, type Page } from '@playwright/test';
@@ -12,7 +14,7 @@ import { freshTotp } from './totp';
 
 /**
  * Documentation screenshots (scripts/screenshots.sh). Runs only when HP_SCREENSHOTS_OUT is set, against a fresh
- * backend and the throwaway sshd containers `hallpass-docs-{web1,db1,ci-runner}` on 127.0.0.1:2431-2433. Every name,
+ * backend and the throwaway sshd containers `hallpass-docs-{web1,db1,ci-runner,forge}` on 127.0.0.1:2431-2434. Every name,
  * reason and file is fictional; agent keys are generated at run time. Agent outputs in the terminal images are real.
  */
 const OUT = process.env.HP_SCREENSHOTS_OUT ?? '';
@@ -222,6 +224,36 @@ async function terminalShot(browser: Browser, name: string, title: string, lines
     ${esc(title)}</div><pre>${body}</pre></div></div></body></html>`);
   await page.locator('.wrap').screenshot({ path: join(OUT, `${name}.png`) });
   await ctx.close();
+}
+
+/** Runs the system git as an agent whose ssh config calls the gateway `center`, ignoring the developer's git config. */
+function runGit(args: string[], cwd: string, sshConfig: string): Promise<{ code: number; out: string }> {
+  const who = { name: 'claude-sre', email: 'claude-sre@example.com' };
+  return new Promise((resolve) => {
+    execFile(
+      'git',
+      args,
+      {
+        cwd,
+        timeout: 120_000,
+        env: {
+          ...process.env,
+          GIT_SSH_COMMAND: `ssh -F ${sshConfig}`,
+          GIT_CONFIG_GLOBAL: '/dev/null',
+          GIT_CONFIG_NOSYSTEM: '1',
+          GIT_TERMINAL_PROMPT: '0',
+          GIT_AUTHOR_NAME: who.name,
+          GIT_AUTHOR_EMAIL: who.email,
+          GIT_COMMITTER_NAME: who.name,
+          GIT_COMMITTER_EMAIL: who.email,
+        },
+      },
+      (error, stdout, stderr) => {
+        const code = error ? (typeof error.code === 'number' ? error.code : 1) : 0;
+        resolve({ code, out: stderr + stdout });
+      },
+    );
+  });
 }
 
 function outputLines(s: string): string[] {
@@ -485,6 +517,74 @@ test('documentation screenshots', async ({ page, browser }) => {
   await page.goto(`/servers/onboard?server=${servers.web1 ?? ''}&step=done`);
   await shot(page, 'wizard-done');
 
+  // ---- Git remote: the forge container, a read profile for every acme repository and a push profile for two -------
+  const forge = (
+    await api.call<Id>('POST', '/api/v1/servers', {
+      kind: 'git',
+      alias: 'forge',
+      description: 'Company git server (acme organization)',
+      address: '127.0.0.1',
+      port: 2434,
+    })
+  ).id;
+  servers.forge = forge;
+  const forgeKeys = await api.call<{ items: HostIdentity[] }>(
+    'POST',
+    `/api/v1/servers/${forge}/host-identities:scan`,
+  );
+  for (const h of forgeKeys.items) {
+    await api.call('POST', `/api/v1/host-identities/${h.id}/confirm`);
+  }
+  const profileSpecs = [
+    {
+      alias: 'acme-read',
+      description: 'Clone and fetch any acme repository.',
+      capabilities: ['git-read'],
+      git: { repos: ['acme/**'] },
+      default_duration: 30 * MIN,
+      max_duration: 2 * HOUR,
+    },
+    {
+      alias: 'acme-push',
+      description: 'Push agent/ branches to acme/api and acme/web. main stays protected.',
+      capabilities: ['git-read', 'git-write'],
+      git: { repos: ['acme/{api,web}'], push: { branches: ['agent/**'], protected_branches: ['main'] } },
+      default_duration: HOUR,
+      max_duration: 4 * HOUR,
+    },
+  ];
+  for (const p of profileSpecs) {
+    const role = await api.call<Id>('POST', `/api/v1/servers/${forge}/roles`, {
+      ...p,
+      remote_user: 'deploy',
+    });
+    roleIds[`forge/${p.alias}`] = role.id;
+    const cred = await api.call<Credential>('POST', `/api/v1/roles/${role.id}/credentials:generate`);
+    installKey('forge', 'deploy', cred.authorized_keys_line);
+    await api.call('POST', `/api/v1/credentials/${cred.id}/probe`);
+    await api.call('POST', `/api/v1/credentials/${cred.id}/activate`);
+  }
+  await rule({
+    name: 'SRE reads acme repositories',
+    effect: 'allow',
+    level: 'auto_approve',
+    require_reason: false,
+    subjects: { agent_groups: ['sre-agents'] },
+    targets: { servers: [forge] },
+    roles: { names: ['acme-read'] },
+    max_duration: 2 * HOUR,
+    auto_max_duration: 30 * MIN,
+  });
+  await rule({
+    name: 'SRE pushes agent branches on request',
+    effect: 'allow',
+    level: 'requestable',
+    subjects: { agent_groups: ['sre-agents'] },
+    targets: { servers: [forge] },
+    roles: { names: ['acme-push'] },
+    max_duration: 4 * HOUR,
+  });
+
   // ---- Agent activity over SSH ------------------------------------------------------------------------------------
   const knownHosts = await writeKnownHosts(page.request);
   const sre = keys['claude-sre'];
@@ -527,21 +627,27 @@ test('documentation screenshots', async ({ page, browser }) => {
   });
 
   const transcript: string[] = [];
-  const record = async (shown: string, key: AgentKey, words: string[], during?: () => Promise<void>) => {
+  const record = async (
+    shown: string,
+    key: AgentKey,
+    words: string[],
+    during?: () => Promise<void>,
+    into: string[] = transcript,
+  ) => {
     const run = ssh(key, words);
     if (during) {
       await during();
     }
     const res = await run;
-    transcript.push(
+    into.push(
       `$ ${shown}`,
       ...(res.stderr ? outputLines(res.stderr) : []),
       ...(res.stdout ? outputLines(res.stdout) : []),
     );
     if (res.code !== 0) {
-      transcript.push(`[exit ${String(res.code)}]`);
+      into.push(`[exit ${String(res.code)}]`);
     }
-    transcript.push('');
+    into.push('');
   };
   await record('ssh center list', sre, ['list']);
   await record('ssh center exec web1 --role inspect -- uptime', sre, [
@@ -605,6 +711,63 @@ test('documentation screenshots', async ({ page, browser }) => {
 
   // ci-agent runs on its own runner automatically.
   await ssh(ci, ['exec', 'ci-runner', '--role', 'deploy', '--', 'uname', '-sr']);
+
+  // claude-sre with plain git: clone through the auto-approved read profile, request the push profile with a reason,
+  // push an agent branch, and get refused on the protected main branch.
+  const gitHome = mkdtempSync(join(tmpdir(), 'hallpass-docs-git-'));
+  const [gwHost, gwPort] = (sshAddr ?? '').split(':');
+  const sshConfig = join(gitHome, 'ssh_config');
+  writeFileSync(
+    sshConfig,
+    [
+      'Host center',
+      `  HostName ${gwHost ?? '127.0.0.1'}`,
+      `  Port ${gwPort ?? '22'}`,
+      '  User agent',
+      `  IdentityFile ${sre.privatePath}`,
+      '  IdentitiesOnly yes',
+      `  UserKnownHostsFile ${knownHosts}`,
+      '  StrictHostKeyChecking yes',
+      '  BatchMode yes',
+      '',
+    ].join('\n'),
+  );
+  const gitTranscript: string[] = [];
+  const git = async (shown: string, args: string[], cwd: string, want = 0) => {
+    const res = await runGit(args, cwd, sshConfig);
+    if (res.code !== want) {
+      throw new Error(`git ${args.join(' ')}: exit ${String(res.code)}\n${res.out}`);
+    }
+    gitTranscript.push(`$ ${shown}`, ...(res.out ? outputLines(res.out) : []));
+    if (res.code !== 0) {
+      gitTranscript.push(`[exit ${String(res.code)}]`);
+    }
+    gitTranscript.push('');
+  };
+  await git('git clone center:forge/acme/api.git', ['clone', 'center:forge/acme/api.git'], gitHome);
+  const repo = join(gitHome, 'api');
+  const cartToml = join(repo, 'config', 'cart.toml');
+  writeFileSync(cartToml, readFileSync(cartToml, 'utf8').replace('10s', '30s'));
+  await git(
+    `cd api && sed -i 's/10s/30s/' config/cart.toml && git commit -qam 'Raise the cart upstream timeout to 30s'`,
+    ['commit', '-qam', 'Raise the cart upstream timeout to 30s'],
+    repo,
+  );
+  await record(
+    `ssh center 'request forge --role acme-push --reason "Push the cart timeout fix (OPS-2302)" --wait'`,
+    sre,
+    ['request', 'forge', '--role', 'acme-push', "--reason='Push the cart timeout fix (OPS-2302)'", '--wait'],
+    async () => {
+      await api.call('POST', `/api/v1/requests/${(await pending('claude-sre', 'forge')).id}/approve`, {
+        duration: HOUR,
+        comment: 'Branch only; I will review the merge request.',
+      });
+    },
+    gitTranscript,
+  );
+  await git('git push origin HEAD:agent/cart-timeout', ['push', 'origin', 'HEAD:agent/cart-timeout'], repo);
+  await git('git push origin HEAD:main', ['push', 'origin', 'HEAD:main'], repo, 128);
+  await terminalShot(browser, 'agent-git', 'claude-sre@agent-sandbox: ~/src', gitTranscript.slice(0, -1));
 
   // deploy-bot: one denied, one canceled, one left pending.
   await ssh(bot, ['request', 'web1', '--role', 'deploy', "--reason='Hotfix straight to production'"]);
@@ -697,6 +860,28 @@ test('documentation screenshots', async ({ page, browser }) => {
   await shot(page, 'servers');
   await page.goto(`/servers/${servers.web1 ?? ''}`);
   await shot(page, 'server');
+  await page.goto('/git');
+  await themed(page, 'git-remotes');
+  await page.goto(`/git/${forge}`);
+  await expect(page.getByText('acme-push').first()).toBeVisible();
+  await themed(page, 'git-remote');
+  const gitSession = sessions.items.find((s) => s.role_id === roleIds['forge/acme-push']);
+  if (!gitSession) {
+    throw new Error('no git push session');
+  }
+  await page.goto(`/sessions/${gitSession.id}`);
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await cardShot(
+      page,
+      page
+        .locator('.ant-card')
+        .filter({ has: page.getByText('Timeline', { exact: true }) })
+        .last(),
+      `git-timeline-${scheme}`,
+    );
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
   await page.goto('/policy');
   await themed(page, 'policy');
   await page.getByRole('tab', { name: 'Effective access' }).click();

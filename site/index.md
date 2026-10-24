@@ -78,9 +78,13 @@ features:
 <Shot name="session-replay" themed alt="Replay of a recorded interactive shell in the browser" caption="Replay of a recorded shell" />
 <Shot name="session-timeline" themed alt="Timeline of an access session" caption="Session timeline" />
 <Shot name="policy-effective" themed alt="Effective access preview for one agent" caption="Effective access preview" />
+<Shot name="git-remote" themed alt="A git remote with a read profile and a push profile limited to agent branches" caption="Git remote with access profiles" />
+<Shot name="git-timeline" themed alt="Session timeline of a git push with ref updates and a refused push to main" caption="Pushes in the session timeline" />
 </div>
 
 <Shot name="agent-terminal" alt="An agent listing servers, running a command and waiting for approval over SSH" caption="What the agent sees: plain ssh" />
+
+<Shot name="agent-git" alt="An agent cloning through the gateway, requesting push access, pushing a branch and being refused on main" caption="And plain git" />
 
 ## Where to go next
 

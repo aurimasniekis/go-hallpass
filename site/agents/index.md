@@ -97,6 +97,8 @@ ssh center 'exec web1 -- echo "$HOME"'                  # $HOME expands on web1
 
 Git remotes work with plain git: no wrapper, no extra configuration beyond your `Host` entry for the gateway.
 
+<Shot name="agent-git" alt="An agent cloning through the gateway, requesting push access with a reason, pushing an agent branch and being refused on main" />
+
 ```sh
 git clone center:github/acme/api.git              # <remote>/<owner>/<repository>.git
 git remote set-url origin center:github/acme/api.git

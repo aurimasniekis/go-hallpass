@@ -80,10 +80,13 @@ in plaintext.
 | <img src="site/public/screenshots/request-pending-light.png" alt="A pending access request with the agent's untrusted reason"><br>**A request waiting for approval** | <img src="site/public/screenshots/request-approve-light.png" alt="Approve dialog with duration choices and a comment"><br>**Approving with a chosen duration** |
 | <img src="site/public/screenshots/session-replay-light.png" alt="Replay of a recorded interactive shell"><br>**Replay of a recorded shell** | <img src="site/public/screenshots/session-timeline-light.png" alt="Access session timeline"><br>**Session timeline** |
 | <img src="site/public/screenshots/wizard-credentials.png" alt="Onboarding wizard: install, test and activate a login key"><br>**Guided server onboarding** | <img src="site/public/screenshots/policy-light.png" alt="Policy rules: deny, auto-approve and requestable"><br>**Default-deny policy** |
+| <img src="site/public/screenshots/git-remote-light.png" alt="A git remote with a read profile and a push profile limited to agent branches"><br>**Git remote with access profiles** | <img src="site/public/screenshots/git-timeline-light.png" alt="Session timeline of a git push with ref updates and a refused push to main"><br>**Pushes in the timeline** |
 
 **What the agent sees:**
 
 <img src="site/public/screenshots/agent-terminal.png" alt="Terminal: an agent lists servers, runs a command, waits for approval, and gets 'not found or not permitted' for a hidden server">
+
+<img src="site/public/screenshots/agent-git.png" alt="Terminal: an agent clones through the gateway, requests push access with a reason, pushes an agent branch and is refused on main">
 
 ## Quick start
 
