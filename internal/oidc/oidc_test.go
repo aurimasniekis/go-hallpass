@@ -3,6 +3,7 @@ package oidc
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -691,43 +692,13 @@ func TestTokensNotPersisted(t *testing.T) {
 	// claims (subject, issuer), so search for the whole token and the signature.
 	sig := id[strings.LastIndex(id, ".")+1:]
 	needles := map[string]string{"access token": access, "refresh token": refresh, "id token": id, "id token signature": sig}
-	tables, err := f.s.ReadDB().QueryContext(f.ctx, `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+	names, err := queryStrings(f.ctx, f.s.ReadDB(), `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
 	must(t, err)
-	var names []string
-	for tables.Next() {
-		var n string
-		must(t, tables.Scan(&n))
-		names = append(names, n)
-	}
-	must(t, tables.Close())
 	var found []string
 	for _, table := range names {
-		rows, err := f.s.ReadDB().QueryContext(f.ctx, `SELECT * FROM "`+table+`"`) //nolint:gosec // names from sqlite_master
+		hits, err := tableContains(f.ctx, f.s.ReadDB(), table, needles)
 		must(t, err)
-		cols, _ := rows.Columns()
-		for rows.Next() {
-			vals := make([]any, len(cols))
-			ptrs := make([]any, len(cols))
-			for i := range vals {
-				ptrs[i] = &vals[i]
-			}
-			must(t, rows.Scan(ptrs...))
-			for i, v := range vals {
-				var s string
-				switch x := v.(type) {
-				case string:
-					s = x
-				case []byte:
-					s = string(x)
-				}
-				for what, needle := range needles {
-					if s != "" && strings.Contains(s, needle) {
-						found = append(found, what+" in "+table+"."+cols[i])
-					}
-				}
-			}
-		}
-		must(t, rows.Close())
+		found = append(found, hits...)
 	}
 	if len(found) > 0 {
 		t.Fatalf("tokens stored: %v", found)
@@ -743,4 +714,60 @@ func TestTokensNotPersisted(t *testing.T) {
 			}
 		}
 	}
+}
+
+func queryStrings(ctx context.Context, d *sql.DB, q string) ([]string, error) {
+	rows, err := d.QueryContext(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+// tableContains reports "<what> in <table>.<column>" for every text or blob cell that contains one of the needles.
+func tableContains(ctx context.Context, d *sql.DB, table string, needles map[string]string) ([]string, error) {
+	rows, err := d.QueryContext(ctx, `SELECT * FROM "`+table+`"`) //nolint:gosec // table names come from sqlite_master
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+	var found []string
+	for rows.Next() {
+		vals := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return nil, err
+		}
+		for i, v := range vals {
+			var s string
+			switch x := v.(type) {
+			case string:
+				s = x
+			case []byte:
+				s = string(x)
+			}
+			for what, needle := range needles {
+				if s != "" && strings.Contains(s, needle) {
+					found = append(found, what+" in "+table+"."+cols[i])
+				}
+			}
+		}
+	}
+	return found, rows.Err()
 }
