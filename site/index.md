@@ -38,6 +38,14 @@ features:
     details: >-
       Recording is on by default and fails closed. Recordings are encrypted per segment and integrity-chained. Replay
       them in the browser, next to a timeline of what happened.
+  - title: Git with branch rules
+    details: >-
+      Agents clone and push with plain git through HallPass. Access profiles limit repositories and branches, protect
+      main, refuse force-pushes, and refused pushes never reach GitHub, GitLab or your own host.
+  - title: File transfer with a record of every file
+    details: >-
+      Roles with the file-transfer capability accept scp and sftp. Every upload, download, rename and deletion is
+      recorded with its path, size and SHA-256 checksum.
   - title: One binary, one database
     details: >-
       A single Go binary with an embedded web UI and SQLite storage. Backup, restore, integrity anchors, Prometheus
@@ -56,7 +64,8 @@ features:
 
 1. You register an agent's **public key** and enroll your servers, each with one or more **roles** (a remote account
    plus what the role allows).
-2. The agent runs ordinary `ssh` against HallPass: `ssh center list`, `ssh center exec web1 -- uptime`.
+2. The agent runs ordinary `ssh` against HallPass: `ssh center list`, `ssh center exec web1 -- uptime`. Git and
+   file transfer use the standard tools: `git clone center:github/acme/api.git`, `scp build.tar web1@center:/tmp/`.
 3. Policy decides: the role is hidden, requestable (a human approves), or approved automatically up to a limit.
 4. HallPass opens the destination session itself, records it, and ends it when the grant ends.
 

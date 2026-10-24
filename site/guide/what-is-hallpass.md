@@ -33,6 +33,8 @@ The quickest way to let an agent work on a server is to give it a key that is in
 | Revocation means editing servers | Revoke a grant, disable an agent or enable lockdown: live gateway sessions end within 5 seconds. |
 | History is a best effort | Every channel is recorded (encrypted, integrity-chained) and replayable, next to a timeline and a hash-chained audit log. |
 | The agent knows server addresses | Agents see aliases and descriptions only. Unknown and hidden servers look the same. |
+| A deploy key can push anywhere | Agents use plain git through HallPass. Access profiles limit repositories and branches, protect `main` and refuse force-pushes. |
+| Files are copied without a trace | Roles with the file-transfer capability accept `scp` and `sftp`, and every file operation is recorded with its path, size and SHA-256. |
 
 <Shot name="dashboard" themed alt="HallPass dashboard" caption="The operator dashboard" />
 
@@ -43,7 +45,8 @@ HallPass controls **who** gets a session, **when**, and records **what passed th
 - **a sandbox.** An approved shell can do whatever its remote account can do. Restrict that on the destination with
   a dedicated account per role, `sudoers`, `ForceCommand` and firewalling. See
   [destination hardening](/destinations/hardening).
-- **a port-forwarding proxy.** Forwarding (`-L`, `-R`, `-D`, `-W`), agent forwarding, X11, SFTP and SCP are refused.
+- **a port-forwarding proxy.** Forwarding (`-L`, `-R`, `-D`, `-W`), agent forwarding and X11 are refused. SFTP and
+  scp work only through roles with the file-transfer capability.
 - **highly available.** One active instance; recovery is restoring a backup onto a standby.
 - **safe from its own host.** HallPass sees every session in plaintext and holds every destination credential. Run it
   like a bastion host. See the [security model](/security/).

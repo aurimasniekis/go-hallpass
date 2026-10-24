@@ -53,6 +53,10 @@ yet.**
   itself when the grant ends.
 - **Workload attestation.** Anyone holding an agent's private key acts as that agent. Source-CIDR restrictions are
   defense in depth.
+- **Byte-level recording of git and file transfers.** Git pushes and fetches, and scp/sftp transfers, are recorded
+  as metadata: repository, ref updates and bytes; file paths, operations, sizes and SHA-256 checksums. The contents
+  are not stored, so the recording guarantee above covers shell and exec channels. HallPass does not limit which paths
+  a file-transfer role can reach: the role's remote account decides.
 - **Secret redaction.** Recordings capture what the session showed. Input recording, when enabled, may capture typed
   secrets.
 - **Zero-delay revocation or zero recording loss.** Up to 5 seconds of activity may continue after revocation. In the

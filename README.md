@@ -41,7 +41,8 @@ flowchart LR
 ```
 
 1. You register the agent's public key and enroll servers, each with roles (a remote account plus what it allows).
-2. The agent runs `ssh center list`, `ssh center exec web1 -- uptime`, `ssh -t center connect web1`.
+2. The agent runs `ssh center list`, `ssh center exec web1 -- uptime`, `ssh -t center connect web1`, plain
+   `git clone center:github/acme/api.git`, or `scp build.tar web1@center:/tmp/`.
 3. Policy decides per agent, server and role: hidden, requestable (a human approves), or approved automatically up to
    a limit.
 4. HallPass opens the destination session itself, records it, and ends it when the grant ends.
@@ -51,12 +52,17 @@ flowchart LR
 - **No credentials for agents.** HallPass keeps destination login keys encrypted, or signs OpenSSH certificates that
   live about two minutes. Destination host keys are pinned; there is no trust on first use.
 - **Default-deny policy** by agent, server and role groups or labels, with an effective-access preview.
-- **Human approval** in the web console, Slack or Telegram. A chat button is never authorization by itself: the
-  approver is re-checked when they click.
+- **Human approval** in the web console, Slack or Telegram, optionally by several distinct approvers for sensitive
+  roles. A chat button is never authorization by itself: the approver is re-checked when they click.
 - **Time-bound grants** that never extend. Expiry, revocation, a disabled agent or lockdown end live sessions within
   5 seconds.
 - **Recording on by default, fail closed.** Encrypted per segment, integrity-chained, replayable in the browser next
   to a session timeline, plus a hash-chained audit log.
+- **Git remotes.** Agents clone and push with plain git through the gateway (GitHub, GitLab, Bitbucket or your own
+  host). Access profiles limit repositories with patterns and pushes with branch, protected-branch and tag rules;
+  force-pushes are refused unless allowed. Refused pushes never reach the host.
+- **File transfer.** Roles with the file-transfer capability accept `scp` and `sftp`. Every upload, download,
+  rename and deletion is recorded with its path, size and SHA-256.
 - **Hidden inventory.** Agents see aliases only. An unknown server and a forbidden one give the same answer.
 - **Operators** with Argon2id passwords and TOTP or OIDC single sign-on, and administrator, approver, auditor and
   viewer roles.
@@ -144,6 +150,9 @@ ssh center exec web1 --role inspect -- df -h /var             # auto-approved ro
 ssh center 'exec web1 --role deploy --reason "Deploy 1.4.3" -- ls /srv/app'   # waits for approval
 ssh -t center connect web1 --role inspect                     # interactive shell
 ssh center status req_01… --wait                              # keep waiting on a pending request
+git clone center:github/acme/api.git                          # git remotes: plain git, same approvals
+scp build.tar web1@center:/tmp/                               # file transfer: the SSH user names the server
+sftp web1+deploy@center                                       # ... and "+role" picks the role
 ```
 
 Wrap the whole gateway command in single quotes when a value has spaces: ssh joins its arguments, so inner quotes

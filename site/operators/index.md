@@ -11,6 +11,8 @@ there is more to know.
 | Task | Guide |
 |---|---|
 | Add a server, its roles and login credentials | [Servers and roles](/operators/servers) |
+| Let agents clone and push through HallPass | [Git remotes](/operators/git) |
+| Let agents copy files with scp and sftp | [File transfer](/operators/file-transfer) |
 | Register an agent, rotate or revoke its key | [Agents and keys](/operators/agents) |
 | Decide who sees, requests or auto-receives what | [Access policy](/operators/policy) |
 | Approve or deny requests, revoke grants | [Approving requests](/operators/approvals) |

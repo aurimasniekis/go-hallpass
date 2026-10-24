@@ -64,8 +64,8 @@ Ending a channel (expiry, revocation, lockdown) does **not** stop processes star
 
 ## 6. Outbound network
 
-HallPass refuses SSH forwarding, SFTP and SCP, but an allowed shell can still use `curl`, `nc` or `/dev/tcp`, and
-print data to stdout. Restrict egress from destinations (for example `iptables -m owner --uid-owner`) when
+HallPass refuses SSH forwarding, and allows SFTP and scp only for roles with the file-transfer capability, but an
+allowed shell can still use `curl`, `nc` or `/dev/tcp`, and print data to stdout. Restrict egress from destinations (for example `iptables -m owner --uid-owner`) when
 exfiltration matters.
 
 ## 7. Destination-side audit

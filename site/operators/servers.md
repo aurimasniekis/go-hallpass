@@ -36,7 +36,7 @@ possible attack until you have confirmed the change out of band. See
 |---|---|
 | Alias, description | What agents see in `ssh center list`. Descriptions are informational. |
 | Remote user | The account HallPass logs in as. Use a dedicated, least-privilege account per role. |
-| Capabilities | `shell`, `exec`, `pty`: which SSH channel types are allowed. They do not restrict commands. |
+| Capabilities | `shell`, `exec`, `pty`: which SSH channel types are allowed. They do not restrict commands. `file-transfer` allows scp and sftp ([File transfer](/operators/file-transfer)). |
 | Default / maximum duration | Grant length when the agent does not ask, and the role's ceiling. |
 | Approval channels | Restrict decisions for a sensitive role to the web console only. |
 | Record input | Also record what the agent types (off by default; may capture typed secrets). |

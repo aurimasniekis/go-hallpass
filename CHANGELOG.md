@@ -16,9 +16,15 @@ agent JSON schemas, the recording format and the database schema).
   reach the host. Force-pushes are refused unless a profile allows them: HallPass proves every branch update is a
   fast-forward from the pushed commits. Git operations are recorded as metadata (repository, ref updates, bytes),
   not as byte streams.
+- **File transfer.** A new role capability, `file-transfer`, lets agents use plain `scp` and `sftp`
+  (`scp build.tar web1@center:/tmp/`, `web1+deploy@center` to name the role), with requests, approvals and grants as
+  for shell access. Every upload, download, rename, deletion and failure is recorded with its path, size and SHA-256;
+  file contents are not stored. Other SSH subsystems and the legacy scp protocol (`scp -O`) stay refused.
 - **Several approvers.** A role or git access profile can require 1–5 distinct approvers; the request stays pending
   until enough have approved, any denial ends it, and policy never auto-approves such roles.
-- `ssh <gateway> list` marks git remotes (`kind` in `hallpass.list/v1`).
+- `ssh <gateway> list` marks git remotes (`kind` in `hallpass.list/v1`), and `help` shows how to use git and file
+  transfer.
+- The session timeline describes git operations, file operations and partial approvals in words.
 - Database growth bounds: delivered notifications are kept for 30 days and finished background jobs for 7 days; free
   pages are returned to the filesystem every 5 minutes; a writer queue-depth metric.
 

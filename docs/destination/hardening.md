@@ -67,7 +67,8 @@ Closing the SSH channel (expiry, revocation, lockdown) does **not** guarantee th
 
 ## 6. Outbound network and file transfer
 
-HallPass refuses SSH forwarding and SFTP/SCP subsystems, but an allowed shell can still open network connections
+HallPass refuses SSH forwarding and serves SFTP only for roles with the `file-transfer` capability, but an
+allowed shell can still open network connections
 (`curl`, `nc`, `/dev/tcp`) and move data through stdout. Restrict egress from destinations (host firewall per user with
 `iptables -m owner --uid-owner`, or network policy) when data exfiltration matters.
 

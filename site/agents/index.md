@@ -27,7 +27,7 @@ Pin the gateway host key; never accept it on first use. Install the line the ope
 Host center
   HostName hallpass.example.com
   Port 2222
-  User agent                  # ignored by the gateway; any value works
+  User agent                  # any value works for commands; scp and sftp put the server here instead
   IdentityFile ~/.ssh/agent_ed25519
   IdentitiesOnly yes
   StrictHostKeyChecking yes
@@ -36,7 +36,8 @@ Host center
   ServerAliveInterval 30
 ```
 
-Forwarding (`-L`, `-R`, `-D`, `-W`), agent forwarding, X11 and subsystems such as `sftp` are refused and audited.
+Forwarding (`-L`, `-R`, `-D`, `-W`), agent forwarding and X11 are refused and audited. `scp` and `sftp` work through
+roles with the file-transfer capability; see [File transfer](#file-transfer).
 
 ## Commands
 
@@ -117,6 +118,34 @@ git push origin agent/fix-cart-timeout
   `hallpass: push refused: refs/heads/main: protected branch`.
 - `repository not found or not permitted` means no profile you can use covers that repository and operation.
 - `exec` and `connect` are refused on git remotes.
+
+## File transfer
+
+Roles whose capabilities include `file-transfer` (see `ssh center roles web1`) accept `scp` and `sftp`. SFTP has no
+place for a command, so the SSH user names the server, and `+role` picks a role:
+
+```sh
+scp build.tar web1@center:/tmp/                    # upload; the role is chosen for you
+scp web1@center:/var/log/app.log .                 # download
+scp -r dist/ web1+deploy@center:/srv/app/releases/ # name the role after "+"
+sftp web1+deploy@center                            # interactive sftp
+```
+
+- Without `+role`, HallPass picks a file-transfer role you already have a grant for, then one that is approved
+  automatically, then one you can request.
+- A transfer that needs approval waits for it, printing the request ID on stderr, like `exec`.
+- scp cannot send a reason. If the role requires one, request access first, then run scp again:
+
+  ```sh
+  ssh center 'request web1 --role deploy --reason "Upload release 1.4.3" --wait'
+  scp build.tar web1+deploy@center:/srv/app/
+  ```
+
+- Every file operation is recorded: uploads and downloads with their size and SHA-256 checksum, renames, deletions,
+  directory listings and failures. File contents are not stored.
+- Files are read and written as the role's remote account, so its permissions decide what you can reach.
+- The old scp protocol (`scp -O`) is refused; plain `scp` from OpenSSH 9 or later uses SFTP already.
+- `no role you can use on web1 allows file transfer` means you need a role with the capability. Ask the user.
 
 ## Output and exit codes
 

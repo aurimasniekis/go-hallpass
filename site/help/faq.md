@@ -46,8 +46,9 @@ destination (`nohup`, tmux) may keep running unless the destination prevents it.
 
 ### Can I use `scp`, `sftp`, `rsync` or port forwarding?
 
-No. SFTP and SCP subsystems, port forwarding, agent forwarding and X11 are refused and audited. Possible future support
-would be a separately authorized capability.
+`scp` and `sftp` work through roles with the **file-transfer** capability, and every file operation is recorded; see
+[File transfer](/operators/file-transfer). `rsync` over SSH runs a command on the server rather than SFTP, so it is
+not supported. Port forwarding, agent forwarding and X11 are refused and audited.
 
 ### Can operators approve their own agent's requests?
 

@@ -41,7 +41,8 @@ Host center
 During a gateway host-key rotation, the operator stages a second key (`hallpass hostkey stage`) and the gateway serves
 both. Add the new line before the promotion so you keep a pinned key throughout.
 
-Forwarding (`-L`, `-R`, `-D`, `-W`), agent forwarding, X11 and subsystems such as `sftp` are refused and audited.
+Forwarding (`-L`, `-R`, `-D`, `-W`), agent forwarding and X11 are refused and audited. `scp` and `sftp` work only
+through roles with the `file-transfer` capability, with the server as the SSH user (`scp f web1@center:/tmp/`).
 
 ## Commands
 

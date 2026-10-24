@@ -52,6 +52,10 @@ These hold only when HallPass is deployed per the operator guide (`docs/operator
   HallPass enforces grant deadlines itself.
 - **Workload attestation.** Agent source-CIDR restrictions are defense in depth. Anyone holding an agent's private
   key acts as that agent.
+- **Byte-level recording of git and file transfers.** Git operations and SFTP/scp transfers are recorded as
+  metadata (repository, ref updates and bytes; file paths, operations, sizes and SHA-256 of sequential transfers), not
+  as byte streams, so G-8 applies to shell and exec channels only. HallPass does not restrict which paths a
+  file-transfer role reaches: the destination account's permissions do.
 - **Secret redaction.** Recordings capture what the session showed. Input recording, when enabled, may capture typed
   secrets. Authorized auditors can see both.
 - **Zero-delay revocation or zero loss of recording.** Up to 5 seconds of activity may continue after revocation. With `recording.durability: group` (the default), up to `flush_interval` (250 ms) of output can be

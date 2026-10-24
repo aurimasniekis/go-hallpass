@@ -18,8 +18,8 @@ A short glossary of the objects you meet in the console and in the agent's outpu
 
 **Role**
 : A way to use a server, for example `inspect` or `deploy`. A role names the **remote user**, its **capabilities**
-  (`shell`, `exec`, `pty`), default and maximum durations, and recording settings. Capabilities control SSH channel
-  types, not commands.
+  (`shell`, `exec`, `pty`, `file-transfer`), default and maximum durations, and recording settings. Capabilities
+  control SSH channel types, not commands.
 
 **Login credential**
 : How HallPass logs in as the role's remote user: a **managed login key** that you install in that user's

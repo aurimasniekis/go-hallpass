@@ -96,6 +96,21 @@ git push origin agent/my-change
 - `repository not found or not permitted` means no profile you may use covers it. Ask the user; do not guess other
   remotes or paths.
 
+## File transfer
+
+Roles with the `file-transfer` capability (see `ssh center roles <server>`) accept scp and sftp. Put the server, and
+optionally the role, in the SSH user:
+
+```sh
+scp build.tar web1@center:/tmp/
+scp web1+deploy@center:/var/log/app.log .
+```
+
+- Use scp/sftp for files instead of `exec … cat > file`: transfers are recorded per file with checksums.
+- A transfer that needs approval waits like `exec`. scp cannot send a reason: if one is required, run
+  `ssh center 'request web1 --role <role> --reason "<why>" --wait'` first, then scp again.
+- Do not use `scp -O` (refused). Copy only what the task needs; every file operation is recorded.
+
 ## Exit codes
 
 For `exec`/`connect`, the destination's exit status passes through unchanged. The gateway itself uses 80–90. With
