@@ -644,8 +644,8 @@
 
 | ID | Item | Proposal | Blocks |
 |---|---|---|---|
-| R-01 | **License** for the future open-source release. | No proposal is made without authorization. Candidates to evaluate: Apache-2.0, MPL-2.0, AGPL-3.0. No LICENSE file until decided. | Public release (RG-11) |
-| R-02 | **External cryptographic review** of HPREC1, the keyring and field encryption. | Engage a reviewer before 1.0. If not done, release notes must say so (RG-9). | RG-9 |
+| R-01 | **License** for the future open-source release. | No proposal is made without authorization. Candidates to evaluate: Apache-2.0, MPL-2.0, AGPL-3.0. **Operator decision 2026-10-24:** deferred; no LICENSE file until decided. | Public release (RG-11) |
+| R-02 | **External cryptographic review** of HPREC1, the keyring and field encryption. | **Operator decision 2026-10-24:** no external review for now; releases use the RG-9 alternative and are labeled "recording format and keyring not externally reviewed" in CHANGELOG and release notes. A review remains recommended before 1.0. | RG-9 |
 | R-03 | **KMS/Vault/HSM backend** in v1 (`KeyWrapper`, `Signer`). | Ship interfaces plus local implementation in v1. Add Vault Transit/AWS KMS wrappers post-1.0 unless required. | — |
 | R-04 | **Litestream** as optional continuous DB replication for backup. | Document as optional and test compatibility (WAL, checkpoints) in WP23. Not a supported HA mode. | — |
 | R-05 | **Default global grant-duration ceiling.** | 24 h (matches the largest preset). Roles default to a 6 h max and a 30 m default. | — |
