@@ -90,15 +90,11 @@ export function ErrorState({
 }
 
 /** Honest placeholder for pages whose work package has not landed yet. Never shows mock data. */
-export function NotImplemented({ feature, workPackage }: { feature: string; workPackage?: string }) {
+export function NotImplemented({ feature }: { feature: string }) {
   return (
     <EmptyState
       title={`${feature} is not implemented yet`}
-      description={
-        workPackage
-          ? `This page arrives with ${workPackage}. No data is shown until it is backed by the real API.`
-          : 'No data is shown until this page is backed by the real API.'
-      }
+      description="No data is shown until this page is backed by the real API."
     />
   );
 }

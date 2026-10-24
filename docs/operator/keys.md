@@ -1,6 +1,6 @@
 # Keys and encryption at rest
 
-HallPass encrypts sensitive data with a two-level key hierarchy (ADR-0004):
+HallPass encrypts sensitive data with a two-level key hierarchy:
 
 ```
 KEK (master key, 32 bytes, outside data_dir)
@@ -39,7 +39,7 @@ manifest records the KEK ID so restore can check that the right key is supplied.
 
 | What | How | Effect |
 |---|---|---|
-| Purpose key | `hallpass keys rotate --purpose field` (offline) or the storage page (online, WP20) | New version becomes active. Old versions stay decrypt-only until the background job has re-encrypted everything, then they are retired. |
+| Purpose key | `hallpass keys rotate --purpose field` (offline) or the storage page (online) | New version becomes active. Old versions stay decrypt-only until the background job has re-encrypted everything, then they are retired. |
 | KEK | Back up, stop the server, `hallpass keys init-kek --out NEW`, `hallpass keys rotate-kek --new NEW`, set `kek.file` to NEW, start, back up | Every purpose key, including retired versions, is rewrapped in one transaction and the old KEK stops working. Keep the old KEK until backups made with it have expired. |
 
 A wrong or rotated-away KEK is detected at startup ("master key (KEK) does not match this data directory") and the server refuses to start.
@@ -47,7 +47,7 @@ A wrong or rotated-away KEK is detected at startup ("master key (KEK) does not m
 ## Limits
 
 Keys exist in process memory while HallPass runs. Anyone who controls the running process, or holds both the host and the KEK,
-can decrypt everything (see `docs/THREAT_MODEL.md` §1). KMS/HSM-backed wrapping is a review item (R-03).
+can decrypt everything. Wrapping keys with a KMS or HSM is not supported yet.
 
 ## Background re-encryption after purpose-key rotation
 
@@ -71,7 +71,7 @@ Exceptions:
   readers use the newest slot that unwraps.
 - **Token MACs** (recovery codes, invitation/reset/setup tokens, chat link codes, approval action tokens) cannot be
   re-computed, because only their MAC is stored. Rotating the `token` key keeps old versions `decrypt_only`, so
-  invitation, reset and setup tokens and in-flight OIDC logins keep working. **Known gap (security review SR-36):** recovery codes, chat link codes and approval
+  invitation, reset and setup tokens and in-flight OIDC logins keep working. **Known gap:** recovery codes, chat link codes and approval
   action tokens are currently looked up with the active version only, so a `token` rotation invalidates the existing ones.
   Regenerate recovery codes after rotating the token key.
 - **Integrity-chain MACs** (`manifest`) are never re-computed and `manifest` versions are never retired.
@@ -80,7 +80,7 @@ Exceptions:
 
 At every start, before accepting connections, HallPass checks the key slots of every finalized or interrupted segment. If a
 slot no longer unwraps but the database copy of the wrapped segment key does (it is bound to that segment's ID and header
-hash, so it cannot be substituted), the copy is written into the unusable slot (PLAN §13.4). This recovers a file whose
+hash, so it cannot be substituted), the copy is written into the unusable slot. This recovers a file whose
 slots were damaged, a file restored from an older copy after its key was rotated and retired, and refreshes slots that
 only hold a retired key. Repairs are logged.
 

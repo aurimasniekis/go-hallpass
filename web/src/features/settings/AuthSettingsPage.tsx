@@ -70,8 +70,9 @@ export function AuthSettingsPage({
         <ProvidersCard navigate={navigate} />
         <Card title="Not configurable here" size="small">
           <p style={{ margin: 0 }}>
-            Password and MFA policy, session lifetimes and discovery checks are set in the server
-            configuration (docs/operator/configuration.md); the API exposes no endpoints for them yet.
+            Password and MFA policy, session lifetimes and discovery checks are set in the{' '}
+            <code className="hp-mono">auth</code> section of the server configuration file (
+            <code className="hp-mono">hallpass.yaml</code>) and take effect after a restart.
           </p>
         </Card>
       </Space>

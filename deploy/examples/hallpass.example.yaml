@@ -23,7 +23,7 @@ log:
   format: json
 
 egress:
-  allow_cidrs:                    # destinations must resolve inside these ranges (HP-SRV-009)
+  allow_cidrs:                    # destinations must resolve inside these ranges
     - 10.0.0.0/8
 
 access:

@@ -98,7 +98,7 @@ export function ServerDetailPage({
         type="info"
         showIcon
         title="Descriptions and labels are informational"
-        description="They help people and policy selectors find this server, but never enforce anything themselves; access is decided by policy rules and the roles below (HP-SRV-003)."
+        description="They help people and policy selectors find this server, but never enforce anything themselves; access is decided by policy rules and the roles below."
       />
       <Card size="small" title="Details">
         <KeyValueGrid

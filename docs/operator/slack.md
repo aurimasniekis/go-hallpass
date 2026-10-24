@@ -1,14 +1,13 @@
 # Slack approvals
 
 HallPass can post pending access requests to Slack channels. Linked approvers can approve or deny a request with
-buttons, and use `/hallpass link <code>` and `/hallpass status <request-id>`. Requirements: HP-NTF-002..005,
-HP-NTF-011, PLAN §10.4, ADR-0011.
+buttons, and use `/hallpass link <code>` and `/hallpass status <request-id>`.
 
 > **Status.** Implemented and tested end to end against a fake Slack API (`internal/notify` and `internal/notify/slack`
 > tests: delivery, escaping, link codes, unlinked users, the chat MFA requirement, approve/deny through the single decision
 > service, idempotent redelivery, message updates, signature failures). The webhook path is per integration:
 > `<public_url>/hooks/slack/<integration_id>` (shown in the integration settings). Nothing has been **externally verified**
-> against a real Slack workspace yet; that evidence is recorded separately (ADR-0035).
+> against a real Slack workspace yet; that evidence is recorded separately.
 
 ## How it works
 
@@ -110,7 +109,7 @@ Network requirements:
 
 ## 4. Link approver accounts
 
-A Slack user can decide requests only after the operator links their Slack account (HP-NTF-011):
+A Slack user can decide requests only after the operator links their Slack account:
 
 1. The operator signs in to the web console and creates a **Slack link code** (8 characters, valid for 10 minutes,
    single use, bound to that operator).
@@ -123,7 +122,7 @@ immediately, and links of disabled operators have no effect. If an unlinked user
 
 ## 5. What is verified on every request
 
-In this order (PLAN §10.4):
+In this order:
 
 1. The body is at most 64 KiB (`413` otherwise).
 2. `X-Slack-Request-Timestamp` is within ±300 s of the server clock (`401` otherwise).
@@ -139,7 +138,7 @@ request bodies or signatures.
 
 ## Message safety
 
-All untrusted text is cleaned and rendered so that it cannot ping, link or format (HP-NTF-003). This covers the reason,
+All untrusted text is cleaned and rendered so that it cannot ping, link or format. This covers the reason,
 agent, server and role names, descriptions, capabilities and decider names:
 
 - Control characters, bidirectional overrides, zero-width and other invisible characters are removed. Newlines are
@@ -155,7 +154,7 @@ agent, server and role names, descriptions, capabilities and decider names:
   signed with the old secret fail with `401` until you do.
 - **Bot token.** Reinstall the app or revoke the token (*OAuth & Permissions → Revoke tokens*), then update HallPass.
   Deliveries fail with `invalid_auth` until the token is updated. They retry with backoff and are then marked **dead**.
-  They never approve anything (HP-NTF-010).
+  They never approve anything.
 
 Rotate both immediately if you suspect either was exposed.
 
@@ -173,8 +172,7 @@ Rotate both immediately if you suspect either was exposed.
 
 - **Slack account security.** HallPass trusts Slack to authenticate the person clicking. A compromised Slack account
   that is linked to an approver can approve within that approver's scope. Enforce SSO and 2FA in Slack. For sensitive
-  roles, use the per-role `approval_channels` restriction (web only) and the "recent web MFA" requirement (DECISIONS
-  R-10).
+  roles, use the per-role `approval_channels` restriction (web only) and the "recent web MFA" requirement.
 - **Signing-secret confidentiality.** Anyone who holds the signing secret can forge requests and **claim any Slack user
   ID**, which includes a linked approver's. They still need a valid, unused action token, and the request must still
   pass the decision checks for that operator. Protect and rotate the secret like an approval credential.
@@ -182,7 +180,7 @@ Rotate both immediately if you suspect either was exposed.
   and the reason. Addresses, usernames and credentials are never included.
 - **Message updates.** Edits that show the outcome are best effort. The web console is authoritative.
 - **Rendering on real Slack clients.** This is covered by automated tests against a fake API. It still needs manual
-  verification in a real workspace (externally verified evidence, WP17).
+  verification in a real workspace (externally verified evidence).
 
 ## Troubleshooting
 

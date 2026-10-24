@@ -51,7 +51,7 @@ export function RoleFormFields() {
       <Form.Item
         label="Description"
         name="description"
-        extra="Informational only; it does not restrict what the agent can run (HP-SRV-003)."
+        extra="Informational only; it does not restrict what the agent can run."
       >
         <Input.TextArea rows={2} maxLength={2000} />
       </Form.Item>
@@ -115,7 +115,7 @@ export function RoleFormFields() {
           showIcon
           style={{ marginBottom: 16 }}
           title="Input may contain secrets"
-          description="Typed input (including passwords entered at prompts) will be stored in recordings. HallPass does not redact secrets (HP-REC-005)."
+          description="Typed input (including passwords entered at prompts) will be stored in recordings. HallPass does not redact secrets."
         />
       ) : null}
       <Form.Item

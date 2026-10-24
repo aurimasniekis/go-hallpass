@@ -1,14 +1,13 @@
 # Recording operations
 
-Every destination channel is recorded. Recording is mandatory by default (ADR-0019): a session does not start until its
+Every destination channel is recorded. Recording is mandatory by default: a session does not start until its
 recording is established, and a session whose recording cannot be written is terminated (exit 80 to the agent). The
 format is HPREC1 ([formats/hprec1.md](../formats/hprec1.md)), with one encrypted file per segment under
 `<data_dir>/recordings/<shard>/<session>/<segment>.hprec` (`<shard>` is the last two characters of the session ID).
 Reconciliation, verification, replay, the plaintext export, retention, key-slot maintenance, backup and restore derive
 this location from the segment and session IDs and never use the `path` column for file I/O, so a modified row cannot
 point them at a file outside `recordings/`. **Not yet covered:** the ciphertext bundle export
-(`GET /api/v1/access-sessions/{id}/export`, default `format=bundle`) still reads the stored path (security review SR-16
-follow-up).
+(`GET /api/v1/access-sessions/{id}/export`, default `format=bundle`) still reads the stored path.
 
 ## Configuration (`recording:`)
 
@@ -60,7 +59,7 @@ retention with a valid tombstone, failed, or still being written).
 truncate, remove or relabel a finalized segment, or remove the newest chain entries, without `verify` failing. Limits:
 
 - A key holder (KEK or the manifest purpose key) can rewrite everything consistently. Only external anchors detect that, and
-  only for history up to the latest exported anchor (HP-CRY-008, `backup.md`).
+  only for history up to the latest exported anchor (`backup.md`).
 - Restoring an older copy of the database together with its files (a rollback) is self-consistent. Compare the chain head
   with your newest anchor after every restore.
 
@@ -87,7 +86,7 @@ At startup, before accepting connections, HallPass:
 5. Moves files under `recordings/` that are not the canonical file of any row to quarantine as orphans.
 6. Repairs key slots: for every finalized or interrupted segment, if a key slot no longer unwraps but the database copy of
    the wrapped segment key does (under that segment's own associated data), the copy is written into the unusable slot
-   (PLAN §13.4). This also refreshes a slot that only holds a retired recording key. Repairs and segments whose slots could
+  . This also refreshes a slot that only holds a retired recording key. Repairs and segments whose slots could
    not be checked are logged; `verify` reports any segment that still cannot be read.
 7. Leaves alone, and logs, an `open` row that already has an integrity-chain entry (relabeled after finalization);
    `verify` reports it.

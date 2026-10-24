@@ -108,7 +108,7 @@ Tested against an in-process mock provider covering:
 - outages;
 - private-network and cross-origin refusal.
 
-Also tested against real **Keycloak 26.7** and **Dex 2.46** containers (`make test-oidc-interop`, nightly CI; ADR-0030):
+Also tested against real **Keycloak 26.7** and **Dex 2.46** containers (`make test-oidc-interop`, nightly CI):
 - unknown identities are refused;
 - a linked login works with PKCE;
 - group mapping works;
@@ -121,6 +121,6 @@ Provider notes:
 - **Dex** sends the `groups` claim only when the `groups` scope is requested. Set `scopes: [openid, profile, email,
   groups]` and `groups_claim: groups`.
 - **Dex** honours `post_logout_redirect_uri` only together with `id_token_hint`. HallPass does not keep ID tokens
-  (HP-OIDC-008), so after RP-initiated logout the user stays on Dex's "logged out" page. The Dex session does end.
+ , so after RP-initiated logout the user stays on Dex's "logged out" page. The Dex session does end.
 - **Keycloak** asks the user to confirm RP-initiated logout, then redirects back to HallPass.
 - Logout offers the end-session endpoint of the provider that created the session (`web_sessions.auth_provider`).

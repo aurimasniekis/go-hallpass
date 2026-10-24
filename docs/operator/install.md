@@ -1,11 +1,11 @@
 # Installation
 
-This page covers the standalone (systemd) install, the container image, and Docker Compose (PLAN §18.1, HP-OPS-007).
+This page covers the standalone (systemd) install, the container image, and Docker Compose.
 Container details are in [container.md](container.md). Upgrades and rollback are in [upgrade.md](upgrade.md).
 
 > **Releases** are listed at <https://github.com/aurimasniekis/go-hallpass/releases>. The examples use `X.Y.Z`; the
-> current version is 0.1.0. Read the known limitations in [../evidence/v0.1.0/release-gates.md](../evidence/v0.1.0/release-gates.md)
-> before deploying.
+> current version is 0.1.0. Read the known limitations in [../security-guarantees.md](../security-guarantees.md) and the
+> [CHANGELOG](../../CHANGELOG.md) before deploying.
 
 ## Release artifacts
 
@@ -32,12 +32,12 @@ Install only artifacts whose checksum and attestation both verify.
 ## Requirements
 
 - Linux (amd64 or arm64) with a **local** filesystem for the data directory. NFS, SMB/CIFS, FUSE and other network
-  filesystems are refused (HP-DB-007). Use full-disk encryption: the database stores inventory and policy in plaintext
+  filesystems are refused. Use full-disk encryption: the database stores inventory and policy in plaintext
   ([storage.md](storage.md)).
 - One HallPass process per data directory. There is no clustering ([storage.md](storage.md)).
 - A clock synchronized by NTP with slewing (chrony or systemd-timesyncd), not stepped. Grant expiry, approval-token
   windows and webhook timestamp checks use wall-clock UTC. A backward step lengthens active grants by the size of the
-  step (ADR-0039).
+  step.
 - Network: agents reach the SSH port (default `2222`). HallPass reaches destination servers on port 22 from addresses you
   pin with `from=` in `authorized_keys` ([../destination/hardening.md](../destination/hardening.md)). The web console port
   (default `8080`) should only be reachable through a TLS-terminating reverse proxy.
@@ -93,7 +93,7 @@ sudo -u hallpass hallpass migrate --config /etc/hallpass/hallpass.yaml
 ```
 
 HallPass runs with `umask 0077`: files in the data directory are `0600` and directories `0700`. Startup refuses a data
-directory or KEK that is accessible to group or others, or owned by another user (HP-DB-010).
+directory or KEK that is accessible to group or others, or owned by another user.
 
 ### 5. Service
 
@@ -126,7 +126,7 @@ Distribute the `known_hosts` line to agents ([../agent/guide.md](../agent/guide.
 
 - `hallpass admin bootstrap` (offline, like `hostkey show`) prints a one-time `/setup?token=…` link for the first
   administrator (30 minutes, single use).
-- Register agents and enroll servers in the web console (PLAN §18.3, §18.4).
+- Register agents and enroll servers in the web console (§18.4).
 - Monitor `GET /readyz` and the Prometheus metrics ([observability.md](observability.md)).
 - Schedule `hallpass backup create` to a separate volume plus an off-host copy ([backup.md](backup.md)).
 

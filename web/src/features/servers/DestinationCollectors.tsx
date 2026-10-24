@@ -91,7 +91,7 @@ export function DestinationCollectors({ serverId, canManage }: { serverId: strin
           type="info"
           showIcon
           title="Destination-reported, not verified"
-          description="Collector reports come from software on the destination. A compromised destination can omit or forge them, so HallPass shows them as destination-reported and never as verified (HP-REC-006)."
+          description="Collector reports come from software on the destination. A compromised destination can omit or forge them, so HallPass shows them as destination-reported and never as verified."
         />
         {query.isPending ? (
           <LoadingState />

@@ -1,8 +1,8 @@
 # Contributing to HallPass
 
-HallPass is a security-sensitive SSH access gateway. Read [`AGENTS.md`](AGENTS.md), [`docs/GOAL.md`](docs/GOAL.md) and
-[`docs/PLAN.md`](docs/PLAN.md) before changing anything. GOAL.md is the product contract, and security requirements are never weakened
-without a recorded decision in [`docs/DECISIONS.md`](docs/DECISIONS.md).
+HallPass is a security-sensitive SSH access gateway. Read [docs/security-guarantees.md](docs/security-guarantees.md)
+before changing anything: a change must never weaken a guarantee, default or check silently. If it relaxes one, say so
+explicitly in the pull request and the CHANGELOG `Security` section, and explain why.
 
 > License: Apache-2.0 (see [LICENSE](LICENSE) and [NOTICE](NOTICE)). Contributions are accepted under the same license.
 
@@ -10,8 +10,8 @@ without a recorded decision in [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 - Go: the version in `go.mod` (latest stable). With `GOTOOLCHAIN=auto` (the default) an older local Go downloads it automatically.
 - `golangci-lint` v2.
-- Node 24 LTS with pnpm, for the web UI (once it lands in WP19).
-- Docker, for the OpenSSH interop and E2E suites (once they land in WP10/WP19).
+- Node 24 LTS with pnpm, for the web UI.
+- Docker, for the OpenSSH and OIDC interop suites and the screenshot generator.
 
 ## Everyday commands
 
@@ -31,9 +31,9 @@ without a recorded decision in [`docs/DECISIONS.md`](docs/DECISIONS.md).
 - Never commit secrets, real infrastructure details or secret-bearing fixtures. Generate test keys at test time.
 - Never use `ssh.InsecureIgnoreHostKey`, `math/rand`, or unauthenticated encryption.
 - Keep write transactions short. No network, SSH, file fsync or waits inside `store.Writer.Tx`.
-- Commits follow Conventional Commits. Agents commit locally per work package and never push (see AGENTS.md).
-- Update PLAN.md progress and DECISIONS.md with every work package.
+- Commits follow Conventional Commits.
+- User-facing changes get a CHANGELOG entry under `[Unreleased]`.
 
 ## Reporting security issues
 
-See `SECURITY.md` (added in WP24). Until then, report privately to the repository owner. Do not open public issues.
+See [SECURITY.md](SECURITY.md). Report privately; do not open public issues.

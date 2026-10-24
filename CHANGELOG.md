@@ -13,19 +13,19 @@ First release. HallPass is a terminating SSH gateway for AI agents: agents use p
 policy and a human decide what they may reach and for how long, and HallPass logs in to the destination with a
 credential the agent never sees and records the session.
 
-> **Recording format and keyring not externally reviewed** (RG-9, review item R-02). The HPREC1 format, the keyring
-> and field encryption have had internal review only ([docs/security/review-2026-10-24.md](docs/security/review-2026-10-24.md)).
+> **Recording format and keyring not externally reviewed.** The HPREC1 format, the keyring and field encryption have
+> had an internal review only.
 
 ### Known limitations
 
 - Pre-1.0: interfaces may change between minor versions ([docs/VERSIONING.md](docs/VERSIONING.md)).
-- No 24-hour soak test and no benchmarks on reference hardware (RG-5, RG-6). Short soak runs and smoke benchmarks
+- No 24-hour soak test and no benchmarks on reference hardware. Short soak runs and smoke benchmarks
   passed.
 - Slack and Telegram approvals are tested against recorded and fake provider APIs, not live workspaces.
 - Browser end-to-end tests cover the main workflows in Chromium only. There are no visual regression snapshots.
-- Not every requirement in [docs/GOAL.md](docs/GOAL.md) is complete. The per-requirement status is in
-  [docs/PLAN.md](docs/PLAN.md) §21, and the gate evaluation in
-  [docs/evidence/v0.1.0/release-gates.md](docs/evidence/v0.1.0/release-gates.md).
+- Not yet available: the Storage & keys page in the web console (use `hallpass keys status` and the storage
+  metrics), OpenTelemetry metrics export (Prometheus `/metrics` works), visual regression tests, and a built-in
+  connector for destinations behind NAT.
 
 ### Added
 
@@ -67,9 +67,8 @@ credential the agent never sees and records the session.
 
 ### Security
 
-- Internal security review ([docs/security/review-2026-10-24.md](docs/security/review-2026-10-24.md)), performed by AI
-  agents: both HIGH and all MEDIUM findings fixed with regression tests. One LOW is accepted and one LOW is open.
-- The recording format and keyring have not been externally reviewed (RG-9, R-02).
+- An internal security review, performed by AI agents, not an external party: both HIGH and all MEDIUM findings fixed with regression tests. One LOW is accepted and one LOW is open.
+- The recording format and keyring have not been externally reviewed.
 
 [Unreleased]: https://github.com/aurimasniekis/go-hallpass/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/aurimasniekis/go-hallpass/releases/tag/v0.1.0

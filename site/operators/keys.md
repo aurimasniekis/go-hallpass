@@ -50,4 +50,4 @@ The key agents pin. `hallpass hostkey show` prints it. To rotate without breakin
 ## Limits
 
 Keys live in process memory while HallPass runs. Anyone who controls the running process, or holds both the host and
-the KEK, can decrypt everything. KMS/HSM-backed wrapping is an open review item (R-03).
+the KEK, can decrypt everything. Wrapping keys with a KMS or HSM is not supported yet.

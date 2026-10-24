@@ -1,8 +1,8 @@
 # Destination audit collector (optional)
 
 HallPass records what crosses the gateway. Inside an interactive shell it cannot tell which programs actually ran, and it
-never labels commands inferred from keystrokes or output as verified (HP-REC-006). The optional destination audit
-integration (HP-REC-012) adds a second, independent source: the destination kernel's exec audit records, shipped by a
+never labels commands inferred from keystrokes or output as verified. The optional destination audit
+integration adds a second, independent source: the destination kernel's exec audit records, shipped by a
 small signed collector and attached to the access-session timeline as **destination-reported** events.
 
 > **Trust.** These records come from the destination, which HallPass treats as untrusted. HallPass checks that a batch
@@ -23,14 +23,14 @@ version 1, shown as `destination.exec@1`). Its plaintext data holds metadata onl
 | `correlation` | `certificate_key_id`, `login_key_time_window` or `login_binding` (see below) |
 | `confidence` | `high` (certificate) or `medium` (managed key) |
 | `reported_at` | exec time according to the destination clock |
-| `after_session_end` | `true` when the process ran after the access session ended (a detached process, HP-SES-004) |
+| `after_session_end` | `true` when the process ran after the access session ended (a detached process) |
 | `pid`, `ppid`, `uid`, `auid`, `success` | as reported by the kernel audit record |
 | `argc`, `argv_bytes`, `truncated` | size of the command line |
 | `collector_id`, `record_id` | where the record came from and its stored ID |
 
 The executable path, arguments and working directory can contain secrets, so they are not stored in the timeline.
 They are sealed with the field key in `destaudit_records.details_enc` and are only returned by the record-details API,
-which needs the same permission as recording playback. Retention (HP-REC-013) purges them together with the session's
+which needs the same permission as recording playback. Retention purges them together with the session's
 timeline payloads and leaves a tombstone row.
 
 The timeline position (`seq`) is the time HallPass ingested the record, which can be later than surrounding events.

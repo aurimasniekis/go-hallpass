@@ -1,9 +1,8 @@
 # Security model and guarantees
 
 This page summarizes what HallPass does and does not guarantee. The canonical text is
-[security-guarantees.md](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/security-guarantees.md); the full
-threat model is [THREAT_MODEL.md](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/THREAT_MODEL.md). If this
-page and those documents disagree, they win.
+[security-guarantees.md](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/security-guarantees.md). If the
+two disagree, that page wins.
 
 ## Read this first
 
@@ -33,7 +32,7 @@ yet.**
 | G-3 | Destination activity is possible only under an active grant, revalidated on every new channel. | per-channel revalidation tested; concurrency stress evidence pending |
 | G-4 | Grants never extend implicitly. Expiry, revocation, agent disablement and lockdown end gateway-managed channels within **5 seconds**. | no-extension tested; bound tested against real OpenSSH; soak-level evidence pending |
 | G-5 | Approval requires an authenticated, mapped operator whose role and scope are checked in the same transaction that creates the decision. A chat button is never authorization by itself. | tested (Slack and Telegram against recorded provider behavior, not live workspaces) |
-| G-6 | Agents never receive destination addresses, login credentials, gateway signing keys or destination certificates. | tested; security review pending |
+| G-6 | Agents never receive destination addresses, login credentials, gateway signing keys or destination certificates. | tested |
 | G-7 | Outbound connections reach only enrolled destinations with a verified host identity, inside the configured egress ranges. | tested; host-CA and disablement paths partially |
 | G-8 | With mandatory recording (the default), nothing is forwarded until recording is established, and a recording failure ends the activity. | tested (fault injection) |
 | G-9 | Recordings and sensitive fields are encrypted at rest with authenticated encryption; truncation and tampering by a party without the keys are detected. | tested; **recording format not externally reviewed** |
@@ -81,20 +80,17 @@ yet.**
 HallPass uses only the Go standard library and `golang.org/x/crypto`. Secrets at rest use AES-256-GCM under purpose
 keys wrapped by the KEK ([Keys and the KEK](/operators/keys)). Operator passwords use Argon2id. Recordings use the
 HPREC1 segment format ([format description](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/formats/hprec1.md)),
-which **has not been externally reviewed** (review item R-02).
+which **has not been externally reviewed**.
 
 ## Release status
 
 The current release is 0.1.0, a pre-1.0 version. Its known limitations:
 
 - The HPREC1 recording format, the keyring and field encryption have had internal review only, no external
-  cryptographic review (R-02).
+  cryptographic review.
 - No 24-hour soak test and no benchmarks on the reference hardware. Short soak runs and smoke benchmarks passed.
 - Slack and Telegram approvals are tested against recorded and fake provider APIs, not live workspaces.
 - Browser end-to-end tests cover the main workflows in Chromium only. There are no visual regression snapshots.
-
-The per-gate evaluation is in [release-gates.md](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/evidence/v0.1.0/release-gates.md), and per-requirement status in
-[PLAN.md §21](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/PLAN.md).
 
 ## Reporting vulnerabilities
 

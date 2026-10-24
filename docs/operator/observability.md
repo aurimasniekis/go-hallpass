@@ -3,16 +3,16 @@
 HallPass emits three kinds of operational telemetry. None of them needs an external service to run, and all of them
 leave out secrets, request reasons, exec commands, terminal data and tokens.
 
-| Signal | Where | Requirement |
-|---|---|---|
-| Structured logs | JSON lines on stderr (`log/slog`, ECS-aligned) | HP-OBS-001, HP-OBS-002 |
-| Correlation IDs | Log fields, span attributes | HP-OBS-003 |
-| Metrics | Prometheus `/metrics` (dedicated registry) | HP-OBS-004 |
-| Traces | OpenTelemetry over OTLP/HTTP (optional) | HP-OBS-004 |
-| Health | `/healthz` (liveness), `/readyz` (readiness) | HP-OPS-001, HP-OPS-006 |
+| Signal | Where |
+|---|---|
+| Structured logs | JSON lines on stderr (`log/slog`, ECS-aligned) |
+| Correlation IDs | Log fields, span attributes |
+| Metrics | Prometheus `/metrics` (dedicated registry) |
+| Traces | OpenTelemetry over OTLP/HTTP (optional) |
+| Health | `/healthz` (liveness), `/readyz` (readiness) |
 
 The **audit trail** is separate. It is hash-chained in the database, has an optional JSON sink and is the authoritative
-record of security-relevant actions (HP-OBS-005). Logs and metrics are operational aids and do not replace it.
+record of security-relevant actions. Logs and metrics are operational aids and do not replace it.
 
 Audit events record the request or trace correlation ID in `correlation_id`. The trace and lifecycle IDs from the
 request context go under `details.correlation` (`trace_id`, `http_request_id`, `agent_id`, `connection_id`, …).
@@ -28,7 +28,7 @@ The full log schema and redaction rules are in [logging.md](logging.md). In shor
   `*_token`, `*_secret`, `reason`, `comment`, `command`, `stdin`/`stdout`/`stderr`, `terminal_data`, …) are replaced
   with `[REDACTED]` in every handler, including nested groups.
 
-### Correlation fields (HP-OBS-003)
+### Correlation fields
 
 Records logged with a context (`logger.InfoContext(ctx, …)`) automatically carry:
 
@@ -78,8 +78,8 @@ collectors and `promhttp_metric_handler_*`.
 | `hallpass_ssh_auth_failures_total` | counter | `reason` = `unknown_key`, `revoked_key`, `agent_disabled`, `source_not_allowed`, `key_policy`, `method_rejected`, `other` | Failed public-key authentications. |
 | `hallpass_ssh_channels_active` | gauge | `kind` = `shell`, `exec`, `other` | Open activity channels. |
 | `hallpass_ssh_channels_total` | counter | `kind`; `result` = `opened`, `denied`, `limited`, `failed`, `lockdown`, `no_storage`, `other` | Channel open attempts. |
-| `hallpass_ssh_refused_requests_total` | counter | `type` = `channel_type`, `port_forward`, `subsystem`, `x11`, `agent_forward`, `other` | Refused forwarding, subsystems and channel types (HP-SSH-007). |
-| `hallpass_ssh_env_rejected_total` | counter | – | Environment variables dropped because they are not on the allowlist (HP-SSH-008). Variable names are not exported. |
+| `hallpass_ssh_refused_requests_total` | counter | `type` = `channel_type`, `port_forward`, `subsystem`, `x11`, `agent_forward`, `other` | Refused forwarding, subsystems and channel types. |
+| `hallpass_ssh_env_rejected_total` | counter | – | Environment variables dropped because they are not on the allowlist. Variable names are not exported. |
 | `hallpass_ssh_dial_duration_seconds` | histogram | `result` = `ok`, `timeout`, `egress_denied`, `host_key_mismatch`, `auth_failed`, `error`, `other` | Outbound destination dial and handshake. |
 
 ### Access lifecycle and enforcement
@@ -112,11 +112,11 @@ End reasons: `expired`, `operator`, `agent`, `policy_changed`, `agent_disabled`,
 
 | Metric | Type | Labels | Meaning |
 |---|---|---|---|
-| `hallpass_store_tx_duration_seconds` | histogram | `name` (transaction name such as `access.open_connection`; at most 160 values, else `other`; `unnamed` if empty) | Write transaction time including busy retries (HP-DB-004). |
+| `hallpass_store_tx_duration_seconds` | histogram | `name` (transaction name such as `access.open_connection`; at most 160 values, else `other`; `unnamed` if empty) | Write transaction time including busy retries. |
 | `hallpass_store_tx_total` | counter | `name`; `result` = `ok`, `busy`, `full`, `io`, `corrupt`, `constraint`, `conflict`, `not_found`, `canceled`, `error`, `other` | Write transactions by final result. |
-| `hallpass_store_tx_busy_retries_total` | counter | – | Attempts retried after `SQLITE_BUSY` (HP-DB-003). |
-| `hallpass_store_writer_wait_seconds` | histogram | – | Wait for the single writer connection (HP-DB-003). |
-| `hallpass_store_db_bytes`, `hallpass_store_wal_bytes` | gauge | – | SQLite database and WAL size (HP-DB-011). |
+| `hallpass_store_tx_busy_retries_total` | counter | – | Attempts retried after `SQLITE_BUSY`. |
+| `hallpass_store_writer_wait_seconds` | histogram | – | Wait for the single writer connection. |
+| `hallpass_store_db_bytes`, `hallpass_store_wal_bytes` | gauge | – | SQLite database and WAL size. |
 | `hallpass_storage_filesystem_size_bytes` | gauge | `volume` = `data`, `recordings`, `backups` | Filesystem size, read at scrape time. Paths are never exported. |
 | `hallpass_storage_filesystem_avail_bytes` | gauge | `volume` | Space available to the process. |
 
@@ -149,7 +149,7 @@ Response body:
  {"name":"disk.data","status":"degraded","error":"disk_reserve","duration_ms":0.1}],"checked_at":"2026-10-23T10:00:00Z"}
 ```
 
-- `status` is one of `starting` (startup not finished, PLAN §3.4), `ready`, `degraded`, `failed` or `stopping`
+- `status` is one of `starting` (startup not finished), `ready`, `degraded`, `failed` or `stopping`
   (graceful shutdown has begun). `starting` and `stopping` return an empty `checks` list.
 - Each check runs concurrently with its own timeout (default 2 s). A check that does not finish in time reports
   `timeout`, and one that panics reports `panic`.
@@ -158,10 +158,10 @@ Response body:
   load balancers.
 - `error` is a short public code (`storage_degraded`, `storage_failed`, `storage_busy`, `not_writable`, `disk_full`,
   `disk_reserve`, `disk_stat`, `timeout`, `check_failed`, …). Error details such as paths and byte counts are **not**
-  in the public response. The detailed report is available only to authenticated admins (HP-OPS-001).
+  in the public response. The detailed report is available only to authenticated admins.
 - Results are cached for 1 s, so polling `/readyz` cannot be used to load the database or filesystem. A background
   refresh every 15 s keeps `hallpass_readiness_*` current even when nothing polls the endpoint.
-- Readiness recovers automatically once the failing checks pass again (PLAN §18.14). Corruption is the exception:
+- Readiness recovers automatically once the failing checks pass again. Corruption is the exception:
   the store tracker keeps it `failed` until restart and restore.
 
 Standard checks:
@@ -172,7 +172,7 @@ Standard checks:
 | `store.writable` | critical | An empty `BEGIN IMMEDIATE` transaction cannot take the write lock. Busy or full only degrades readiness. |
 | `keyring` | critical | Purpose keys are not loaded. |
 | `recordings.writable` | critical | A probe file cannot be created, written, fsynced and removed in the recording directory. `ENOSPC` only degrades readiness. |
-| `disk.data`, `disk.recordings` | degrading | Free space is below the reserve: the larger of `storage.min_free_bytes` (2 GiB) and `storage.min_free_percent` (5%) of the filesystem. New sessions are refused below the reserve (HP-OPS-006). |
+| `disk.data`, `disk.recordings` | degrading | Free space is below the reserve: the larger of `storage.min_free_bytes` (2 GiB) and `storage.min_free_percent` (5%) of the filesystem. New sessions are refused below the reserve. |
 | `ssh.listener` | critical | The agent SSH listener is not accepting connections. |
 
 ## Tracing
@@ -248,7 +248,7 @@ groups:
         expr: histogram_quantile(0.99, sum by (le) (rate(hallpass_store_tx_duration_seconds_bucket[10m]))) > 0.1
         for: 15m
         labels: {severity: warning}
-        annotations: {summary: "Write transactions exceed the 100 ms budget (HP-DB-004)"}
+        annotations: {summary: "Write transactions exceed the 100 ms budget"}
       - alert: HallpassAuthFailureSpike
         expr: sum(rate(hallpass_ssh_auth_failures_total[5m])) > 1
         for: 10m
@@ -258,11 +258,11 @@ groups:
         labels: {severity: warning}
 ```
 
-The 80% and 90% disk alerts implement the HP-OPS-006 thresholds (`storage.alert_percent`). The free-space reserve
+The 80% and 90% disk alerts use the `storage.alert_percent` thresholds. The free-space reserve
 is enforced separately and does not wait for an alert to fire. Readiness degrades at once, and session admission
 refuses new sessions below the reserve.
 
-> **Status (WP22):** implemented and wired. `hallpass serve` creates the metric registry, passes it to every
+> **Status:** implemented and wired. `hallpass serve` creates the metric registry, passes it to every
 > component, registers the readiness checks (store health and writability, recordings directory, data-disk reserve,
 > SSH listener), serves `/healthz`, `/readyz` and (with `telemetry.prometheus`) `/metrics` on the HTTP listener or
 > on `http.metrics_listen`, wraps the HTTP API in metrics and tracing middleware, marks readiness `ready` once the

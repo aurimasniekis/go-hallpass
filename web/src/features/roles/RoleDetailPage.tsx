@@ -136,7 +136,7 @@ export function RoleDetailPage({ id }: { id: string }) {
               type="warning"
               showIcon
               title="Keyboard input is recorded for this role"
-              description="Input may contain secrets typed at prompts; HallPass does not redact them (HP-REC-005)."
+              description="Input may contain secrets typed at prompts; HallPass does not redact them."
             />
           ) : null}
         </Card>

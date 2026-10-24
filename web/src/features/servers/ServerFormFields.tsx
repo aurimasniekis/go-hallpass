@@ -20,7 +20,7 @@ export function ServerFormFields({ mode, showAddress }: { mode: 'create' | 'edit
       <Form.Item
         label="Description"
         name="description"
-        extra="Informational only. Descriptions and labels never grant or restrict access; policy decides (HP-SRV-003)."
+        extra="Informational only. Descriptions and labels never grant or restrict access; policy decides."
       >
         <Input.TextArea rows={2} maxLength={2000} />
       </Form.Item>

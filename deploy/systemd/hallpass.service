@@ -1,4 +1,4 @@
-# HallPass standalone deployment (HP-OPS-007). Install: docs/operator/install.md.
+# HallPass standalone deployment. Install: docs/operator/install.md.
 #
 #   /usr/local/bin/hallpass           binary, root-owned 0755
 #   /etc/hallpass/hallpass.yaml       configuration (secret-free), root:hallpass 0640
@@ -32,7 +32,7 @@ TimeoutStartSec=120s
 LimitNOFILE=65536
 UMask=0077
 
-# Data directory: created as /var/lib/hallpass, owned by User=, mode 0700 (HP-DB-010).
+# Data directory: created as /var/lib/hallpass, owned by User=, mode 0700.
 StateDirectory=hallpass
 StateDirectoryMode=0700
 

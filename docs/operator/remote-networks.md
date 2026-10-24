@@ -63,7 +63,7 @@ Then enroll the server as `127.0.0.1` port `22001`, and allow the loopback port 
 ```yaml
 egress:
   allow_cidrs: [127.0.0.0/8]
-  allow_special_cidrs: [127.0.0.1/32]   # loopback is denied by default (HP-SRV-009)
+  allow_special_cidrs: [127.0.0.1/32]   # loopback is denied by default
 ```
 
 Caveats:
@@ -77,5 +77,4 @@ Caveats:
 
 A built-in reverse-tunnel connector would let a small HallPass connector on the remote network dial out and carry
 destination connections, without host tunnel accounts or a VPN. It is not implemented. Its design (connector
-identity and enrollment, mutual authentication, which destinations a connector may serve, and audit) is open
-review item R-16 in [../DECISIONS.md](../DECISIONS.md).
+identity and enrollment, mutual authentication, which destinations a connector may serve, and audit) is still open.

@@ -1,12 +1,12 @@
 # Telegram approvals
 
 HallPass can post pending access requests to Telegram groups through a bot. Linked approvers decide with inline
-buttons. Requirements: HP-NTF-002..004, HP-NTF-006, HP-NTF-011, PLAN §10.5, ADR-0011.
+buttons.
 
 > **Status.** Implemented and tested end to end against a fake Bot API (`internal/notify` and `internal/notify/telegram`
 > tests: secret token, chat allowlist, unlinked users, approve through the single decision service, `update_id` replay,
 > link codes burned in group chats). The webhook path is `<public_url>/hooks/telegram/<integration_id>`; saving an enabled
-> integration calls `setWebhook`. Nothing has been **externally verified** against a real bot yet (ADR-0035).
+> integration calls `setWebhook`. Nothing has been **externally verified** against a real bot yet.
 
 ## How it works
 
@@ -43,7 +43,7 @@ Treat the bot token as an approval credential. Do not paste it into chats, ticke
    details.
 2. Find the group's **chat ID**. Supergroup IDs look like `-100…`. Once the integration is configured, the easiest way
    is to send `/start` in the group. HallPass ignores it, but records the rejected update in the audit log together with
-   the chat ID (audit wiring arrives with WP16). Before that, you can read the ID from the group info screen in Telegram
+   the chat ID. You can also read the ID from the group info screen in Telegram
    clients that display it.
 
 ## 3. Configure HallPass
@@ -131,12 +131,12 @@ Rotate both immediately if you suspect either was exposed.
   membership, the bot token and the webhook secret as approval-relevant.
 - **Telegram account security.** A hijacked Telegram account that is linked to an approver can approve within that
   approver's scope. Require 2-step verification in Telegram. For sensitive roles, use the per-role `approval_channels`
-  restriction (web only) and the "recent web MFA" requirement (DECISIONS R-10).
+  restriction (web only) and the "recent web MFA" requirement.
 - **Confidentiality of notification content.** Every group member sees agent identity, server and role aliases and the
   reason. Telegram cloud chats are not end-to-end encrypted.
 - **Message edits.** Edits that show the outcome are best effort. The web console is authoritative.
 - **Rendering on real Telegram clients.** This is covered by automated tests against a fake API. It still needs manual
-  verification against real Telegram (externally verified evidence, WP18).
+  verification against real Telegram (externally verified evidence).
 
 ## Troubleshooting
 

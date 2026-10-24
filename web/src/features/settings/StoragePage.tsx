@@ -14,17 +14,13 @@ export function StoragePage() {
       <PageHeader title="Storage & keys" description="Retention classes, storage usage and keyring status." />
       <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Card size="small">
-          <NotImplemented
-            feature="Storage, retention and key status"
-            workPackage="WP23 (needs GET /system/storage, GET /system/keys and GET/PUT /system/retention in the API)"
-          />
+          <NotImplemented feature="Storage, retention and key status" />
         </Card>
         <Card size="small" title="Until then">
           <p style={{ margin: 0 }}>
             Use <code className="hp-mono">hallpass keys status</code>,{' '}
             <code className="hp-mono">hallpass verify</code> and the{' '}
-            <code className="hp-mono">hallpass_storage_*</code> metrics on the server
-            (docs/operator/storage.md, keys.md).
+            <code className="hp-mono">hallpass_storage_*</code> metrics on the server.
           </p>
         </Card>
       </Space>

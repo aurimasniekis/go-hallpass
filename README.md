@@ -20,7 +20,7 @@
 > **Version 0.1.0**, the first release. Before 1.0, interfaces may change between minor versions
 > ([docs/VERSIONING.md](docs/VERSIONING.md)). Known limitations: no external review of the recording format and keyring,
 > no 24-hour soak or reference-hardware benchmarks, and Slack/Telegram tested against recorded provider APIs only. Details
-> are in [the release-gate evaluation](docs/evidence/v0.1.0/release-gates.md).
+> are on the [security page](https://aurimasniekis.github.io/go-hallpass/security/#release-status).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="site/public/screenshots/dashboard-dark.png">
@@ -178,10 +178,9 @@ The documentation website is **<https://aurimasniekis.github.io/go-hallpass/>** 
 | Operator reference (install, configuration, keys, backup, SSO, approvals, incidents) | [docs/operator/](docs/operator/) |
 | Agent guide, exit codes, JSON schemas | [docs/agent/](docs/agent/) |
 | Destination hardening, destination-side audit | [docs/destination/](docs/destination/) |
-| Security guarantees and threat model | [docs/security-guarantees.md](docs/security-guarantees.md), [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) |
+| Security guarantees | [docs/security-guarantees.md](docs/security-guarantees.md) |
 | REST API (OpenAPI 3.1) | [api/openapi.yaml](api/openapi.yaml) |
 | Recording format | [docs/formats/hprec1.md](docs/formats/hprec1.md) |
-| Product contract, plan, decisions | [docs/GOAL.md](docs/GOAL.md), [docs/PLAN.md](docs/PLAN.md), [docs/DECISIONS.md](docs/DECISIONS.md) |
 | Versioning, changelog, releasing | [docs/VERSIONING.md](docs/VERSIONING.md), [CHANGELOG.md](CHANGELOG.md), [docs/RELEASING.md](docs/RELEASING.md) |
 
 To work on the website: `cd site && pnpm install && pnpm dev`.

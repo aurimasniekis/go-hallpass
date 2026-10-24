@@ -15,14 +15,13 @@ latest minor release line ([docs/VERSIONING.md](docs/VERSIONING.md)).
 
 ## Scope and guarantees
 
-What HallPass does and does not guarantee is documented in [docs/GOAL.md](docs/GOAL.md) (security guarantees and
-non-guarantees) and [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) (assets, trust boundaries, residual risks). In
-particular:
+What HallPass does and does not guarantee is documented in
+[docs/security-guarantees.md](docs/security-guarantees.md). In particular:
 
 - A compromised gateway host that holds the KEK can read recordings and rewrite unanchored history. Export integrity
   anchors to external append-only storage ([docs/operator/backup.md](docs/operator/backup.md)).
 - Destination-side commands run in the destination's shell; HallPass records but does not sandbox them.
-- The HPREC1 recording format has **not** had an external cryptographic review yet (DECISIONS.md R-02).
+- The HPREC1 recording format has **not** had an external cryptographic review yet.
 
 ## Hardening references
 

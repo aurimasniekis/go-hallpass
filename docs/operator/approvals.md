@@ -2,7 +2,7 @@
 
 Agents request access over SSH. Approvers decide in the web UI (`/requests`) or from Slack or Telegram. Every channel
 uses the same decision service, so role, approver-rule scope, self-approval, request state, lockdown and duration limits
-are checked in the same transaction that creates the grant (HP-NTF-008).
+are checked in the same transaction that creates the grant.
 
 ## Web approvals
 
@@ -24,14 +24,14 @@ never decides twice.
    - Telegram: `/link <code>` in a **private** chat with the bot. A code posted in a group is burned.
    Administrators can also link accounts directly (audited).
 4. Chat decisions require MFA by default: the approver has TOTP enrolled in HallPass, or a linked SSO identity whose IdP
-   enforces MFA (R-10). Restrict sensitive roles to web-only approval with the role's `approval_channels`.
+   enforces MFA. Restrict sensitive roles to web-only approval with the role's `approval_channels`.
 
 For each pending request, each matching route gets one message with up to five approve buttons (allowed durations,
 smallest first) and a deny button. Each button carries a single-use action token. HallPass stores only a keyed hash of
 the token, bound to the request, the action and the provider, and the token expires with the request.
 
 Pressing a button still requires a linked, enabled operator who passes every decision check. Possession of a button is
-never enough (HP-NTF-007). A repeated press returns the recorded outcome (HP-NTF-009). Once a request is decided,
+never enough. A repeated press returns the recorded outcome. Once a request is decided,
 canceled or expires, the messages are edited to show the outcome.
 
 ## Delivery and failures
@@ -42,7 +42,7 @@ Messages go through the durable outbox:
 - dead letters are counted in the `hallpass_outbox_dead` metric.
 
 A failed notification never approves anything. The request stays pending until it is decided, canceled or expires
-(HP-NTF-010).
+.
 
 ## Security notes
 
@@ -50,5 +50,4 @@ A failed notification never approves anything. The request stays pending until i
   requests/s per integration, and each request is verified (Slack HMAC with timestamp and replay cache; Telegram secret
   token, chat allowlist and `update_id` replay) before anything is parsed.
 - Someone holding the Slack signing secret or the Telegram webhook secret can forge callbacks that claim any user ID.
-  Treat these secrets like credentials and rotate them if exposed. Use web-only approval for sensitive roles
-  (THREAT_MODEL T-05, ADR-0035).
+  Treat these secrets like credentials and rotate them if exposed. Use web-only approval for sensitive roles.

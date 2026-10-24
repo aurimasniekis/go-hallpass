@@ -16,15 +16,18 @@ does the rest and stops at a **draft** GitHub release that a maintainer reviews 
 
 ## Checklist
 
-1. **Gates.** Evaluate RG-1…RG-11 ([GOAL.md](GOAL.md) §8) and write the result to
-   `docs/evidence/vX.Y.Z/release-gates.md`, with evidence links. A version below 1.0 may ship with failing gates only
-   when they are listed as known limitations; HallPass is never called stable or production-ready unless every gate
-   passes. Record any operator decision to release with open gates in [DECISIONS.md](DECISIONS.md).
+1. **Release criteria.** Before calling a version stable (1.0 or later), all of these must hold: every planned
+   feature done and tested; CI green; every fuzz target run for at least 10 minutes without crashers; the
+   fault-injection suite passing; a 24-hour soak without resource growth; performance targets met on reference
+   hardware; a backup → clean-host restore drill within 15 minutes; an internal security review with every HIGH and
+   MEDIUM finding fixed or accepted; an external review of the recording format and keyring, or the "not externally
+   reviewed" label; complete operator, agent and format documentation. A version below 1.0 may ship with criteria
+   unmet only when the CHANGELOG lists them as known limitations.
 2. **CI.** `main` is green on GitHub for the commit to be tagged: the `ci` workflow, including the browser E2E job, and
    the OpenSSH interop job. Run the slower local suites as well: `make test-fault`, `scripts/recovery-drill.sh`.
 3. **Changelog.** Move the `[Unreleased]` entries into `## [X.Y.Z] - YYYY-MM-DD` in [CHANGELOG.md](../CHANGELOG.md),
    update the comparison links at the bottom, and keep the "Recording format and keyring not externally reviewed"
-   label until R-02 is resolved by an external review. The release workflow refuses a tag without this section and
+   label until an external review has been done. The release workflow refuses a tag without this section and
    uses it as the release notes.
 4. **Version references.** Install examples name the current version. Find them with the previous version, for
    example `git grep -nF 0.1.0 -- README.md site docs/operator deploy`, and update them, together with the status
@@ -56,8 +59,7 @@ does the rest and stops at a **draft** GitHub release that a maintainer reviews 
     docker run --rm "aurimasniekis/hallpass:$V" version
     ```
 
-11. **After the release**, add an empty `## [Unreleased]` section if it is missing and update the evidence index in
-    [PLAN.md](PLAN.md) §19.2.
+11. **After the release**, add an empty `## [Unreleased]` section to the CHANGELOG if it is missing.
 
 ## If something goes wrong
 

@@ -1,4 +1,4 @@
-# HallPass on Docker Compose (HP-OPS-007). Single instance: exactly one HallPass per data volume, no replicas.
+# HallPass on Docker Compose. Single instance: exactly one HallPass per data volume, no replicas.
 # Read docs/operator/container.md first. Quick start from this directory:
 #
 #   1. Create the KEK on the Docker host, owned by the container user (UID 65532) and readable only by it:
@@ -29,7 +29,7 @@ services:
       HALLPASS_CONFIG: /etc/hallpass/hallpass.yaml
     ports:
       - "${HP_SSH_PORT:-2222}:2222"                 # agent SSH front end
-      - "127.0.0.1:${HP_HTTP_PORT:-8080}:8080"       # web console/API (WP15): expose only via a TLS reverse proxy
+      - "127.0.0.1:${HP_HTTP_PORT:-8080}:8080"       # web console/API: expose only via a TLS reverse proxy
     volumes:
       - type: volume
         source: hallpass-data
@@ -59,7 +59,7 @@ services:
         max-file: "5"
 
 volumes:
-  # Local named volume. Do not back it with NFS/SMB/FUSE: HallPass refuses network filesystems (HP-DB-007).
+  # Local named volume. Do not back it with NFS/SMB/FUSE: HallPass refuses network filesystems.
   hallpass-data: {}
 
 secrets:

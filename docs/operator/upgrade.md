@@ -1,11 +1,10 @@
 # Upgrade and rollback
 
-HallPass upgrades are a binary or image swap. The database schema is migrated at startup (PLAN §18.5, ADR-0023,
-HP-OPS-005). Versioning rules are in [../VERSIONING.md](../VERSIONING.md).
+HallPass upgrades are a binary or image swap. The database schema is migrated at startup. Versioning rules are in [../VERSIONING.md](../VERSIONING.md).
 
 > **Status.** Forward-only migrations, the automatic pre-migration snapshot, the newer-schema refusal
 > ([storage.md](storage.md)), `hallpass backup`/`restore` ([backup.md](backup.md)) and `/readyz` are implemented. No
-> version has been released yet, so an upgrade from a previous release has never been exercised (release gate RG-7).
+> version has been released yet, so an upgrade from a previous release has never been exercised.
 
 ## Rules
 

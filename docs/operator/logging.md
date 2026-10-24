@@ -2,7 +2,7 @@
 
 HallPass writes structured JSON logs (one object per line) to stderr using Go's `log/slog`. Field names follow the
 [Elastic Common Schema](https://www.elastic.co/guide/en/ecs/current/index.html) where a matching field exists, and use the
-`hallpass.*` namespace otherwise (review item R-07). Logs can be ingested by OpenSearch, Elasticsearch, Loki or any JSON log
+`hallpass.*` namespace otherwise. Logs can be ingested by OpenSearch, Elasticsearch, Loki or any JSON log
 pipeline without custom parsing, and none of them is required.
 
 Logs are operational telemetry. The **audit trail** is separate (hash-chained in the database, optional JSON audit sink) and
@@ -21,14 +21,14 @@ is the authoritative record of security-relevant actions.
 | `event.outcome` | string | `success`, `failure` or `unknown`. |
 | `event.duration` | number | Nanoseconds, where measured. |
 | `error.message` | string | Error text. Errors never include secrets by construction. |
-| `trace.id` / `span.id` | string | OpenTelemetry correlation (HP-OBS-003). |
+| `trace.id` / `span.id` | string | OpenTelemetry correlation. |
 | `http.request.id` | string | Per-HTTP-request correlation ID. |
 | `source.ip` | string | Client IP (agent or browser), honoring `http.trusted_proxies`. |
 | `user.id` | string | Operator ID for web actions. |
 | `hallpass.agent_id`, `hallpass.key_id`, `hallpass.server_id`, `hallpass.role_id` | string | Inventory identifiers. |
 | `hallpass.request_id`, `hallpass.grant_id`, `hallpass.session_id`, `hallpass.connection_id`, `hallpass.channel_id`, `hallpass.segment_id` | string | Access lifecycle identifiers. |
 
-## Redaction (HP-OBS-002)
+## Redaction
 
 - Values of type `redact.Secret[T]` always render as `[REDACTED]` (log, `fmt`, JSON).
 - Attribute keys matching the sensitive list are replaced with `[REDACTED]` in every handler, including nested groups.

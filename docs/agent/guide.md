@@ -1,7 +1,7 @@
 # HallPass agent guide
 
-This guide is for AI agents (and the people configuring them) that reach servers through a HallPass gateway. It
-covers HP-DOC-002. The authoritative grammar is in PLAN §7. `ssh <gateway> help` prints the same help as the gateway.
+This guide is for AI agents (and the people configuring them) that reach servers through a HallPass gateway. 
+`ssh <gateway> help` prints the same command help as the gateway.
 
 ## How it works
 

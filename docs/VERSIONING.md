@@ -1,13 +1,13 @@
 # Versioning policy
 
-HallPass has several independently versioned interfaces (HP-DOC-006). The binary version says which release you run.
+HallPass has several independently versioned interfaces. The binary version says which release you run.
 Each interface below has its own version and compatibility rules. A release lists every interface change in
 [`CHANGELOG.md`](../CHANGELOG.md).
 
 | Interface | Version marker | Where it is defined |
 |---|---|---|
 | Binary / release | `vMAJOR.MINOR.PATCH[-PRERELEASE]` (SemVer 2.0.0) | git tag, `hallpass version` |
-| REST API | URL prefix `/api/v1` | OpenAPI spec (WP15, HP-API-001/002) |
+| REST API | URL prefix `/api/v1` | OpenAPI spec ([`api/openapi.yaml`](../api/openapi.yaml)) |
 | Agent JSON output | `"schema": "hallpass.<name>/v1"` | [`api/ssh-schemas/`](../api/ssh-schemas), [agent/json-schemas.md](agent/json-schemas.md) |
 | Agent exit codes | stable numeric codes 80–90 | [agent/exit-codes.md](agent/exit-codes.md) |
 | Recording format | magic `HPREC1`, header `v`, event types `<name>@N` | [formats/hprec1.md](formats/hprec1.md) §11 |
@@ -43,7 +43,7 @@ note says otherwise.
 
 ## REST API (`/api/v1`)
 
-- Changes within `/api/v1` are additive only (HP-API-002): new endpoints, new optional request fields, new response
+- Changes within `/api/v1` are additive only: new endpoints, new optional request fields, new response
   fields, new enum values in fields documented as open. Clients must ignore unknown response fields.
 - Breaking changes (removing or renaming fields or endpoints, changing types or semantics, new required inputs,
   stricter validation of existing inputs) require `/api/v2`. `/api/v1` and `/api/v2` are then served side by side for at
@@ -54,7 +54,7 @@ note says otherwise.
 
 ## Agent JSON schemas (`hallpass.<name>/v1`)
 
-- Every `--json` document carries a `schema` field (HP-SSH-018). Published JSON Schema files are in
+- Every `--json` document carries a `schema` field. Published JSON Schema files are in
   `api/ssh-schemas/hallpass.<name>.v1.json`.
 - Within `v1`, only additive changes are allowed: new optional fields, and new values for fields documented as open sets.
   Agents must ignore unknown fields.
@@ -70,11 +70,11 @@ Defined in [formats/hprec1.md](formats/hprec1.md) §11, summarized here:
   (`HPREC2`).
 - The header `v` fixes the record-type registry and payload encodings. New record types or payload fields require a new `v`.
   Readers reject an unknown `v` instead of skipping records.
-- Event types are versioned individually (`terminal.output@1`, HP-REC-001). Type codes and names are never reused.
+- Event types are versioned individually (`terminal.output@1`). Type codes and names are never reused.
 - Writers write only the newest version they implement. Readers keep support for every version that can still exist
   within the configured retention, so a release can drop reading support for a format only in a MAJOR release, and only
   after the longest supported retention has passed.
-- A format change that has not been externally reviewed is labeled as such in the release notes (RG-9).
+- A format change that has not been externally reviewed is labeled as such in the release notes.
 
 ## Database schema (migrations)
 
@@ -85,19 +85,19 @@ Defined in [formats/hprec1.md](formats/hprec1.md) §11, summarized here:
   ([operator/upgrade.md](operator/upgrade.md)).
 - Each release's changelog states whether it contains migrations, and whether they are long-running (data rewrites).
 - Upgrades are supported from the previous MINOR release. The release test upgrades a database fixture from the
-  previous release (RG-7).
+  previous release.
 
 ## Configuration
 
 - Configuration keys and `HALLPASS_*` variables are part of the public interface. Unknown keys are errors, so removing
   or renaming a key is a breaking change. Keys are deprecated first: still accepted, with a warning, for at least one
   MINOR release.
-- Changing a default that weakens a security property requires a recorded ADR labeled **security-relevant change**
-  (AGENTS.md) and a **Security** entry in the changelog.
+- Changing a default that weakens a security property is called out explicitly, with the reason, in a **Security**
+  entry in the changelog.
 
 ## Changelog
 
 [`CHANGELOG.md`](../CHANGELOG.md) follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), with sections
 Added, Changed, Deprecated, Removed, Fixed, Security. Entries name affected interfaces (API, schema, format, migration,
-config) and requirement IDs where relevant. Status words follow GOAL.md §7: an entry never claims more than
-*implemented*, *tested* or *externally verified* evidence supports.
+config). An entry never claims more than the evidence supports: *implemented* (the code exists), *tested* (automated
+tests pass) or *externally verified* (reviewed or tested outside the project).

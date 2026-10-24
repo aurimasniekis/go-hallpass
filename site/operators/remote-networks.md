@@ -67,4 +67,4 @@ sees connections from `127.0.0.1`; pin `from="127.0.0.1"` on its login key.
 
 ## Not available yet
 
-A built-in connector that dials out from the remote network is not implemented. Its design is open review item R-16.
+A built-in connector that dials out from the remote network is not implemented yet. Its design is still open.

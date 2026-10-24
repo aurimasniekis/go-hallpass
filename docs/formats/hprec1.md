@@ -1,10 +1,10 @@
 # HPREC1 — HallPass encrypted recording segment format
 
-Status: **implemented and tested** (`internal/recording/hprec`). **Not externally reviewed. Needs external cryptographic
-review before 1.0 (DECISIONS.md R-02, release gate RG-9).**
+Status: **implemented and tested** (`internal/recording/hprec`). **Not externally reviewed.** An external cryptographic
+review is recommended before 1.0.
 
-Normative sources: GOAL.md HP-CRY-004/005 and HP-REC-001..004/009, PLAN.md §13.3–13.7, ADR-0005. This document is
-the byte-level specification. Where it refines PLAN §13.3, the refinement is listed in [§12](#12-refinements-of-plan-133).
+This document is the byte-level specification. [§12](#12-design-choices) lists the choices that make it precise enough
+to implement independently.
 The key words MUST, MUST NOT and SHOULD are used as in RFC 2119.
 
 ## 1. Overview
@@ -179,14 +179,14 @@ the others.
 ### 7.2 Sequence rules
 
 For every non-footer record `seq` >= 1, and `seq` strictly increases across the whole segment (gaps are allowed: the
-sequencer is per access session and interleaves channels, HP-REC-002).
+sequencer is per access session and interleaves channels).
 
 The footer record MUST have `seq` = 0, `t_us` delta = 0, `mono_ns` = 0 and `stream` = 4.
 
 ### 7.3 Record types and payloads
 
 Strings and byte strings inside structured payloads are `uvarint length || bytes`. Integers are minimal uvarints.
-Every parser MUST reject trailing bytes. The versioned event name of each type is `<name>@1` (HP-REC-001).
+Every parser MUST reject trailing bytes. The versioned event name of each type is `<name>@1`.
 
 | Code | Name | Default stream | Payload |
 | --- | --- | --- | --- |
@@ -231,7 +231,7 @@ ciphertext_sha256 = SHA-256( every byte from the first frame's ct_len to the end
 It covers the frames region only. The header is covered by `H`, and the slots are excluded because rewrapping changes
 them. At finalization the writer returns the manifest
 `{segment_id, path, header_sha256 = H, ciphertext_sha256, frames, bytes (file size), records, first_seq, last_seq,
-end_reason}`. The database layer stores it and appends it to the per-session integrity chain (PLAN §13.5 step 4).
+end_reason}`. The database layer stores it and appends it to the per-session integrity chain.
 That chain is outside this format.
 
 ## 9. Write, commit and maintenance protocol
@@ -239,17 +239,17 @@ That chain is outside this format.
 1. **Prepare** (`hprec.Prepare`): validate the header, draw the DEK and `payload_salt`, compute `H`, wrap the DEK into
    slot A. No I/O. The caller registers the `open` segment row (`H`, key ID, wrapped DEK) in the database.
 2. **Create** (`Prepared.Create`): `open(path + ".partial", O_WRONLY|O_CREAT|O_EXCL, 0600)`, write magic, header and
-   both slots, `fsync(file)`, `fsync(dir)`. Only after this returns is the recording *established* (HP-REC-007). On
+   both slots, `fsync(file)`, `fsync(dir)`. Only after this returns is the recording *established*. On
    failure the partial file is removed and the error returned. The final path must not exist.
 3. **Append / Flush**: `Append` buffers records into the current frame and, when the next record does not fit, seals and
    writes the pending frame (non-final, not yet fsynced). `Flush` seals pending records as a non-final frame and fsyncs.
    The caller decides when to flush (group commit ≤ 250 ms, or per frame in strict mode). Any write or fsync error is
    returned and permanently fails the writer. Nothing is retried, and the caller terminates the channel in mandatory
-   mode (PLAN §13.5 step 3).
+   mode.
 4. **Finalize**: seal the final frame (flag 0x01, ending with the footer), `fsync(file)`, `close`,
    `rename(.partial → final)`, `fsync(dir)`. The caller then commits the manifest. Only after that commit is the
    recording *durable and complete*.
-5. **Rewrap** (`RewrapSlot`, PLAN §13.4): unwrap with the current key, wrap with the new key, and write the *other*
+5. **Rewrap** (`RewrapSlot`): unwrap with the current key, wrap with the new key, and write the *other*
    slot (not the one in use) as one full 256-byte block with `gen` = highest gen + 1, then fsync. Afterwards the caller
    updates the database copy. A torn slot write fails its checksum, so readers fall back to the previous slot. Writers
    never touch the slots after Create, so rewrapping an open segment is safe.
@@ -260,7 +260,7 @@ That chain is outside this format.
    `ExpectHeaderSHA256`) and check them against the header before anything is written, so a substituted file at the
    expected path is never modified.
 
-The gateway uses both (security review SR-39): the `recording.rewrap` job rewraps every segment still on an old
+The gateway uses both: the `recording.rewrap` job rewraps every segment still on an old
 recording key after a rotation and then updates the database copy (compare-and-set), and startup reconciliation runs
 repair for every finalized or interrupted segment (`docs/operator/keys.md`).
 
@@ -273,17 +273,17 @@ authenticates and fully validates a frame before releasing any of its records. I
 
 - end of file after a valid final frame → complete (`io.EOF`);
 - end of file at a frame boundary or inside a frame, with no final frame → incomplete (`ErrIncomplete`); every record
-  yielded before is authentic (HP-REC-009);
+  yielded before is authentic;
 - an invalid length, a frame that fails authentication, an invalid record or footer, or bytes after the final frame →
   corrupt (`ErrCorrupt`). Records yielded before the failure are authentic.
 
-**Verification** (`Verify`, PLAN §13.7) reports `ok` (all frames authentic, valid final frame, nothing after it),
+**Verification** (`Verify`) reports `ok` (all frames authentic, valid final frame, nothing after it),
 `interrupted` (all frames present authentic, no final frame) or `corrupt` (header, slots or a frame invalid). It also
 reports frames, records, seq range, the offset of the end of the valid prefix, `ciphertext_sha256` of the valid prefix,
 `H`, and the state of both slots. The database layer compares `H` and `ciphertext_sha256` with its records and assigns
 `missing`/`orphan`.
 
-**Recovery** (`Recover`, PLAN §13.6 step 2) is for a `.partial` file found at startup. It authenticates frames from the
+**Recovery** (`Recover`.6 step 2) is for a `.partial` file found at startup. It authenticates frames from the
 start and stops at the first failure or at the end. If bytes follow the valid prefix, it first copies the whole original
 to a caller-supplied quarantine path (`O_EXCL`, 0600, fsynced), then truncates the partial file to the valid prefix
 and fsyncs. It then renames the file to its final name and fsyncs the directory. The result is *complete* if a valid
@@ -299,14 +299,14 @@ before truncation.
   `HPREC` followed by another version report an unsupported version.
 - The header `v` fixes the record-type registry and payload encodings within HPREC1. New record types or payload fields
   require `v` = 2. Readers reject a `v` they do not implement, rather than skipping unknown records, because a recording
-  that silently loses events would violate HP-REC-011.
+  that silently loses events would no longer be a complete record of the session.
 - Record type codes and names are never reused or renumbered.
 - Writers only ever write the newest version they implement. Readers keep support for every version that may still
   exist within the retention period.
 
-## 12. Refinements of PLAN §13.3
+## 12. Design choices
 
-These do not relax any requirement. They make the format precise enough to implement independently:
+These make the format precise enough to implement independently:
 
 1. **Binary key slots** (`HPK1` layout with a SHA-256 checksum) instead of zero-padded JSON
    `{"gen","key_id","wrap":"A256GCM","nonce","wrapped_dek"}`. The wrap algorithm and nonce are inside the opaque
@@ -345,8 +345,8 @@ Limits:
 
 - **A key holder can forge.** Anyone with the KEK (or the recording purpose key) and write access can create a fully
   consistent segment, including the footer and hashes. Tamper evidence against such an attacker comes only from
-  the MAC'd integrity chain in SQLite plus **external anchoring** (`hallpass anchors export`, HP-CRY-008). Anchoring
-  protects history up to the last exported anchor, not data written after a compromise (THREAT_MODEL T-12, T-15).
+  the MAC'd integrity chain in SQLite plus **external anchoring** (`hallpass anchors export`). Anchoring
+  protects history up to the last exported anchor, not data written after a compromise.
 - **Whole-file substitution and deletion** are not detectable from the file alone. Each file is self-consistent, so
   verification MUST compare `H`, IDs and `ciphertext_sha256` with the database, the database rows with the MAC'd
   integrity chain (recomputing each entry's manifest from the row), deletions with authenticated retention tombstones,
@@ -361,7 +361,7 @@ Limits:
 
 ## 14. Review status
 
-**Needs external cryptographic review (R-02).** The construction composes standard primitives (HKDF-SHA256,
+**Needs external cryptographic review.** The construction composes standard primitives (HKDF-SHA256,
 ChaCha20-Poly1305 in STREAM, SHA-256, a caller AEAD for key wrapping) from the Go standard library and
 `golang.org/x/crypto`. No primitive is implemented here. The composition, the slot design, the recovery semantics and
-the limits above have not had independent review. Until review, release notes must say so (RG-9).
+the limits above have not had independent review. Until review, release notes must say so.

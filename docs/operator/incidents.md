@@ -1,6 +1,6 @@
 # Incident runbooks
 
-Runbooks for common incidents (PLAN §18.12–18.17, HP-DOC-001). Each one gives the trigger, the containment steps and
+Runbooks for common incidents. Each one gives the trigger, the containment steps and
 the follow-up. Actions named "API" are REST calls under `/api/v1` made by an administrator with a fresh login (and MFA
 where it is enrolled). The web console offers the same actions. Every action listed here is audited.
 
@@ -9,7 +9,7 @@ Before you need these runbooks:
 - keep the KEK backed up offline, separately from data backups ([keys.md](keys.md));
 - route alerts on `/readyz`, disk usage and the `hallpass_*` failure metrics ([observability.md](observability.md)).
 
-## Lockdown (PLAN §18.17)
+## Lockdown
 
 Use lockdown when you cannot yet tell what is affected. It revokes every active grant (gateway-managed channels end
 within 5 seconds), cancels pending requests and refuses new requests and channels. Agents can still connect and run
@@ -122,4 +122,4 @@ Without the KEK, encrypted data (login credentials, recordings, sealed fields) c
   - disable the affected operators or the provider mapping;
   - unlink chat identities (`DELETE /operators/{id}/provider-links/...`);
   - rotate the integration secrets.
-  A compromised IdP can log in as any identity mapped for its issuer (THREAT_MODEL T-09).
+  A compromised IdP can log in as any identity mapped for its issuer.

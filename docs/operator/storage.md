@@ -18,7 +18,7 @@ HallPass stores state in a single SQLite database and session content in encrypt
 - **Local storage only.** On Linux, startup refuses NFS, SMB/CIFS, FUSE, 9p, Ceph, AFS, GFS2, OCFS2, GPFS and Lustre
   filesystems. SQLite locking and durability are not reliable on them.
 - **No clustering.** Independent SQLite files are not a cluster. High availability is cold standby: restore the latest backup
-  on a new host (see `docs/operator/backup.md`, WP23). Live SSH sessions cannot move between processes, so agents
+  on a new host (see `docs/operator/backup.md`). Live SSH sessions cannot move between processes, so agents
   reconnect after failover. Their grants remain valid until expiry.
 
 ## Durability and concurrency

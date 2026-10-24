@@ -1,6 +1,6 @@
 # Container image
 
-The image is built by the root [`Dockerfile`](../../Dockerfile) (PLAN WP24, ADR-0022, HP-OPS-007).
+The image is built by the root [`Dockerfile`](../../Dockerfile).
 
 ## What is in the image
 
@@ -18,7 +18,7 @@ The image is built by the root [`Dockerfile`](../../Dockerfile) (PLAN WP24, ADR-
 
 Build stages: `web` (Node, `pnpm install --frozen-lockfile && pnpm build` → `web/dist`), `build` (Go, cross-compiled for
 the target platform, with `-tags embedui` so the binary serves the web UI), final (distroless). `web/dist` is placed in
-the Go build tree and embedded with `go:embed` (HP-UI-016).
+the Go build tree and embedded with `go:embed`.
 
 Build locally (never pushes):
 
@@ -34,7 +34,7 @@ inside `data_dir`. In a container that means:
 
 - The KEK lives **outside the data volume**: a Compose/Swarm secret, a Kubernetes Secret volume, or a separate read-only
   bind mount. A KEK in the data volume would end up in every volume snapshot and backup, defeating the separation of
-  data backups and key backups (ADR-0023).
+  data backups and key backups.
 - The file is mode `0400` and owned by UID `65532`. A bind mount shows the host file's owner and mode, so set them on the host:
 
   ```sh
@@ -52,7 +52,7 @@ Back up the KEK offline before the first start. See [keys.md](keys.md).
 
 ## Data volume
 
-- Use a local named volume or a local bind mount. Network filesystems are refused (HP-DB-007). On Docker Desktop,
+- Use a local named volume or a local bind mount. Network filesystems are refused. On Docker Desktop,
   bind mounts are FUSE-backed and are refused for the data directory; use a named volume.
 - A new named volume inherits `0700 65532:65532` from the image. A bind-mounted directory must be prepared on the host:
   `install -d -m 0700 -o 65532 -g 65532 /srv/hallpass/data`.
@@ -92,7 +92,7 @@ sends SIGKILL.
 user, ports, data volume, absence of `/bin/sh`, `version`, KEK provisioning (`0400`, UID 65532), refusal of a KEK inside
 the data volume and of a group-readable KEK, `config check`, `migrate` (data volume `0700 65532:65532`), and `serve`
 answering with an SSH banner and exiting 0 on SIGTERM, all with a read-only root filesystem and no capabilities.
-It does not yet cover `/readyz` (WP22) or an agent running `ssh center list` against a fixture (needs agent bootstrap).
+It does not yet cover `/readyz` or an agent running `ssh center list` against a fixture (needs agent bootstrap).
 
 ## Supply chain
 

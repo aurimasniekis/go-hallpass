@@ -365,7 +365,7 @@ function GalleryPane({ mode }: { mode: ResolvedTheme }) {
             <PermissionDenied />
           </Card>
           <Card size="small">
-            <NotImplemented feature="Example page" workPackage="WP20" />
+            <NotImplemented feature="Example page" />
           </Card>
         </Space>
       </Section>

@@ -1,8 +1,7 @@
 # Backup, restore, anchors and break-glass
 
-This page covers backups (HP-OPS-003), restore onto a clean host (HP-OPS-004), upgrade rollback (HP-OPS-005), recovery
-objectives (HP-DB-014), master-key loss (HP-CRY-007), external integrity anchors (HP-CRY-008), ciphertext-only archival
-(HP-CRY-009) and break-glass administrator recovery (HP-AUTH-016). Design: PLAN §4.4, §13.8, §13.10, §18.5–18.16 and ADR-0023.
+This page covers backups, restore onto a clean host, upgrade rollback, recovery objectives, master-key loss, external
+integrity anchors, ciphertext-only archival and break-glass administrator recovery.
 
 > **Losing the KEK loses the data.** Every sealed database field, every recording key and every integrity MAC depends on the
 > master key (KEK). Backups never contain it. If the KEK is lost, no backup can be read, and neither HallPass nor anyone else
@@ -29,7 +28,7 @@ DIR/                                  0700
 | Partial files of segments open at T | `quarantine/` (orphans and pre-truncation copies kept for investigation; copy it yourself if needed) |
 | Manifest with `kek_id`, schema version, binary version, chain head | `backups/` (pre-migration snapshots), `hallpass.lock`, WAL/SHM files |
 
-Segments are copied exactly as stored. Nothing is decrypted, and restoring requires the KEK (HP-CRY-009). The manifest's
+Segments are copied exactly as stored. Nothing is decrypted, and restoring requires the KEK. The manifest's
 `kek_id` (a non-secret identifier derived from the KEK) lets restore check that the right key is supplied.
 
 A backup still reveals plaintext metadata: server aliases, addresses, remote usernames, policy, identities and timestamps
@@ -68,7 +67,7 @@ Exit codes: `0` ok, `1` error, `2` usage, `3` written with problems (create) or 
   files never change, apart from rare key-slot rewraps after purpose-key rotation, which a later backup picks up. This keeps
   recording loss well below the backup interval. The database snapshot is still what makes a set restorable.
 - Run `hallpass backup verify` on the newest backup after each run, and on the off-host copy daily.
-- Expire old backups deliberately. Recordings deleted by retention (HP-REC-013) remain in older backups until those expire.
+- Expire old backups deliberately. Recordings deleted by retention remain in older backups until those expire.
   Keep backups no longer than your recording retention requires, and keep a KEK as long as any backup made with it.
 - Back up again right after `hallpass keys rotate-kek`, and before every upgrade.
 
@@ -98,7 +97,7 @@ Limits: `manifest.sha256` detects accidental damage, not a deliberate rewrite of
 steps 3–5 bind files to the database copy, and **MAC verification needs the KEK**. Full authenticity is established by
 `hallpass verify` after a restore, and by comparing the chain with external anchors (below).
 
-## Restore and disaster recovery (PLAN §18.8)
+## Restore and disaster recovery
 
 On a new or clean host:
 
@@ -122,7 +121,7 @@ On a new or clean host:
 6. Compare the chain head with your external anchors (`hallpass anchors verify`), then repoint DNS/VIP for SSH and HTTPS.
    Agents see the same gateway host key, because it is restored from the encrypted database.
 
-### Recovery objectives (HP-DB-014)
+### Recovery objectives
 
 | Event | RPO | RTO |
 |---|---|---|
@@ -139,7 +138,7 @@ The RTO target **has not yet been measured** on the reference hardware. Record y
 3. Start the restored instance on non-production ports. Check `/readyz`, an operator login and replay of a recording.
 4. Destroy the scratch copy (it contains production metadata) and record the drill result and duration.
 
-## Upgrade and rollback (PLAN §18.5, HP-OPS-005)
+## Upgrade and rollback
 
 1. Read the release notes. Take a backup (`hallpass backup create`) and verify it.
 2. Stop the server and replace the binary or image.
@@ -149,7 +148,7 @@ The RTO target **has not yet been measured** on the reference hardware. Record y
 Migrations are forward-only. **Rollback** = stop, restore the pre-upgrade backup with the previous binary
 (`hallpass restore --force …`). Data written after the upgrade is lost. Never run an older binary on a newer schema: it refuses to start.
 
-## Litestream (optional, R-04)
+## Litestream (optional)
 
 [Litestream](https://litestream.io) can continuously replicate `hallpass.db` to object storage to shrink the database RPO.
 It is **optional and not a high-availability mode**: there is still exactly one active HallPass per data directory, and failover
@@ -158,10 +157,10 @@ is a cold restore. Caveats:
 - Litestream replicates only the database. Recordings still need `hallpass backup` or continuous segment sync, and a replica
   whose recordings are older than its database restores with `missing` segments.
 - HallPass runs `PRAGMA wal_checkpoint(TRUNCATE)` every 5 minutes. Compatibility with Litestream's checkpoint handling has
-  **not yet been tested** (R-04 open). Treat Litestream as an addition to, never a replacement for, `hallpass backup`.
+  **not yet been tested**. Treat Litestream as an addition to, never a replacement for, `hallpass backup`.
 - A Litestream restore must go into an empty data directory, and needs the same KEK and the recordings directory.
 
-## External integrity anchors (HP-CRY-008)
+## External integrity anchors
 
 Each finalized or reconciled segment appends an entry to the integrity chain: `hash = SHA-256(prev_hash || manifest_sha256)`,
 MACed with the manifest key. Someone who holds the KEK and can write the data directory can rewrite segments, chain entries and
@@ -191,7 +190,7 @@ Verify reports:
 It **cannot** protect entries written after the latest anchor, data written after a compromise, or deletion of not-yet-anchored
 history. Ship anchors often, to storage with object lock/WORM, a transparency log, or a separate log host. A built-in scheduled push is not in v1.
 
-## Break-glass administrator recovery (PLAN §18.16, HP-AUTH-016)
+## Break-glass administrator recovery
 
 Use this when no administrator can sign in (lost MFA, disabled SSO, departed staff). It works even when password login is
 disabled, and it has **no remote equivalent**: it needs shell access on the host, the KEK and the data-directory lock.
