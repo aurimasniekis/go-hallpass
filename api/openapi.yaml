@@ -717,6 +717,7 @@ paths:
       tags: [inventory]
       x-permission: inventory.write
       x-token: true
+      x-idempotency-key: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       requestBody:
         required: true
@@ -1466,6 +1467,7 @@ paths:
       x-token: true
       x-reauth: true
       x-mfa: true
+      x-idempotency-key: true
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: "#/components/schemas/OIDCProviderInput"}}}
@@ -1523,6 +1525,7 @@ paths:
       x-token: true
       x-reauth: true
       x-mfa: true
+      x-idempotency-key: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       requestBody:
         required: true
@@ -1591,6 +1594,7 @@ paths:
       x-token: true
       x-reauth: true
       x-mfa: true
+      x-idempotency-key: true
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: "#/components/schemas/IntegrationInput"}}}
@@ -1646,6 +1650,7 @@ paths:
       x-permission: integrations.manage
       x-token: true
       x-reauth: true
+      x-idempotency-key: true
       requestBody:
         required: true
         content: {application/json: {schema: {type: object, required: [integration_id, destination, targets], properties: {integration_id: {type: string}, destination: {type: string}, targets: {$ref: "#/components/schemas/Selector"}, enabled: {type: boolean}}}}}

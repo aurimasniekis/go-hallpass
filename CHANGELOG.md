@@ -37,6 +37,8 @@ agent JSON schemas, the recording format and the database schema).
 
 ### Changed
 
+- Every configuration create (roles and access profiles, agent and host keys, login keys, OIDC providers and
+  mappings, integrations, notification routes) honors `Idempotency-Key`, so automation can retry it safely.
 - The policy page's effective-access preview names the deciding rules, and the server wizard recognizes rules that
   reach a server through groups or labels.
 
