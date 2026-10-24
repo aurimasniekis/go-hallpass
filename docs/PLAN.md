@@ -1753,7 +1753,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [ ] `HP-POL-009` Effective-access preview — WP08 — evidence: U, E — ◐ WP08: PreviewAgent/PreviewServer with deciding rule + Engine.WhatIf tested; UI pending WP20
 - [x] `HP-POL-010` Hidden-target non-disclosure — WP10 — evidence: U, O, I — ✅ tested: unknown and hidden targets indistinguishable (internal/app/e2e_test.go TestGatewayHiddenTarget, test/openssh/gateway_test.go TestOpenSSHHiddenTarget)
 - [x] `HP-POL-011` Approver authority rules — WP08 — evidence: U, I — ✅ tested (local) @ WP08: approver rules + internal role required; admins need rules too
-- [ ] `HP-POL-012` Self-approval prohibition — WP08 — evidence: U, I — ◐ downgraded by internal review SR-14: the self-approval check exists, but agent owners cannot be set through any API or UI, so the ban never applies in production
+- [x] `HP-POL-012` Self-approval prohibition — WP08 — evidence: U, I — ✅ tested: self-approval ban enforced on approve (policy CanApprove/CanAct tests), owners settable via PUT /agents/{id}/owners and /policy/self-approval (httpapi TestAdministrationFlow), UI owners card and setting (AgentOwners/PolicyPage tests); ADR-0044
 - [x] `HP-POL-013` Auto-approval within limits — WP08 — evidence: U, I — ✅ tested (local) @ WP08: AutoApproves only ≤ auto max; longer requests need a human; decision recording in WP09
 - [x] `HP-POL-014` Command allowlists are not a sandbox — WP08 — evidence: D — ✅ done: docs/operator/policy.md (capabilities are channel types) + docs/destination/hardening.md (allowlists are not a sandbox; ForceCommand/sudoers)
 

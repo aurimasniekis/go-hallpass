@@ -34,6 +34,11 @@ export interface ConfirmActionProps<T> {
   /** Called when the dialog opens (reset embedded form state here). */
   onOpen?: () => void;
   buttonProps?: Omit<ButtonProps, 'onClick' | 'danger' | 'disabled'>;
+  /**
+   * Replaces the trigger button (e.g. a Switch that must not flip before the server confirms). Call
+   * `open` to show the dialog; `label` and `buttonProps` are then unused.
+   */
+  renderTrigger?: (trigger: { open: () => void; disabled: boolean | undefined }) => ReactNode;
 }
 
 export function ConfirmAction<T>({
@@ -49,6 +54,7 @@ export function ConfirmAction<T>({
   confirmDisabled = false,
   onOpen,
   buttonProps,
+  renderTrigger,
 }: ConfirmActionProps<T>) {
   const [open, setOpen] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);
@@ -86,20 +92,24 @@ export function ConfirmAction<T>({
     }
   };
 
+  const openDialog = () => {
+    if (disabled) {
+      return;
+    }
+    setIdempotencyKey(newIdempotencyKey());
+    onOpen?.();
+    setOpen(true);
+  };
+
   return (
     <>
-      <Button
-        {...buttonProps}
-        danger={danger}
-        disabled={disabled}
-        onClick={() => {
-          setIdempotencyKey(newIdempotencyKey());
-          onOpen?.();
-          setOpen(true);
-        }}
-      >
-        {label}
-      </Button>
+      {renderTrigger ? (
+        renderTrigger({ open: openDialog, disabled })
+      ) : (
+        <Button {...buttonProps} danger={danger} disabled={disabled} onClick={openDialog}>
+          {label}
+        </Button>
+      )}
       <Modal
         open={open}
         title={title}

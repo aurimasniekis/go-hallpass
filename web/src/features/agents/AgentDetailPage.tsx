@@ -19,6 +19,7 @@ import { FormModal } from '../servers/FormModal';
 import { AgentFormFields } from './AgentFormFields';
 import { agentFormValues, toAgentPatch, type AgentFormValues } from './agentForm';
 import { AgentKeys } from './AgentKeys';
+import { AgentOwners } from './AgentOwners';
 import { EnabledBadge, TagList } from './AgentsPage';
 
 export function AgentDetailPage({ id }: { id: string }) {
@@ -161,6 +162,7 @@ export function AgentDetailPage({ id }: { id: string }) {
           />
         </Card>
         <AgentKeys agentId={id} keys={agent.keys} canWrite={canWrite} />
+        {can('policy.read') ? <AgentOwners agentId={id} /> : null}
         {can('policy.read') ? <EffectiveAccessCard kind="agent" id={id} /> : null}
       </Space>
       <FormModal<AgentFormValues>

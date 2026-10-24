@@ -24,6 +24,7 @@ import { useSseState } from '../../stores/sse';
 import { EffectiveAccessPreview, LevelBadge } from './EffectiveAccessPreview';
 import { limitText } from './ruleForm';
 import { ApproverRuleDrawer, RuleDrawer } from './RuleDrawers';
+import { SelfApprovalCard } from './SelfApproval';
 import { summarizeSelector, type SelectorKind } from './selectors/model';
 
 /** Resolves agent/server/operator IDs in selector summaries from lists the operator may read. */
@@ -96,7 +97,11 @@ function RulesTab({ canWrite }: { canWrite: boolean }) {
     { key: 'roles', title: 'Roles', render: (_v, r) => summarizeSelector('role', r.roles) },
     { key: 'max', title: 'Max', render: (_v, r) => limitText(r.max_duration) },
     { key: 'auto', title: 'Auto up to', render: (_v, r) => limitText(r.auto_max_duration) },
-    { key: 'reason', title: 'Reason', render: (_v, r) => (r.require_reason ? <Tag>required</Tag> : '—') },
+    {
+      key: 'reason',
+      title: 'Reason',
+      render: (_v, r) => (r.require_reason ? <Tag>required</Tag> : '—'),
+    },
     { key: 'enabled', title: 'State', render: (_v, r) => <EnabledBadge enabled={r.enabled} /> },
   ];
   if (canWrite) {
@@ -272,7 +277,10 @@ function ApproverRulesTab({ canWrite }: { canWrite: boolean }) {
   );
 }
 
-/** Policy (docs/PLAN.md §9, HP-POL-*): access rules, approver rules and an effective-access preview. */
+/**
+ * Policy (docs/PLAN.md §9, HP-POL-*): the self-approval prohibition, access rules, approver rules and an
+ * effective-access preview.
+ */
 export function PolicyPage() {
   const { can, loading } = usePermissions();
   const version = useQuery({ ...policyVersionQueryOptions(), enabled: can('policy.read') });
@@ -302,6 +310,9 @@ export function PolicyPage() {
           </span>
         }
       />
+      <div style={{ marginBottom: 16 }}>
+        <SelfApprovalCard canWrite={canWrite} />
+      </div>
       <Tabs
         items={[
           {

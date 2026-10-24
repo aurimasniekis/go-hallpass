@@ -58,6 +58,8 @@ export type SSHBan = S['SSHBan'];
 export type PolicyRule = S['PolicyRule'];
 export type ApproverRule = S['ApproverRule'];
 export type EffectiveAccess = S['EffectiveAccess'];
+export type AgentOwners = S['AgentOwners'];
+export type SelfApprovalSetting = S['SelfApprovalSetting'];
 export type EffectiveAccessItem = EffectiveAccess['items'][number];
 
 // access

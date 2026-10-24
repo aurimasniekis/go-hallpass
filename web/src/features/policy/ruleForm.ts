@@ -56,7 +56,8 @@ export function newRuleForm(): RuleFormValues {
     roles: emptySelectorForm(),
     max_duration: null,
     auto_max_duration: null,
-    require_reason: false,
+    // The server defaults an omitted require_reason to true; new rules start from the same safe default.
+    require_reason: true,
     enabled: true,
   };
 }
@@ -72,7 +73,7 @@ export function ruleToForm(rule: PolicyRule): RuleFormValues {
     roles: selectorToForm('role', rule.roles),
     max_duration: positiveOrNull(rule.max_duration),
     auto_max_duration: positiveOrNull(rule.auto_max_duration),
-    require_reason: rule.require_reason ?? false,
+    require_reason: rule.require_reason,
     enabled: rule.enabled,
   };
 }

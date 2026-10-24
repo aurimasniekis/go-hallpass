@@ -67,6 +67,11 @@ describe('policy rule form', () => {
     ]);
   });
 
+  it('requires a reason by default for new rules (the server default when omitted)', () => {
+    expect(newRuleForm().require_reason).toBe(true);
+    expect(ruleToForm({ ...rule, require_reason: false }).require_reason).toBe(false);
+  });
+
   it('rejects sub-minute durations', () => {
     const { errors } = formToRuleBody({ ...ruleToForm(rule), level: 'requestable', max_duration: 30 });
     expect(errors).toContain('Maximum duration must be at least 1 minute.');

@@ -224,6 +224,20 @@ export const policyVersionQueryOptions = () =>
     queryFn: ({ signal }) => api.call('get', '/api/v1/policy/version', { signal }),
   });
 
+/** Operators owning an agent (policy.read). */
+export const agentOwnersQueryOptions = (agentId: string) =>
+  queryOptions({
+    queryKey: qk.agentOwners(agentId),
+    queryFn: ({ signal }) => api.call('get', '/api/v1/agents/{id}/owners', { path: { id: agentId }, signal }),
+  });
+
+/** Whether agent owners are barred from approving their own agents' requests (policy.read). */
+export const selfApprovalQueryOptions = () =>
+  queryOptions({
+    queryKey: qk.selfApproval,
+    queryFn: ({ signal }) => api.call('get', '/api/v1/policy/self-approval', { signal }),
+  });
+
 // ---- operators
 
 export const operatorsQueryOptions = () =>

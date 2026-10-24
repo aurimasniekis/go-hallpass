@@ -80,6 +80,8 @@ export function renderInventory(path: string, opts: { permissions: string[]; han
       component: ServerRoute,
     }),
     createRoute({ getParentRoute: () => root, path: '/roles/$id', component: RoleRoute }),
+    // Link target only (operator names link here); the page itself is not under test.
+    createRoute({ getParentRoute: () => root, path: '/operators/$id', component: () => null }),
     createRoute({
       getParentRoute: () => root,
       path: '/groups',

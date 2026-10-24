@@ -99,4 +99,42 @@ describe('<ConfirmAction>', () => {
     });
     expect(keys[2]).not.toBe(keys[0]);
   });
+
+  it('opens from a custom trigger and ignores it while disabled', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn(() => Promise.resolve('ok'));
+    const { rerender } = renderWithProviders(
+      <ConfirmAction
+        label="Toggle"
+        title="Change setting"
+        disabled
+        onConfirm={onConfirm}
+        renderTrigger={({ open }) => (
+          <button type="button" onClick={open}>
+            Custom trigger
+          </button>
+        )}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Toggle' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Custom trigger' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    rerender(
+      <ConfirmAction
+        label="Toggle"
+        title="Change setting"
+        onConfirm={onConfirm}
+        renderTrigger={({ open }) => (
+          <button type="button" onClick={open}>
+            Custom trigger
+          </button>
+        )}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Custom trigger' }));
+    await user.click(await screen.findByRole('button', { name: 'Confirm' }));
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledTimes(1);
+    });
+  });
 });

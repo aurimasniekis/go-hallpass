@@ -21,10 +21,17 @@ const rule = {
   version: 2,
 };
 
-function setup(permissions: string[]) {
+function setup(permissions: string[], prohibit = true) {
+  let prohibitSelfApproval = prohibit;
   return mockApi({
     'GET /api/v1/me': makeMe({ permissions }),
     'GET /api/v1/policy/version': { version: 7 },
+    'GET /api/v1/policy/self-approval': () =>
+      jsonResponse(200, { prohibit_self_approval: prohibitSelfApproval }),
+    'PUT /api/v1/policy/self-approval': (c) => {
+      prohibitSelfApproval = (c.body as { prohibit_self_approval: boolean }).prohibit_self_approval;
+      return jsonResponse(200, { prohibit_self_approval: prohibitSelfApproval });
+    },
     'GET /api/v1/policy/rules': { items: [rule] },
     'GET /api/v1/policy/approver-rules': { items: [] },
     'GET /api/v1/agents': { items: [{ id: 'agt_1', name: 'builder' }] },
@@ -86,7 +93,8 @@ describe('<PolicyPage>', () => {
       subjects: { all: true },
       targets: { all: true },
       roles: { all: true },
-      require_reason: false,
+      // New rules require a reason by default, matching the server default.
+      require_reason: true,
       enabled: true,
     });
     expect(post?.headers.get('Idempotency-Key')).toBeTruthy();
@@ -103,6 +111,64 @@ describe('<PolicyPage>', () => {
     await user.click(await screen.findByRole('button', { name: 'Delete rule' }));
     await waitFor(() => {
       expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/v1/policy/rules/pol_1')).toBe(true);
+    });
+  });
+
+  describe('self-approval', () => {
+    it('shows the current value without a switch for read-only operators', async () => {
+      setup(['policy.read']);
+      renderWithProviders(<PolicyPage />);
+      expect(await screen.findByText('Prohibited')).toBeInTheDocument();
+      expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    });
+
+    it('turning the prohibition off warns about owners and needs the typed phrase', async () => {
+      const user = userEvent.setup();
+      const { calls } = setup(['policy.read', 'policy.write']);
+      renderWithProviders(<PolicyPage />);
+      const toggle = await screen.findByRole('switch', { name: 'Prohibit self-approval' });
+      expect(toggle).toBeChecked();
+      await user.click(toggle);
+      const dialog = await screen.findByRole('dialog');
+      expect(within(dialog).getByText('Owners will be able to approve their own agents')).toBeInTheDocument();
+      // The switch does not move before the server confirms.
+      expect(toggle).toBeChecked();
+      const confirm = within(dialog).getByRole('button', { name: 'Allow self-approval' });
+      expect(confirm).toBeDisabled();
+      await user.type(within(dialog).getByLabelText(/to confirm/), 'ALLOW SELF-APPROVAL');
+      await user.click(confirm);
+      await waitFor(() => {
+        expect(screen.getByRole('switch', { name: 'Prohibit self-approval' })).not.toBeChecked();
+      });
+      expect(screen.getByText('Allowed')).toBeInTheDocument();
+      const put = calls.find((c) => c.method === 'PUT' && c.path === '/api/v1/policy/self-approval');
+      expect(put?.body).toEqual({ prohibit_self_approval: false });
+      expect(put?.headers.get('X-CSRF-Token')).toBe('csrf-test');
+    });
+
+    it('turning the prohibition on asks for confirmation without the owner warning', async () => {
+      const user = userEvent.setup();
+      const { calls } = setup(['policy.read', 'policy.write'], false);
+      renderWithProviders(<PolicyPage />);
+      expect(await screen.findByText('Allowed')).toBeInTheDocument();
+      await user.click(screen.getByRole('switch', { name: 'Prohibit self-approval' }));
+      const dialog = await screen.findByRole('dialog');
+      expect(within(dialog).queryByText('Owners will be able to approve their own agents')).toBeNull();
+      await user.type(within(dialog).getByLabelText(/to confirm/), 'PROHIBIT SELF-APPROVAL');
+      await user.click(within(dialog).getByRole('button', { name: 'Prohibit self-approval' }));
+      expect(await screen.findByText('Prohibited')).toBeInTheDocument();
+      expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ prohibit_self_approval: true });
+    });
+
+    it('cancelling sends nothing and leaves the value unchanged', async () => {
+      const user = userEvent.setup();
+      const { calls } = setup(['policy.read', 'policy.write']);
+      renderWithProviders(<PolicyPage />);
+      await user.click(await screen.findByRole('switch', { name: 'Prohibit self-approval' }));
+      const dialog = await screen.findByRole('dialog');
+      await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+      expect(screen.getByRole('switch', { name: 'Prohibit self-approval' })).toBeChecked();
+      expect(calls.some((c) => c.method === 'PUT')).toBe(false);
     });
   });
 });

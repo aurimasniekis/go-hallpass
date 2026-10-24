@@ -60,6 +60,10 @@ export const qk = {
   policyRules: ['policy', 'rules'] as const,
   approverRules: ['policy', 'approver-rules'] as const,
   policyVersion: ['policy', 'version'] as const,
+  // Owners and the self-approval prohibition are policy state (changing either bumps the policy version and
+  // emits a `policy` live event), so they hang below the policy root rather than the agent detail key.
+  selfApproval: ['policy', 'self-approval'] as const,
+  agentOwners: (agentId: string) => ['policy', 'agent-owners', agentId] as const,
 
   operators: ['operators'] as const,
   operator: (id: string) => ['operator', id] as const,
