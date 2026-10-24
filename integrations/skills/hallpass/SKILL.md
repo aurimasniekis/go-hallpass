@@ -79,6 +79,23 @@ ssh center exec web1 --role deploy -- ./deploy.sh 1.4.3     # once approved
 - Ask for the shortest duration that fits the task (`--duration 15m`). Policy caps it, and grants end exactly at
   expiry (exit 87).
 
+## Git
+
+Git remotes (marked `(git)` in `list`) are used with plain git, never `exec`:
+
+```sh
+git clone center:github/acme/api.git
+git push origin agent/my-change
+```
+
+- If a push or clone needs approval, git waits like `exec` does; tell the user you are waiting.
+- Git cannot send a reason. When access needs one, request first, then retry git:
+  `ssh center 'request github --role <profile> --reason "<why>" --wait'`.
+- Push only to branches the profile allows (often `agent/*`), never to protected branches. Do not rewrite pushed
+  history: force-pushes are refused. Add new commits instead.
+- `repository not found or not permitted` means no profile you may use covers it. Ask the user; do not guess other
+  remotes or paths.
+
 ## Exit codes
 
 For `exec`/`connect`, the destination's exit status passes through unchanged. The gateway itself uses 80–90. With

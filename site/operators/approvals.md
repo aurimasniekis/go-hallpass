@@ -32,6 +32,18 @@ what was actually granted.
 If nobody decides, the request expires after `access.pending_expiry` (30 minutes by default) and the agent gets
 exit 84. An agent whose wait timed out (exit 86) can keep waiting with `ssh center status <req_id> --wait`.
 
+## Several approvers
+
+A role or git access profile can require more than one approver (**Approvers needed**, 1–5). Each approver decides
+separately, from the web console, Slack or Telegram:
+
+- An approval is checked like any other (approver rules, self-approval, approval channels) and recorded. The request
+  stays pending and shows **Approvals: 1 of 2** with the names so far.
+- The same person cannot approve twice.
+- The last required approval creates the grant, with the shortest duration any approver chose.
+- Any one denial ends the request.
+- Policy never auto-approves such a role, even if a rule says auto-approve.
+
 ## After approval
 
 - Active grants are listed on the dashboard and under **Sessions → Grants**, with the time remaining.

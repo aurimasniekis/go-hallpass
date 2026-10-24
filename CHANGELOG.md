@@ -7,6 +7,26 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+### Added
+
+- **Git remotes.** Agents clone, fetch and push with plain git through the gateway
+  (`git clone center:github/acme/api.git`), with requests, approvals and time-bound grants. Git remotes have their own
+  page with presets for GitHub, GitLab.com and Bitbucket. Access profiles limit repositories with patterns
+  (`acme/{api,web}`, `acme/*`, `**`) and pushes with branch, protected-branch and tag rules; refused pushes never
+  reach the host. Force-pushes are refused unless a profile allows them: HallPass proves every branch update is a
+  fast-forward from the pushed commits. Git operations are recorded as metadata (repository, ref updates, bytes),
+  not as byte streams.
+- **Several approvers.** A role or git access profile can require 1–5 distinct approvers; the request stays pending
+  until enough have approved, any denial ends it, and policy never auto-approves such roles.
+- `ssh <gateway> list` marks git remotes (`kind` in `hallpass.list/v1`).
+- Database growth bounds: delivered notifications are kept for 30 days and finished background jobs for 7 days; free
+  pages are returned to the filesystem every 5 minutes; a writer queue-depth metric.
+
+### Changed
+
+- The policy page's effective-access preview names the deciding rules, and the server wizard recognizes rules that
+  reach a server through groups or labels.
+
 ## [0.1.0] - 2026-10-24
 
 First release. HallPass is a terminating SSH gateway for AI agents: agents use plain `ssh` with their own key,

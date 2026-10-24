@@ -92,6 +92,32 @@ ssh center 'exec web1 -- ls -l /var/log | head -5'     # the pipe runs on web1
 ssh center 'exec web1 -- echo "$HOME"'                  # $HOME expands on web1
 ```
 
+## Git
+
+Git remotes work with plain git: no wrapper, no extra configuration beyond your `Host` entry for the gateway.
+
+```sh
+git clone center:github/acme/api.git              # <remote>/<owner>/<repository>.git
+git remote set-url origin center:github/acme/api.git
+git push origin agent/fix-cart-timeout
+```
+
+- `ssh center list` marks git remotes with `(git)` and lists their access profiles like roles.
+- A clone or push that needs approval waits for it, printing the request ID on stderr, just like `exec`.
+- Git cannot send a reason. If the profile requires one, request access first, then run git again:
+
+  ```sh
+  ssh center 'request github --role acme-push --reason "Fix cart timeout (OPS-2297)" --wait'
+  git push origin agent/fix-cart-timeout
+  ```
+
+- Pushes are checked before they reach the host. Only the branches and tags the profile allows can change, protected
+  branches never, and rewriting history (force-push) is refused unless the profile allows it. Push new commits on top
+  of the branch instead of rewriting it. A refused push changes nothing and prints the reason, for example
+  `hallpass: push refused: refs/heads/main: protected branch`.
+- `repository not found or not permitted` means no profile you can use covers that repository and operation.
+- `exec` and `connect` are refused on git remotes.
+
 ## Output and exit codes
 
 - The destination's stdout and stderr pass through unchanged and separately. Gateway messages go to stderr, prefixed

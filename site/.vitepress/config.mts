@@ -46,6 +46,7 @@ export default defineConfig({
         items: [
           { text: 'Overview', link: '/operators/' },
           { text: 'Servers and roles', link: '/operators/servers' },
+          { text: 'Git remotes', link: '/operators/git' },
           { text: 'Agents and keys', link: '/operators/agents' },
           { text: 'Access policy', link: '/operators/policy' },
           { text: 'Approving requests', link: '/operators/approvals' },

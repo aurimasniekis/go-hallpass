@@ -72,7 +72,7 @@ Go duration strings (`30m0s`), and optional values are `null`. Within `/v1`, fie
 Example `list --json`:
 
 ```json
-{"schema":"hallpass.list/v1","servers":[{"alias":"web1","description":"Web server","roles":[
+{"schema":"hallpass.list/v1","servers":[{"alias":"web1","kind":"ssh","description":"Web server","roles":[
   {"alias":"inspect","description":"Read-only inspection account","level":"auto","active_grant":null},
   {"alias":"deploy","description":"Deployment account","level":"requestable","active_grant":null}]}]}
 ```
