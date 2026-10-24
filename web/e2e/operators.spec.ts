@@ -132,9 +132,9 @@ test('link a Telegram account with a one-time code', async ({ page }) => {
     await page.getByRole('button', { name: 'New integration' }).click();
     const drawer = page.getByRole('dialog', { name: 'New chat integration' });
     await drawer.locator('label.ant-radio-button-wrapper').filter({ hasText: 'Telegram' }).click();
-    await drawer.getByLabel('Name').fill(name);
-    await drawer.getByLabel('Bot token').fill(botToken);
-    await drawer.getByLabel('Webhook secret').fill(webhookSecret);
+    await drawer.getByLabel('Name', { exact: true }).fill(name);
+    await drawer.getByLabel('Bot token', { exact: true }).fill(botToken);
+    await drawer.getByLabel('Webhook secret', { exact: true }).fill(webhookSecret);
     await drawer.getByRole('button', { name: 'Create integration' }).click();
     await expect(page.getByText(`${name} · Telegram`)).toBeVisible();
   });
