@@ -59,11 +59,12 @@ type IdP struct {
 	// Now is the IdP clock.
 	Now func() time.Time
 
-	keys       []signingKey
-	codes      map[string]codeGrant
-	jwksHits   int
-	tokenHits  int
-	lastParams url.Values
+	keys                            []signingKey
+	codes                           map[string]codeGrant
+	jwksHits                        int
+	tokenHits                       int
+	lastParams                      url.Values
+	lastAccess, lastRefresh, lastID string
 }
 
 type signingKey struct {
@@ -121,6 +122,13 @@ func (i *IdP) JWKSHits() int {
 }
 
 // LastAuthorizeParams returns the query of the last authorization request.
+// LastTokens returns the access, refresh and ID tokens of the most recent token response (HP-OIDC-008 tests).
+func (i *IdP) LastTokens() (access, refresh, id string) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.lastAccess, i.lastRefresh, i.lastID
+}
+
 func (i *IdP) LastAuthorizeParams() url.Values {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -258,7 +266,9 @@ func (i *IdP) token(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, map[string]any{"access_token": "at-" + randomString(), "refresh_token": "rt-" + randomString(), "token_type": "Bearer",
+	access, refresh := "at-"+randomString(), "rt-"+randomString()
+	i.lastAccess, i.lastRefresh, i.lastID = access, refresh, idToken // i.mu is held for the whole handler
+	writeJSON(w, map[string]any{"access_token": access, "refresh_token": refresh, "token_type": "Bearer",
 		"expires_in": 300, "id_token": idToken})
 }
 

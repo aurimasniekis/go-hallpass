@@ -1867,7 +1867,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-OIDC-005` TLS and redirect safety — WP14 — evidence: U, I — ✅ tested: https issuer, exact redirect URI, return_to allowlist, binding cookie over HTTP (oidc + httpapi TestOIDCBrowserFlow)
 - [x] `HP-OIDC-006` Endpoint validation — WP14 — evidence: U, I — ✅ tested: endpoint site check, private-network refusal, untrusted TLS refused
 - [x] `HP-OIDC-007` Secret handling — WP14 — evidence: I, E — ✅ tested: encrypted at rest, write-only in API (oidc + httpapi tests); UI pending WP20
-- [ ] `HP-OIDC-008` Token minimization — WP14 — evidence: I — ◐ implemented: access/refresh tokens dropped after exchange, ID token not stored (code review; no persistence path)
+- [x] `HP-OIDC-008` Token minimization — WP14 — evidence: I — ✅ tested: access/refresh tokens dropped after the exchange, ID token used only for claims; after a real mock-IdP login no token or ID-token signature appears in any table or in the DB/WAL files (internal/oidc TestTokensNotPersisted)
 - [x] `HP-OIDC-009` Identity by issuer+subject — WP14 — evidence: I, E — ✅ tested: identity by iss+sub, no email merge, link via session/invite/admin (internal/oidc/oidc_test.go (mock IdP) TestNoEmailMerge, TestLinking)
 - [x] `HP-OIDC-010` Provisioning modes — WP14 — evidence: I — ✅ tested: preprovisioned default, JIT restrictions, no roles without mapping (internal/oidc/oidc_test.go (mock IdP) TestJITAndGroupSync)
 - [x] `HP-OIDC-011` Group mapping — WP14 — evidence: U, I — ✅ tested: allowlisted mapping replaced per login, manual kept, last-admin guard (internal/oidc/oidc_test.go (mock IdP) TestJITAndGroupSync, TestSyncKeepsLastAdmin)

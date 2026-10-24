@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -670,5 +671,76 @@ func TestDisabled(t *testing.T) {
 	must(t, f.s.ReadDB().QueryRowContext(f.ctx, `SELECT count(*) FROM audit_events WHERE action = 'operator.login.failed'`).Scan(&n))
 	if n == 0 {
 		t.Fatal("denied SSO login not audited")
+	}
+}
+
+// HP-OIDC-008: after an SSO login no access, refresh or ID token is stored anywhere: not in any table and not in the
+// database or WAL files on disk.
+func TestTokensNotPersisted(t *testing.T) {
+	f := newFx(t)
+	op := f.operator("alice@corp.example", opauth.RoleApprover)
+	must(t, f.svc.LinkIdentity(f.ctx, admin, op.ID, f.prov.ID, "user-1"))
+	if _, err := f.flow(PurposeLogin, nil); err != nil {
+		t.Fatal(err)
+	}
+	access, refresh, id := f.idp.LastTokens()
+	if access == "" || refresh == "" || id == "" {
+		t.Fatal("mock IdP issued no tokens")
+	}
+	// The ID token's signature part is unique to this token; its claims segment could legitimately overlap stored
+	// claims (subject, issuer), so search for the whole token and the signature.
+	sig := id[strings.LastIndex(id, ".")+1:]
+	needles := map[string]string{"access token": access, "refresh token": refresh, "id token": id, "id token signature": sig}
+	tables, err := f.s.ReadDB().QueryContext(f.ctx, `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+	must(t, err)
+	var names []string
+	for tables.Next() {
+		var n string
+		must(t, tables.Scan(&n))
+		names = append(names, n)
+	}
+	must(t, tables.Close())
+	var found []string
+	for _, table := range names {
+		rows, err := f.s.ReadDB().QueryContext(f.ctx, `SELECT * FROM "`+table+`"`) //nolint:gosec // names from sqlite_master
+		must(t, err)
+		cols, _ := rows.Columns()
+		for rows.Next() {
+			vals := make([]any, len(cols))
+			ptrs := make([]any, len(cols))
+			for i := range vals {
+				ptrs[i] = &vals[i]
+			}
+			must(t, rows.Scan(ptrs...))
+			for i, v := range vals {
+				var s string
+				switch x := v.(type) {
+				case string:
+					s = x
+				case []byte:
+					s = string(x)
+				}
+				for what, needle := range needles {
+					if s != "" && strings.Contains(s, needle) {
+						found = append(found, what+" in "+table+"."+cols[i])
+					}
+				}
+			}
+		}
+		must(t, rows.Close())
+	}
+	if len(found) > 0 {
+		t.Fatalf("tokens stored: %v", found)
+	}
+	for _, name := range []string{store.DBFile, store.DBFile + "-wal"} {
+		raw, err := os.ReadFile(f.s.Path(name))
+		if err != nil {
+			continue
+		}
+		for what, needle := range needles {
+			if bytes.Contains(raw, []byte(needle)) {
+				t.Fatalf("%s found in %s on disk", what, name)
+			}
+		}
 	}
 }
