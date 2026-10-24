@@ -64,6 +64,27 @@ func (q *Queries) CountGroupMembers(ctx context.Context, groupID string) (int64,
 	return count, err
 }
 
+const deleteAgent = `-- name: DeleteAgent :execrows
+UPDATE agents SET enabled = 0, deleted_name = name, name = '~' || id, deleted_at = ?1, deleted_by = ?2,
+  disabled_at = coalesce(disabled_at, ?1), disabled_by = coalesce(disabled_by, ?2),
+  version = version + 1, updated_at = ?1, updated_by = ?2
+WHERE id = ?3 AND deleted_at IS NULL
+`
+
+type DeleteAgentParams struct {
+	Now   sql.NullInt64
+	Actor sql.NullString
+	ID    string
+}
+
+func (q *Queries) DeleteAgent(ctx context.Context, arg DeleteAgentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteAgent, arg.Now, arg.Actor, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteAgentGroups = `-- name: DeleteAgentGroups :exec
 DELETE FROM agent_groups WHERE agent_id = ?
 `
@@ -74,7 +95,7 @@ func (q *Queries) DeleteAgentGroups(ctx context.Context, agentID string) error {
 }
 
 const getAgent = `-- name: GetAgent :one
-SELECT id, name, description, enabled, source_cidrs_json, version, created_at, created_by, updated_at, updated_by, disabled_at, disabled_by FROM agents WHERE id = ?
+SELECT id, name, description, enabled, source_cidrs_json, version, created_at, created_by, updated_at, updated_by, disabled_at, disabled_by, deleted_at, deleted_by, deleted_name FROM agents WHERE id = ?
 `
 
 func (q *Queries) GetAgent(ctx context.Context, id string) (Agent, error) {
@@ -93,12 +114,15 @@ func (q *Queries) GetAgent(ctx context.Context, id string) (Agent, error) {
 		&i.UpdatedBy,
 		&i.DisabledAt,
 		&i.DisabledBy,
+		&i.DeletedAt,
+		&i.DeletedBy,
+		&i.DeletedName,
 	)
 	return i, err
 }
 
 const getAgentByName = `-- name: GetAgentByName :one
-SELECT id, name, description, enabled, source_cidrs_json, version, created_at, created_by, updated_at, updated_by, disabled_at, disabled_by FROM agents WHERE name = ?
+SELECT id, name, description, enabled, source_cidrs_json, version, created_at, created_by, updated_at, updated_by, disabled_at, disabled_by, deleted_at, deleted_by, deleted_name FROM agents WHERE name = ?
 `
 
 func (q *Queries) GetAgentByName(ctx context.Context, name string) (Agent, error) {
@@ -117,6 +141,9 @@ func (q *Queries) GetAgentByName(ctx context.Context, name string) (Agent, error
 		&i.UpdatedBy,
 		&i.DisabledAt,
 		&i.DisabledBy,
+		&i.DeletedAt,
+		&i.DeletedBy,
+		&i.DeletedName,
 	)
 	return i, err
 }
@@ -321,7 +348,7 @@ func (q *Queries) ListAgentKeys(ctx context.Context, agentID string) ([]AgentKey
 }
 
 const listAgents = `-- name: ListAgents :many
-SELECT id, name, description, enabled, source_cidrs_json, version, created_at, created_by, updated_at, updated_by, disabled_at, disabled_by FROM agents ORDER BY name
+SELECT id, name, description, enabled, source_cidrs_json, version, created_at, created_by, updated_at, updated_by, disabled_at, disabled_by, deleted_at, deleted_by, deleted_name FROM agents WHERE deleted_at IS NULL ORDER BY name
 `
 
 func (q *Queries) ListAgents(ctx context.Context) ([]Agent, error) {
@@ -346,6 +373,52 @@ func (q *Queries) ListAgents(ctx context.Context) ([]Agent, error) {
 			&i.UpdatedBy,
 			&i.DisabledAt,
 			&i.DisabledBy,
+			&i.DeletedAt,
+			&i.DeletedBy,
+			&i.DeletedName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAgentsWithDeleted = `-- name: ListAgentsWithDeleted :many
+SELECT id, name, description, enabled, source_cidrs_json, version, created_at, created_by, updated_at, updated_by, disabled_at, disabled_by, deleted_at, deleted_by, deleted_name FROM agents ORDER BY deleted_at IS NOT NULL, name
+`
+
+func (q *Queries) ListAgentsWithDeleted(ctx context.Context) ([]Agent, error) {
+	rows, err := q.db.QueryContext(ctx, listAgentsWithDeleted)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Agent{}
+	for rows.Next() {
+		var i Agent
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.Enabled,
+			&i.SourceCidrsJson,
+			&i.Version,
+			&i.CreatedAt,
+			&i.CreatedBy,
+			&i.UpdatedAt,
+			&i.UpdatedBy,
+			&i.DisabledAt,
+			&i.DisabledBy,
+			&i.DeletedAt,
+			&i.DeletedBy,
+			&i.DeletedName,
 		); err != nil {
 			return nil, err
 		}
@@ -417,6 +490,41 @@ func (q *Queries) RevokeAgentKey(ctx context.Context, arg RevokeAgentKeyParams) 
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const revokeAllAgentKeys = `-- name: RevokeAllAgentKeys :many
+UPDATE agent_keys SET state = 'revoked', revoked_at = ?1, revoked_by = ?2
+WHERE agent_id = ?3 AND state = 'active'
+RETURNING id
+`
+
+type RevokeAllAgentKeysParams struct {
+	Now     sql.NullInt64
+	Actor   sql.NullString
+	AgentID string
+}
+
+func (q *Queries) RevokeAllAgentKeys(ctx context.Context, arg RevokeAllAgentKeysParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, revokeAllAgentKeys, arg.Now, arg.Actor, arg.AgentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const setAgentEnabled = `-- name: SetAgentEnabled :execrows

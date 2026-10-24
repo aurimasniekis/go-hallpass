@@ -50,7 +50,12 @@ type Agent struct {
 	UpdatedAt   time.Time         `json:"updated_at"`
 	UpdatedBy   string            `json:"updated_by"`
 	DisabledAt  *time.Time        `json:"disabled_at,omitempty"`
+	// DeletedAt is set for a deleted agent, which is kept only so history can name it (Name is its former name).
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
+
+// Deleted reports whether the agent was deleted.
+func (a *Agent) Deleted() bool { return a.DeletedAt != nil }
 
 // Key is an agent public key.
 type Key struct {
@@ -243,6 +248,9 @@ func (svc *Service) setGroupsLabels(ctx context.Context, tx *store.Tx, agentID s
 // Update changes agent attributes.
 func (svc *Service) Update(ctx context.Context, actor audit.Actor, id string, in UpdateInput) (*Agent, error) {
 	cur, err := svc.Get(ctx, id)
+	if err == nil && cur.Deleted() {
+		err = errAgentNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -325,8 +333,8 @@ func (svc *Service) SetEnabled(ctx context.Context, actor audit.Actor, id string
 		return nil, apperr.New(apperr.CodeInvalid, "reason too long")
 	}
 	err := svc.s.W().TxNamed(ctx, "agents.set_enabled", func(tx *store.Tx) error {
-		if _, err := tx.Q.GetAgent(ctx, id); errors.Is(err, sql.ErrNoRows) {
-			return apperr.New(apperr.CodeNotFound, "agent not found")
+		if r, err := tx.Q.GetAgent(ctx, id); errors.Is(err, sql.ErrNoRows) || (err == nil && r.DeletedAt.Valid) {
+			return errAgentNotFound
 		} else if err != nil {
 			return err
 		}
@@ -366,6 +374,55 @@ func (svc *Service) SetEnabled(ctx context.Context, actor audit.Actor, id string
 	return svc.Get(ctx, id)
 }
 
+var errAgentNotFound = apperr.New(apperr.CodeNotFound, "agent not found")
+
+// Delete deletes an agent: it is disabled (disable hooks end its grants, requests and connections), every key is
+// revoked and stays unusable (HP-AGT-003), and it disappears from lists and policy. The row stays so history can name
+// it, and the name becomes free for reuse.
+func (svc *Service) Delete(ctx context.Context, actor audit.Actor, id string) error {
+	return svc.s.W().TxNamed(ctx, "agents.delete", func(tx *store.Tx) error {
+		r, err := tx.Q.GetAgent(ctx, id)
+		if errors.Is(err, sql.ErrNoRows) || (err == nil && r.DeletedAt.Valid) {
+			return errAgentNotFound
+		} else if err != nil {
+			return err
+		}
+		now := sql.NullInt64{Int64: tx.NowMicros(), Valid: true}
+		by := sql.NullString{String: actorRef(actor), Valid: true}
+		if _, err := tx.Q.DeleteAgent(ctx, db.DeleteAgentParams{Now: now, Actor: by, ID: id}); err != nil {
+			return err
+		}
+		keys, err := tx.Q.RevokeAllAgentKeys(ctx, db.RevokeAllAgentKeysParams{Now: now, Actor: by, AgentID: id})
+		if err != nil {
+			return err
+		}
+		svc.mu.RLock()
+		hooks := append([]TxHook(nil), svc.disableHook...)
+		svc.mu.RUnlock()
+		for _, h := range hooks {
+			if err := h(ctx, tx, id, "", "agent_disabled"); err != nil {
+				return err
+			}
+		}
+		if err := svc.bumpPolicy(ctx, tx); err != nil {
+			return err
+		}
+		_, err = svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "agent.deleted", Target: audit.Target{Type: "agent", ID: id},
+			Details: map[string]any{"name": r.Name, "revoked_keys": keys}})
+		svc.afterCommit(tx, eventbus.TopicAgentDisabled, id)
+		return err
+	})
+}
+
+// ListWithDeleted also returns deleted agents, for naming them in history.
+func (svc *Service) ListWithDeleted(ctx context.Context) ([]*Agent, error) {
+	rows, err := svc.s.R().ListAgentsWithDeleted(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return svc.list(ctx, rows)
+}
+
 // AddKey registers a new public key for an agent (HP-AGT-002/003).
 func (svc *Service) AddKey(ctx context.Context, actor audit.Actor, agentID, line string) (*Key, error) {
 	pk, err := ParseAgentKey(line)
@@ -374,8 +431,8 @@ func (svc *Service) AddKey(ctx context.Context, actor audit.Actor, agentID, line
 	}
 	var keyID string
 	err = svc.s.W().TxNamed(ctx, "agents.add_key", func(tx *store.Tx) error {
-		if _, err := tx.Q.GetAgent(ctx, agentID); errors.Is(err, sql.ErrNoRows) {
-			return apperr.New(apperr.CodeNotFound, "agent not found")
+		if r, err := tx.Q.GetAgent(ctx, agentID); errors.Is(err, sql.ErrNoRows) || (err == nil && r.DeletedAt.Valid) {
+			return errAgentNotFound
 		} else if err != nil {
 			return err
 		}
@@ -530,12 +587,16 @@ func (svc *Service) Get(ctx context.Context, id string) (*Agent, error) {
 	return a, nil
 }
 
-// List returns all agents with groups and labels.
+// List returns all agents that are not deleted, with groups and labels.
 func (svc *Service) List(ctx context.Context) ([]*Agent, error) {
 	rows, err := svc.s.R().ListAgents(ctx)
 	if err != nil {
 		return nil, err
 	}
+	return svc.list(ctx, rows)
+}
+
+func (svc *Service) list(ctx context.Context, rows []db.Agent) ([]*Agent, error) {
 	gs, err := svc.s.R().ListAllAgentGroups(ctx)
 	if err != nil {
 		return nil, err
@@ -660,6 +721,10 @@ func agentFromRow(r db.Agent) *Agent {
 	if r.DisabledAt.Valid {
 		t := time.UnixMicro(r.DisabledAt.Int64).UTC()
 		a.DisabledAt = &t
+	}
+	if r.DeletedAt.Valid {
+		t := time.UnixMicro(r.DeletedAt.Int64).UTC()
+		a.DeletedAt, a.Name = &t, r.DeletedName.String
 	}
 	return a
 }

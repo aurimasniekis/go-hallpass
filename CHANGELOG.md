@@ -26,7 +26,8 @@ agent JSON schemas, the recording format and the database schema).
   transfer.
 - The session timeline describes git operations, file operations and partial approvals in words.
 - **Disable, enable and delete** servers, git remotes, roles and access profiles from the console and the API
-  (`POST …/disable`, `POST …/enable`, `DELETE`). Disabling ends active access and cancels pending requests. Deleting
+  (`POST …/disable`, `POST …/enable`, `DELETE`), and delete agents (`DELETE /api/v1/agents/{id}`; their keys stay
+  revoked for good). Disabling ends active access and cancels pending requests. Deleting
   also revokes the login keys and frees the name; the record stays so past sessions and the audit log can still name
   it. Deleting a server or git remote needs its name typed and takes its roles with it.
 - **API tokens** for Terraform and scripts (**Administration → API tokens**, `/api/v1/api-tokens`): bearer tokens

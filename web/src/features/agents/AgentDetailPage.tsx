@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
-import { Button, Card, Input, Space } from 'antd';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { Alert, Button, Card, Input, Space } from 'antd';
 import { useState } from 'react';
 
 import { api } from '../../api/client';
@@ -28,6 +28,7 @@ export function AgentDetailPage({ id }: { id: string }) {
   const query = useQuery({ ...agentQueryOptions(id), enabled: can('inventory.read') });
   const [editing, setEditing] = useState(false);
   const [reason, setReason] = useState('');
+  const navigate = useNavigate();
   const canWrite = can('inventory.write');
 
   const back = <Link to="/agents">← Agents</Link>;
@@ -70,7 +71,7 @@ export function AgentDetailPage({ id }: { id: string }) {
         title={agent.name}
         description={<EnabledBadge enabled={agent.enabled} />}
         extra={
-          canWrite ? (
+          canWrite && !agent.deleted_at ? (
             <Space wrap>
               <Button
                 onClick={() => {
@@ -121,11 +122,44 @@ export function AgentDetailPage({ id }: { id: string }) {
                   onSuccess={() => void refresh()}
                 />
               )}
+              <ConfirmAction
+                label="Delete"
+                title={`Delete agent ${agent.name}`}
+                confirmLabel="Delete agent"
+                typedConfirmation={agent.name}
+                description={
+                  <>
+                    <p>
+                      Its access ends, pending requests are canceled and every key is revoked. A revoked key
+                      can never be registered again, so a new agent needs a new key.
+                    </p>
+                    <p style={{ margin: 0 }}>
+                      This cannot be undone. Past sessions and the audit log keep its name, and the name can
+                      be used again.
+                    </p>
+                  </>
+                }
+                onConfirm={async () => {
+                  await api.call('delete', '/api/v1/agents/{id}', { path: { id } });
+                }}
+                onSuccess={() => {
+                  void navigate({ to: '/agents' });
+                  void refresh();
+                }}
+              />
             </Space>
           ) : null
         }
       />
       <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+        {agent.deleted_at ? (
+          <Alert
+            type="warning"
+            showIcon
+            title={`Deleted ${formatDateTime(agent.deleted_at)}`}
+            description="Kept only so past sessions and the audit log can name it. It cannot authenticate."
+          />
+        ) : null}
         <Card size="small" title="Details">
           <KeyValueGrid
             items={[

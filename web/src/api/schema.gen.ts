@@ -557,7 +557,8 @@ export interface paths {
         get: operations["getAgent"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete an agent: its access ends, its keys are revoked for good, and its pending requests are canceled. The record stays for history (deleted_at set) and the name can be reused. */
+        delete: operations["deleteAgent"];
         options?: never;
         head?: never;
         patch: operations["updateAgent"];
@@ -2147,6 +2148,8 @@ export interface components {
             updated_at: components["schemas"]["Timestamp"];
             updated_by?: string;
             disabled_at?: components["schemas"]["Timestamp"];
+            /** @description Set when the agent was deleted; name is then the name it had. */
+            deleted_at?: components["schemas"]["Timestamp"];
         };
         AgentDetail: components["schemas"]["Agent"] & {
             keys: components["schemas"]["AgentKey"][];
@@ -3776,7 +3779,10 @@ export interface operations {
     };
     listAgents: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Also return deleted agents (deleted_at set), for naming them in history. */
+                include_deleted?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3840,6 +3846,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AgentDetail"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };

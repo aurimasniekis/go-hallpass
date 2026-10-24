@@ -482,6 +482,8 @@ paths:
       tags: [agents]
       x-permission: inventory.read
       x-token: true
+      parameters:
+        - {name: include_deleted, in: query, schema: {type: boolean}, description: "Also return deleted agents (deleted_at set), for naming them in history."}
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Agent"}}}}}}}
     post:
@@ -517,6 +519,19 @@ paths:
         content: {application/json: {schema: {$ref: "#/components/schemas/AgentPatch"}}}
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Agent"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: deleteAgent
+      tags: [agents]
+      x-permission: inventory.write
+      x-token: true
+      x-reauth: true
+      summary: >-
+        Delete an agent: its access ends, its keys are revoked for good, and its pending requests are canceled. The
+        record stays for history (deleted_at set) and the name can be reused.
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "204": {description: deleted}
         default: {$ref: "#/components/responses/Problem"}
   /api/v1/agents/{id}/disable:
     post:
@@ -2084,6 +2099,7 @@ components:
         updated_at: {$ref: "#/components/schemas/Timestamp"}
         updated_by: {type: string}
         disabled_at: {$ref: "#/components/schemas/Timestamp"}
+        deleted_at: {allOf: [{$ref: "#/components/schemas/Timestamp"}], description: "Set when the agent was deleted; name is then the name it had."}
     AgentDetail:
       allOf:
         - {$ref: "#/components/schemas/Agent"}

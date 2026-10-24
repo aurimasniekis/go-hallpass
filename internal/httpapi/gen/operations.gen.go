@@ -17,6 +17,7 @@ var Operations = []Operation{
 	{ID: "createAgent", Method: "POST", Path: "/api/v1/agents", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: true, Stream: false, Redirect: false, Token: true, Tags: []string{"agents"}},
 	{ID: "getAgent", Method: "GET", Path: "/api/v1/agents/{id}", Permission: "inventory.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"agents"}},
 	{ID: "updateAgent", Method: "PATCH", Path: "/api/v1/agents/{id}", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"agents"}},
+	{ID: "deleteAgent", Method: "DELETE", Path: "/api/v1/agents/{id}", Permission: "inventory.write", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"agents"}},
 	{ID: "disableAgent", Method: "POST", Path: "/api/v1/agents/{id}/disable", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: true, Stream: false, Redirect: false, Token: true, Tags: []string{"agents"}},
 	{ID: "getAgentEffectiveAccess", Method: "GET", Path: "/api/v1/agents/{id}/effective-access", Permission: "policy.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"agents", "policy"}},
 	{ID: "enableAgent", Method: "POST", Path: "/api/v1/agents/{id}/enable", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"agents"}},
@@ -190,6 +191,8 @@ type Server interface {
 	GetAgent(c *Call) (*Result, error)
 	// UpdateAgent PATCH /api/v1/agents/{id} (permission inventory.write)
 	UpdateAgent(c *Call) (*Result, error)
+	// DeleteAgent DELETE /api/v1/agents/{id} (permission inventory.write)
+	DeleteAgent(c *Call) (*Result, error)
 	// DisableAgent POST /api/v1/agents/{id}/disable (permission inventory.write)
 	DisableAgent(c *Call) (*Result, error)
 	// GetAgentEffectiveAccess GET /api/v1/agents/{id}/effective-access (permission policy.read)
@@ -494,6 +497,7 @@ func Handlers(s Server) map[string]Handler {
 		"createAgent":                   s.CreateAgent,
 		"getAgent":                      s.GetAgent,
 		"updateAgent":                   s.UpdateAgent,
+		"deleteAgent":                   s.DeleteAgent,
 		"disableAgent":                  s.DisableAgent,
 		"getAgentEffectiveAccess":       s.GetAgentEffectiveAccess,
 		"enableAgent":                   s.EnableAgent,

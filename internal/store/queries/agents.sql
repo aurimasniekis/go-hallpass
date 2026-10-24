@@ -9,7 +9,21 @@ SELECT * FROM agents WHERE id = ?;
 SELECT * FROM agents WHERE name = ?;
 
 -- name: ListAgents :many
-SELECT * FROM agents ORDER BY name;
+SELECT * FROM agents WHERE deleted_at IS NULL ORDER BY name;
+
+-- name: ListAgentsWithDeleted :many
+SELECT * FROM agents ORDER BY deleted_at IS NOT NULL, name;
+
+-- name: DeleteAgent :execrows
+UPDATE agents SET enabled = 0, deleted_name = name, name = '~' || id, deleted_at = sqlc.arg(now), deleted_by = sqlc.arg(actor),
+  disabled_at = coalesce(disabled_at, sqlc.arg(now)), disabled_by = coalesce(disabled_by, sqlc.arg(actor)),
+  version = version + 1, updated_at = sqlc.arg(now), updated_by = sqlc.arg(actor)
+WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
+
+-- name: RevokeAllAgentKeys :many
+UPDATE agent_keys SET state = 'revoked', revoked_at = sqlc.arg(now), revoked_by = sqlc.arg(actor)
+WHERE agent_id = sqlc.arg(agent_id) AND state = 'active'
+RETURNING id;
 
 -- name: UpdateAgent :execrows
 UPDATE agents SET name = ?, description = ?, source_cidrs_json = ?, version = version + 1, updated_at = ?, updated_by = ?

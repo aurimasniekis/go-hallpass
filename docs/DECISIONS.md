@@ -910,6 +910,10 @@
   others reference).
 - **Consequences:** policy rules that select roles by name match a new role with a reused name; rules that select by ID
   keep pointing at the deleted one and match nothing. A deletion cannot be undone.
+- **Agents (added 2026-10-24, migration 0026):** `DELETE /agents/{id}` (recent authentication; the console needs the
+  name typed) works the same way: the agent is disabled through its disable hooks, every key is revoked, the name
+  becomes a tombstone with the former name in `deleted_name`, and `GET /agents?include_deleted=true` names it in
+  history. Revoked keys stay globally unique tombstones (HP-AGT-003), so a recreated agent needs a new key.
 
 ### ADR-0052 — API tokens for automation (security-relevant change)
 

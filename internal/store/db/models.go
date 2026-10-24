@@ -65,6 +65,9 @@ type Agent struct {
 	UpdatedBy       string
 	DisabledAt      sql.NullInt64
 	DisabledBy      sql.NullString
+	DeletedAt       sql.NullInt64
+	DeletedBy       sql.NullString
+	DeletedName     sql.NullString
 }
 
 type AgentGroup struct {

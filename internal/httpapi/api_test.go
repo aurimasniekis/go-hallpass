@@ -1298,6 +1298,19 @@ func TestDisableAndDeleteAPI(t *testing.T) {
 		t.Fatalf("include_deleted: %+v", all)
 	}
 	c.ok("createServer", 201, "POST", "/api/v1/servers", map[string]any{"kind": "git", "alias": "github", "address": "10.1.2.40"})
+
+	var agent struct{ ID string }
+	c.ok("createAgent", 201, "POST", "/api/v1/agents", map[string]any{"name": "ci-bot"}).json(t, &agent)
+	c.ok("deleteAgent", 204, "DELETE", "/api/v1/agents/"+agent.ID, nil)
+	var agents struct{ Items []struct{ Name string } }
+	c.ok("listAgents", 200, "GET", "/api/v1/agents", nil).json(t, &agents)
+	if len(agents.Items) != 0 {
+		t.Fatalf("deleted agent listed: %+v", agents)
+	}
+	c.ok("listAgents", 200, "GET", "/api/v1/agents?include_deleted=true", nil).json(t, &agents)
+	if len(agents.Items) != 1 || agents.Items[0].Name != "ci-bot" {
+		t.Fatalf("include_deleted: %+v", agents)
+	}
 }
 
 // bearerDo sends a request with an automation token only: no cookie, no Origin, no CSRF token.

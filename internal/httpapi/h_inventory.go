@@ -15,7 +15,11 @@ import (
 // ---- agents
 
 func (s *Server) ListAgents(c *gen.Call) (*gen.Result, error) {
-	v, err := s.d.Agents.List(c.R.Context())
+	load := s.d.Agents.List
+	if c.R.URL.Query().Get("include_deleted") == "true" {
+		load = s.d.Agents.ListWithDeleted
+	}
+	v, err := load(c.R.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -84,6 +88,13 @@ func (s *Server) DisableAgent(c *gen.Call) (*gen.Result, error) {
 		return nil, err
 	}
 	return ok(a)
+}
+
+func (s *Server) DeleteAgent(c *gen.Call) (*gen.Result, error) {
+	if err := s.d.Agents.Delete(c.R.Context(), actor(c), c.R.PathValue("id")); err != nil {
+		return nil, err
+	}
+	return noContent()
 }
 
 func (s *Server) EnableAgent(c *gen.Call) (*gen.Result, error) {

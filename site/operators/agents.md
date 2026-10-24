@@ -34,6 +34,15 @@ it. Use it to check a new rule before telling the agent to try.
 
 If you suspect an agent is compromised, follow the [incident runbook](/operators/incidents#suspected-agent-compromise).
 
+## Disable or delete an agent
+
+**Disable** (on the agent's page) stops it for now: it can no longer sign in or request access, its live sessions end
+within 5 seconds, and **Enable** brings it back with its keys.
+
+**Delete** is for good, and asks you to type the agent's name. It does what disabling does, revokes every key and
+cancels pending requests. A revoked key can never be registered again, on any agent, so a replacement agent needs a
+new key. The name can be used again, and past sessions and the audit log still show the deleted agent.
+
 ## Hand the agent its configuration
 
 Give the agent's owner:

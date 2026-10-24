@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 
 import {
-  agentsQueryOptions,
+  agentNamesQueryOptions,
   operatorsQueryOptions,
   roleQueryOptions,
   serverNamesQueryOptions,
@@ -26,12 +26,19 @@ function IdFallback({ id }: { id: string }) {
 
 export function AgentName({ id, link = true }: { id: string | null | undefined; link?: boolean }) {
   const { can } = usePermissions();
-  const agents = useQuery({ ...agentsQueryOptions(), enabled: can('inventory.read') });
+  const agents = useQuery({ ...agentNamesQueryOptions(), enabled: can('inventory.read') });
   if (!id) {
     return <>—</>;
   }
-  const name = agents.data?.items.find((a) => a.id === id)?.name;
-  const content = name ? <span title={id}>{name}</span> : <IdFallback id={id} />;
+  const agent = agents.data?.items.find((a) => a.id === id);
+  const content = agent ? (
+    <span title={id}>
+      {agent.name}
+      {agent.deleted_at ? <span className="hp-legend"> (deleted)</span> : null}
+    </span>
+  ) : (
+    <IdFallback id={id} />
+  );
   return link && can('inventory.read') ? (
     <Link to="/agents/$id" params={{ id }}>
       {content}

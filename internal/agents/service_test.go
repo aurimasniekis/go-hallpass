@@ -218,3 +218,58 @@ func TestAuditTrail(t *testing.T) {
 		t.Fatalf("%+v %v", res, err)
 	}
 }
+
+// Deleting an agent ends its access through the disable hooks, revokes its keys for good, hides it, refuses further
+// changes and frees the name; history still reads it by ID under its former name.
+func TestDelete(t *testing.T) {
+	svc, _, _ := newSvc(t)
+	ctx := context.Background()
+	var disabled []string
+	svc.OnDisable(func(_ context.Context, _ *store.Tx, agentID, _, reason string) error {
+		disabled = append(disabled, agentID+":"+reason)
+		return nil
+	})
+	k := sshkeys.Ed25519(t)
+	a, err := svc.Create(ctx, admin, CreateInput{Name: "ci-bot", PublicKeys: []string{k.AuthorizedLine("ci")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Delete(ctx, admin, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Delete(ctx, admin, a.ID); !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("second delete: %v", err)
+	}
+	if len(disabled) != 1 || disabled[0] != a.ID+":agent_disabled" {
+		t.Fatalf("disable hooks: %v", disabled)
+	}
+	got, err := svc.Get(ctx, a.ID)
+	if err != nil || !got.Deleted() || got.Name != "ci-bot" || got.Enabled {
+		t.Fatalf("deleted agent: %+v %v", got, err)
+	}
+	if keys, _ := svc.Keys(ctx, a.ID); len(keys) != 1 || keys[0].State != "revoked" {
+		t.Fatalf("keys: %+v", keys)
+	}
+	if list, _ := svc.List(ctx); len(list) != 0 {
+		t.Fatalf("deleted agent listed: %+v", list)
+	}
+	if all, _ := svc.ListWithDeleted(ctx); len(all) != 1 || all[0].Name != "ci-bot" {
+		t.Fatalf("with deleted: %+v", all)
+	}
+	if _, err := svc.Update(ctx, admin, a.ID, UpdateInput{Version: got.Version, Description: ptrTo("x")}); !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("update of a deleted agent: %v", err)
+	}
+	if _, err := svc.SetEnabled(ctx, admin, a.ID, true, ""); !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("enabling a deleted agent: %v", err)
+	}
+	if _, err := svc.AddKey(ctx, admin, a.ID, sshkeys.Ed25519(t).AuthorizedLine("")); !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("key for a deleted agent: %v", err)
+	}
+	// The name is free again; the revoked key stays unusable (HP-AGT-003).
+	if _, err := svc.Create(ctx, admin, CreateInput{Name: "ci-bot", PublicKeys: []string{k.AuthorizedLine("ci")}}); !errors.Is(err, apperr.ErrAlreadyExists) {
+		t.Fatalf("revoked key accepted again: %v", err)
+	}
+	if _, err := svc.Create(ctx, admin, CreateInput{Name: "ci-bot"}); err != nil {
+		t.Fatalf("name not reusable: %v", err)
+	}
+}

@@ -130,6 +130,13 @@ export const agentsQueryOptions = () =>
     queryFn: ({ signal }) => api.call('get', '/api/v1/agents', { signal }),
   });
 
+/** Every agent including deleted ones, only for naming agents in history (sessions, requests, audit). */
+export const agentNamesQueryOptions = () =>
+  queryOptions({
+    queryKey: [...qk.agents, { include_deleted: true }] as const,
+    queryFn: ({ signal }) => api.call('get', '/api/v1/agents', { query: { include_deleted: true }, signal }),
+  });
+
 export const agentQueryOptions = (id: string) =>
   queryOptions({
     queryKey: qk.agent(id),
