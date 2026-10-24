@@ -237,6 +237,70 @@ func TestPreviewAndWhatIf(t *testing.T) {
 	}
 }
 
+func TestPreviewChange(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	saved, err := f.svc.CreateRule(ctx, admin, sreRule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	level := func(snap *Snapshot) *Decision {
+		d := snap.Evaluate(f.agent.ID, f.srv.ID, f.role.ID)
+		return &d
+	}
+
+	// A new rule (no ID) is added next to the saved ones; deny overrides the saved allow.
+	deny := sreRule()
+	deny.Name, deny.Effect, deny.Level = "block", EffectDeny, ""
+	snap, err := f.svc.PreviewChange(ctx, &deny, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := level(snap); !d.Denied || d.DecidingRule != "pol_preview" {
+		t.Fatalf("added deny: %+v", d)
+	}
+
+	// Editing the saved rule replaces it instead of adding a second one.
+	edit := *saved
+	edit.Level, edit.AutoMaxDuration = LevelAutoApprove, 30*time.Minute
+	if snap, err = f.svc.PreviewChange(ctx, &edit, ""); err != nil {
+		t.Fatal(err)
+	}
+	if d := level(snap); d.Level != LevelAutoApprove || d.DecidingRule != saved.ID {
+		t.Fatalf("edited rule: %+v", d)
+	}
+
+	// Removing the only allow rule hides the role again.
+	if snap, err = f.svc.PreviewChange(ctx, nil, saved.ID); err != nil {
+		t.Fatal(err)
+	}
+	if d := level(snap); d.Visible() {
+		t.Fatalf("removed rule still grants: %+v", d)
+	}
+
+	// The proposed rule is validated like a saved one, and nothing is ever saved.
+	bad := sreRule()
+	bad.Subjects = SubjectSelector{}
+	if _, err := f.svc.PreviewChange(ctx, &bad, ""); err == nil {
+		t.Fatal("an empty subject selector was accepted")
+	}
+	if rules, _ := f.svc.ListRules(ctx); len(rules) != 1 || rules[0].Level != LevelRequestable {
+		t.Fatalf("preview changed stored rules: %+v", rules)
+	}
+	if d := level(mustCurrent(t, f)); !d.Requestable() || d.DecidingRule != saved.ID {
+		t.Fatalf("preview leaked into the live snapshot: %+v", d)
+	}
+}
+
+func mustCurrent(t *testing.T, f *fixture) *Snapshot {
+	t.Helper()
+	snap, err := f.svc.Engine().Current(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return snap
+}
+
 func TestLockdownHidesEverything(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()
