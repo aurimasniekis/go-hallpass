@@ -8,6 +8,7 @@ import { api } from '../api/client';
 import { errorMessage } from '../api/errors';
 import type { Me } from '../api/types';
 import { ConnectionBanner } from '../ds/ConnectionBanner';
+import { Logo } from '../ds/Logo';
 import { watchScrollableRegions } from '../ds/scrollableRegions';
 import { LockdownBanner } from '../features/dashboard/LockdownControls';
 import { SseManager } from '../sse/manager';
@@ -105,7 +106,10 @@ export function AppShell({ me }: { me: Me }) {
         theme="light"
         style={{ borderRight: '1px solid var(--hp-color-border-secondary)' }}
       >
-        <div className="hp-shell-brand">Hallpass</div>
+        <div className="hp-shell-brand">
+          <Logo size={22} />
+          Hallpass
+        </div>
         <nav aria-label="Main">
           <Menu
             mode="inline"

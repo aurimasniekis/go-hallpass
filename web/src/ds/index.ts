@@ -14,6 +14,7 @@ export {
 } from './DataTable';
 export { Fingerprint } from './Fingerprint';
 export { KeyValueGrid, type KeyValueItem } from './KeyValueGrid';
+export { Logo } from './Logo';
 export { OneTimeSecret } from './OneTimeSecret';
 export { PageHeader } from './PageHeader';
 export { PermissionGate } from './PermissionGate';

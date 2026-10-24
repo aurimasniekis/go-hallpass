@@ -364,6 +364,11 @@
 }
 
 /* App shell */
+.hp-auth__brand {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
 .hp-shell-brand {
   display: flex;
   align-items: center;
