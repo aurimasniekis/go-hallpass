@@ -2,8 +2,9 @@
 
 ### Is HallPass ready for production?
 
-No. It is pre-release: no version has been tagged and the release gates are not met. See the
-[security model](/security/#release-status).
+Version 0.1.0 is the first release. It has not had a 24-hour soak test, benchmarks on reference hardware or an
+external review of its recording format and keyring. Decide against the [known limitations](/security/#release-status)
+and the [security model](/security/), and run it like a bastion host.
 
 ### Can the agent see the server's IP address or credentials?
 

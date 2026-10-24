@@ -10,10 +10,6 @@ with one [reference file](https://github.com/aurimasniekis/go-hallpass/blob/main
 The same files work in Claude Code and Codex. Installation details for every option are in
 [integrations/README.md](https://github.com/aurimasniekis/go-hallpass/blob/main/integrations/README.md).
 
-::: warning The repository is currently private
-Installing from GitHub needs access to `aurimasniekis/go-hallpass`. You can also install from a local checkout.
-:::
-
 ## Before you install
 
 The agent still needs its own SSH key registered in HallPass and a pinned gateway entry in `~/.ssh/config`

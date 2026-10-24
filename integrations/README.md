@@ -31,8 +31,7 @@ or in two steps:
 /plugin install hallpass@hallpass
 ```
 
-The repository is currently private, so installing needs GitHub access to it. To install from a local checkout, use
-`/plugin marketplace add /path/to/go-hallpass`.
+To install from a local checkout, use `/plugin marketplace add /path/to/go-hallpass`.
 
 Without the plugin system, copy the skill directory instead:
 

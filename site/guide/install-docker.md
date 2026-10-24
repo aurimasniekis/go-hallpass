@@ -15,15 +15,26 @@ all capabilities dropped and `no-new-privileges`. Container details are in
 
 ## 1. Get the image
 
-No release has been tagged yet, so no image is published. Build one locally from a checkout:
+Releases are published to Docker Hub as
+[`aurimasniekis/hallpass`](https://hub.docker.com/r/aurimasniekis/hallpass) and mirrored to
+`ghcr.io/aurimasniekis/go-hallpass` (same digest), for linux/amd64 and linux/arm64. Pick the latest version from the
+[releases page](https://github.com/aurimasniekis/go-hallpass/releases), pull it, and verify its build provenance
+before you run it:
 
 ```sh
-git clone https://github.com/aurimasniekis/go-hallpass.git && cd go-hallpass
-make image IMAGE=hallpass:local VERSION=v0.0.0-local
+export HP_VERSION=0.1.0
+docker pull aurimasniekis/hallpass:$HP_VERSION
+gh attestation verify oci://docker.io/aurimasniekis/hallpass:$HP_VERSION --repo aurimasniekis/go-hallpass
 ```
 
-Once releases exist, use `ghcr.io/aurimasniekis/go-hallpass:X.Y.Z` and verify it first
-(`gh attestation verify oci://ghcr.io/aurimasniekis/go-hallpass:X.Y.Z --repo aurimasniekis/go-hallpass`).
+You also need the `deploy/` directory (Compose file and example configuration) from the same release:
+
+```sh
+git clone --depth 1 --branch v$HP_VERSION https://github.com/aurimasniekis/go-hallpass.git && cd go-hallpass
+```
+
+To build the image yourself instead: `make image IMAGE=hallpass:local VERSION=v0.0.0-local`, then use
+`HP_IMAGE=hallpass HP_VERSION=local` below.
 
 ## 2. Create the master key (KEK)
 
@@ -34,7 +45,7 @@ container user (UID 65532) and be readable only by it.
 cd deploy
 install -d -m 0700 secrets
 sudo chown 65532:65532 secrets
-docker run --rm --user 65532:65532 -v "$PWD/secrets:/out" hallpass:local keys init-kek --out /out/hallpass.kek
+docker run --rm --user 65532:65532 -v "$PWD/secrets:/out" aurimasniekis/hallpass:$HP_VERSION keys init-kek --out /out/hallpass.kek
 sudo chmod 0400 secrets/hallpass.kek
 ```
 
@@ -67,7 +78,7 @@ Offline commands take the data-directory lock, so run them before the first star
 same volume, secret and configuration as the service:
 
 ```sh
-export HP_IMAGE=hallpass HP_VERSION=local HP_CONFIG_FILE=./hallpass.yaml
+export HP_CONFIG_FILE=./hallpass.yaml       # HP_VERSION from step 1
 docker compose run --rm hallpass config check
 docker compose run --rm hallpass migrate
 docker compose run --rm hallpass hostkey show --host center    # known_hosts line for agents

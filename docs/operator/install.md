@@ -3,9 +3,9 @@
 This page covers the standalone (systemd) install, the container image, and Docker Compose (PLAN §18.1, HP-OPS-007).
 Container details are in [container.md](container.md). Upgrades and rollback are in [upgrade.md](upgrade.md).
 
-> **Status.** Pre-release. The SSH front end, data plane, recording, the web console and REST API, `/readyz` and
-> metrics, first-administrator bootstrap (`hallpass admin bootstrap`) and `hallpass backup`/`restore` are implemented.
-> No version has been tagged yet, so the release artifacts below do not exist yet; build from source until then.
+> **Releases** are listed at <https://github.com/aurimasniekis/go-hallpass/releases>. The examples use `X.Y.Z`; the
+> current version is 0.1.0. Read the known limitations in [../evidence/v0.1.0/release-gates.md](../evidence/v0.1.0/release-gates.md)
+> before deploying.
 
 ## Release artifacts
 
@@ -13,18 +13,18 @@ Each `vX.Y.Z` release provides:
 
 | Artifact | Content |
 |---|---|
-| `hallpass_X.Y.Z_linux_amd64.tar.gz`, `…_linux_arm64.tar.gz`, `…_darwin_arm64.tar.gz` | Static binary (`CGO_ENABLED=0`), example config, systemd unit, changelog. darwin is for development only. |
+| `hallpass_X.Y.Z_linux_amd64.tar.gz`, `…_linux_arm64.tar.gz`, `…_darwin_arm64.tar.gz` | Static `hallpass` binary (`CGO_ENABLED=0`, web UI embedded), `hallpass-collector`, example config, systemd unit, changelog, LICENSE, NOTICE. darwin is for development only. |
 | `hallpass_X.Y.Z_binaries.spdx.json` | SBOM of the shipped binaries (syft, SPDX JSON). |
 | `hallpass_X.Y.Z_source.spdx.json` | SBOM of the source tree, including the web UI's locked dependencies. |
 | `SHA256SUMS` | SHA-256 of every archive and SBOM. |
-| `ghcr.io/<owner>/<repo>:X.Y.Z` | Multi-arch image (linux/amd64, linux/arm64), distroless, non-root. |
+| `aurimasniekis/hallpass:X.Y.Z` (Docker Hub), `ghcr.io/aurimasniekis/go-hallpass:X.Y.Z` | One multi-arch image (linux/amd64, linux/arm64) in both registries, distroless, non-root. |
 
 Every archive, SBOM and image carries a GitHub build provenance attestation. Verify before installing:
 
 ```sh
 sha256sum --check --ignore-missing SHA256SUMS
-gh attestation verify hallpass_X.Y.Z_linux_amd64.tar.gz --repo <owner>/<repo>
-gh attestation verify oci://ghcr.io/<owner>/<repo>:X.Y.Z --repo <owner>/<repo>
+gh attestation verify hallpass_X.Y.Z_linux_amd64.tar.gz --repo aurimasniekis/go-hallpass
+gh attestation verify oci://docker.io/aurimasniekis/hallpass:X.Y.Z --repo aurimasniekis/go-hallpass
 ```
 
 Install only artifacts whose checksum and attestation both verify.
@@ -133,8 +133,8 @@ Distribute the `known_hosts` line to agents ([../agent/guide.md](../agent/guide.
 ## Container
 
 ```sh
-docker pull ghcr.io/<owner>/<repo>:X.Y.Z
-docker run --rm ghcr.io/<owner>/<repo>:X.Y.Z version
+docker pull aurimasniekis/hallpass:X.Y.Z
+docker run --rm aurimasniekis/hallpass:X.Y.Z version
 ```
 
 The image runs as UID/GID `65532`, has no shell, keeps data in the `/var/lib/hallpass` volume, reads its configuration
@@ -149,7 +149,7 @@ secret, a read-only root filesystem, all capabilities dropped and `no-new-privil
 ```sh
 cd deploy
 install -d -m 0700 secrets
-docker run --rm --user 65532:65532 -v "$PWD/secrets:/out" ghcr.io/<owner>/<repo>:X.Y.Z \
+docker run --rm --user 65532:65532 -v "$PWD/secrets:/out" aurimasniekis/hallpass:X.Y.Z \
   keys init-kek --out /out/hallpass.kek       # or generate it with the release binary
 sudo chown 65532:65532 secrets/hallpass.kek && sudo chmod 0400 secrets/hallpass.kek
 cp examples/hallpass.container.yaml hallpass.yaml && $EDITOR hallpass.yaml

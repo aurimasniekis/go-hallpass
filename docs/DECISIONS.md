@@ -785,6 +785,26 @@
   - Clones made before the rewrite must re-clone or reset.
   - AGENTS.md's "no license" rule is replaced by "do not change the license without an operator decision".
 
+### ADR-0046 — Release 0.1.0 with known limitations; publish images to Docker Hub
+
+- **Status:** accepted (operator decision, 2026-10-24). Not a requirement change; flagged for operator review because
+  it removes the "pre-release, not production-ready" wording from user-facing docs.
+- **Context:** the operator asked to drop the pre-release notices, prepare release docs and publish container images
+  to Docker Hub as `aurimasniekis/hallpass`. RG-1, RG-5 and RG-6 do not pass (docs/evidence/v0.1.0/release-gates.md).
+- **Decision:**
+  - The first release is **0.1.0**, a pre-1.0 version under GOAL.md §8 ("pre-1.0 release candidates may ship with
+    explicit known-gaps notes"). It is not called stable or production-ready anywhere.
+  - The "pre-release" banners in README, site and install docs are replaced by a version note plus a short, factual
+    known-limitations list: no external crypto review (R-02 label, unchanged), no 24 h soak or reference-hardware
+    benchmarks, Slack/Telegram tested against recorded APIs only, Chromium-only E2E without visual snapshots.
+  - The release workflow pushes one multi-arch manifest to `docker.io/aurimasniekis/hallpass` (primary in docs) and
+    `ghcr.io/aurimasniekis/go-hallpass` (mirror), with a build provenance attestation in each registry. Docker Hub
+    needs the `DOCKERHUB_TOKEN` secret; without it the publish job fails before pushing.
+  - A tag without a matching CHANGELOG section fails the release; the draft release notes are that section.
+  - The release procedure is docs/RELEASING.md. Release evidence lives in `docs/evidence/vX.Y.Z/`.
+- **Open before tagging (operator):** R-08 (name/trademark check) and R-15 (versioning commitments) are marked as
+  blocking a public release and are not resolved by this ADR.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

@@ -67,4 +67,4 @@ Entries written after the latest anchor are not protected, so ship anchors often
 | Event | Data loss | Recovery time |
 |---|---|---|
 | Process or OS crash, power loss | None for committed transactions; recordings lose at most 250 ms in `group` mode, nothing in `strict` mode | Restart |
-| Host or disk loss | Since the last backup | Restore time. The target is 15 minutes for 10 GiB on reference hardware, which **has not been measured yet**. One local drill (non-reference hardware, 349 MiB) went from restore start to ready in about 7 seconds ([evidence](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/evidence/unreleased/recovery-drill.txt)). |
+| Host or disk loss | Since the last backup | Restore time. The target is 15 minutes for 10 GiB on reference hardware, which **has not been measured yet**. One local drill (non-reference hardware, 349 MiB) went from restore start to ready in about 7 seconds ([evidence](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/evidence/v0.1.0/recovery-drill.txt)). |

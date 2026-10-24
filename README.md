@@ -16,11 +16,11 @@
   <a href="docs/security-guarantees.md">Security guarantees</a>
 </p>
 
-> [!WARNING]
-> **Pre-release, not production-ready.** No version has been tagged and the release gates are not met: no 24-hour
-> soak, no external review of the recording format, and CI not yet green on GitHub. The current
-> evaluation is in [docs/evidence/unreleased/release-gates.md](docs/evidence/unreleased/release-gates.md), and
-> per-requirement status (implemented versus tested) in [docs/PLAN.md](docs/PLAN.md) §21.
+> [!NOTE]
+> **Version 0.1.0**, the first release. Before 1.0, interfaces may change between minor versions
+> ([docs/VERSIONING.md](docs/VERSIONING.md)). Known limitations: no external review of the recording format and keyring,
+> no 24-hour soak or reference-hardware benchmarks, and Slack/Telegram tested against recorded provider APIs only. Details
+> are in [the release-gate evaluation](docs/evidence/v0.1.0/release-gates.md).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="site/public/screenshots/dashboard-dark.png">
@@ -89,20 +89,23 @@ All screenshots come from a throwaway instance with fictional data.
 
 ## Quick start
 
-No release has been published yet, so both paths build from source. Full guides:
-[Docker Compose](https://aurimasniekis.github.io/go-hallpass/guide/install-docker),
+Full guides: [Docker Compose](https://aurimasniekis.github.io/go-hallpass/guide/install-docker),
 [binary with systemd](https://aurimasniekis.github.io/go-hallpass/guide/install-binary), or a
 [local trial in development mode](https://aurimasniekis.github.io/go-hallpass/guide/try-locally).
 
 ### Docker Compose
 
+Images are on Docker Hub as [`aurimasniekis/hallpass`](https://hub.docker.com/r/aurimasniekis/hallpass) (mirrored to
+`ghcr.io/aurimasniekis/go-hallpass`) for linux/amd64 and linux/arm64.
+
 ```sh
-make image IMAGE=hallpass:local VERSION=v0.0.0-local
-cd deploy
+export HP_VERSION=0.1.0
+gh attestation verify oci://docker.io/aurimasniekis/hallpass:$HP_VERSION --repo aurimasniekis/go-hallpass
+git clone --depth 1 --branch v$HP_VERSION https://github.com/aurimasniekis/go-hallpass.git && cd go-hallpass/deploy
 install -d -m 0700 secrets && sudo chown 65532:65532 secrets
-docker run --rm --user 65532:65532 -v "$PWD/secrets:/out" hallpass:local keys init-kek --out /out/hallpass.kek
+docker run --rm --user 65532:65532 -v "$PWD/secrets:/out" aurimasniekis/hallpass:$HP_VERSION keys init-kek --out /out/hallpass.kek
 cp examples/hallpass.container.yaml hallpass.yaml && $EDITOR hallpass.yaml   # public_url, egress.allow_cidrs
-export HP_IMAGE=hallpass HP_VERSION=local HP_CONFIG_FILE=./hallpass.yaml
+export HP_CONFIG_FILE=./hallpass.yaml
 docker compose run --rm hallpass migrate
 docker compose run --rm hallpass hostkey show --host center      # known_hosts line for agents
 docker compose run --rm hallpass admin bootstrap                  # one-time setup link
@@ -115,17 +118,25 @@ front of `127.0.0.1:8080`, open the setup link, and follow
 
 ### Binary
 
-Requirements: Go 1.27 or later, Node 24 and pnpm.
+Release archives for linux/amd64, linux/arm64 and darwin/arm64 are on the
+[releases page](https://github.com/aurimasniekis/go-hallpass/releases), with `SHA256SUMS`, SBOMs and build provenance.
 
 ```sh
-(cd web && pnpm install --frozen-lockfile && pnpm build)          # web UI
-go build -tags embedui -o bin/hallpass ./cmd/hallpass              # binary with the UI embedded
-bin/hallpass keys init-kek --out /etc/hallpass/kek                 # master key: back it up offline
-cp deploy/examples/hallpass.example.yaml /etc/hallpass/hallpass.yaml   # set public_url, egress.allow_cidrs
-bin/hallpass migrate --config /etc/hallpass/hallpass.yaml
-bin/hallpass admin bootstrap --config /etc/hallpass/hallpass.yaml  # one-time setup link
-bin/hallpass serve --config /etc/hallpass/hallpass.yaml
+V=0.1.0; base=https://github.com/aurimasniekis/go-hallpass/releases/download/v$V
+curl -fLO "$base/hallpass_${V}_linux_amd64.tar.gz" -fLO "$base/SHA256SUMS"
+sha256sum --check --ignore-missing SHA256SUMS
+gh attestation verify "hallpass_${V}_linux_amd64.tar.gz" --repo aurimasniekis/go-hallpass
+tar -xzf "hallpass_${V}_linux_amd64.tar.gz" && cd "hallpass_${V}_linux_amd64"
+sudo install -m 0755 hallpass /usr/local/bin/hallpass
+hallpass keys init-kek --out /etc/hallpass/kek                     # master key: back it up offline
+cp hallpass.example.yaml /etc/hallpass/hallpass.yaml               # set public_url, egress.allow_cidrs
+hallpass migrate --config /etc/hallpass/hallpass.yaml
+hallpass admin bootstrap --config /etc/hallpass/hallpass.yaml      # one-time setup link
+hallpass serve --config /etc/hallpass/hallpass.yaml
 ```
+
+To build from source instead (Go 1.27+, Node 24, pnpm): `(cd web && pnpm install --frozen-lockfile && pnpm build)`,
+then `go build -tags embedui -o bin/hallpass ./cmd/hallpass`.
 
 Run it as a dedicated service user with the [systemd unit](deploy/systemd/hallpass.service); the guide covers the
 user, file permissions and hardening. The web console listens on port 8080 and must sit behind TLS. Agents connect on
@@ -155,8 +166,7 @@ similar agents to use the gateway properly: honest reasons, no request spamming,
 mkdir -p ~/.codex/skills && cp -R integrations/skills/hallpass ~/.codex/skills/   # Codex
 ```
 
-The repository is currently private, so installing from GitHub needs access to it. Other options are in
-[integrations/README.md](integrations/README.md).
+Other options are in [integrations/README.md](integrations/README.md).
 
 ## Documentation
 
@@ -172,7 +182,7 @@ The documentation website is **<https://aurimasniekis.github.io/go-hallpass/>** 
 | REST API (OpenAPI 3.1) | [api/openapi.yaml](api/openapi.yaml) |
 | Recording format | [docs/formats/hprec1.md](docs/formats/hprec1.md) |
 | Product contract, plan, decisions | [docs/GOAL.md](docs/GOAL.md), [docs/PLAN.md](docs/PLAN.md), [docs/DECISIONS.md](docs/DECISIONS.md) |
-| Versioning, changelog | [docs/VERSIONING.md](docs/VERSIONING.md), [CHANGELOG.md](CHANGELOG.md) |
+| Versioning, changelog, releasing | [docs/VERSIONING.md](docs/VERSIONING.md), [CHANGELOG.md](CHANGELOG.md), [docs/RELEASING.md](docs/RELEASING.md) |
 
 To work on the website: `cd site && pnpm install && pnpm dev`.
 

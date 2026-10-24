@@ -1,7 +1,9 @@
 name: release
 
 # Release pipeline (PLAN WP24, ADR-0022, HP-OPS-009). Runs only for pushed v* tags and manual dispatch; never on PRs.
-# Publishing (GHCR push, attestations, draft GitHub release) happens only when the run's ref is a v* tag.
+# Publishing (Docker Hub and GHCR push, attestations, draft GitHub release) happens only when the run's ref is a v* tag.
+# Docker Hub needs the repository secret DOCKERHUB_TOKEN (a Docker Hub access token with Read & Write scope for
+# DOCKERHUB_IMAGE); the publish job fails before pushing anything when it is missing.
 # A dispatch from a branch builds, scans and uploads workflow artifacts but publishes nothing.
 
 on:
@@ -21,6 +23,8 @@ env:
   NODE_VERSION: "24.22.0"
   TRIVY_VERSION: v0.70.0
   SYFT_VERSION: v1.54.0
+  DOCKERHUB_USER: aurimasniekis
+  DOCKERHUB_IMAGE: docker.io/aurimasniekis/hallpass
 
 jobs:
   meta:
@@ -53,6 +57,11 @@ jobs:
             fi
             version="$REF_NAME"
             publish=true
+            # Every release needs its CHANGELOG.md section; the draft release notes are taken from it.
+            if ! grep -q "^## \[${version#v}\] - " CHANGELOG.md; then
+              echo "::error::CHANGELOG.md has no '## [${version#v}] - YYYY-MM-DD' section (docs/RELEASING.md)"
+              exit 1
+            fi
           else
             version="v0.0.0-dev+${GITHUB_SHA:0:12}"
             publish=false
@@ -256,7 +265,7 @@ jobs:
           ./scripts/container-smoke.sh hallpass:scan-amd64
 
   image-publish:
-    name: publish multi-arch image to GHCR
+    name: publish multi-arch image to Docker Hub and GHCR
     needs: [meta, image-scan, binaries]
     if: needs.meta.outputs.publish == 'true'
     runs-on: ubuntu-24.04
@@ -271,7 +280,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: require Docker Hub credentials
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [[ -z "$DOCKERHUB_TOKEN" ]]; then
+            echo "::error::repository secret DOCKERHUB_TOKEN is not set; nothing was pushed"
+            exit 1
+          fi
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: docker.io
+          username: ${{ env.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
@@ -285,8 +307,12 @@ jobs:
           PRERELEASE: ${{ needs.meta.outputs.prerelease }}
         run: |
           set -euo pipefail
-          tags="${IMAGE}:${FILE_VERSION}"
-          if [[ "$PRERELEASE" != "true" ]]; then tags="${tags},${IMAGE}:latest"; fi
+          tags=""
+          # The same manifest list (one digest) is pushed to both registries.
+          for image in "$DOCKERHUB_IMAGE" "$IMAGE"; do
+            tags="${tags:+$tags,}${image}:${FILE_VERSION}"
+            if [[ "$PRERELEASE" != "true" ]]; then tags="${tags},${image}:latest"; fi
+          done
           echo "tags=$tags" >>"$GITHUB_OUTPUT"
       # Same Dockerfile, build args and per-arch layer cache as the scanned images.
       - name: build and push linux/amd64,linux/arm64
@@ -318,10 +344,16 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
-      - name: build provenance attestation (image)
+      - name: build provenance attestation (GHCR image)
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ needs.meta.outputs.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+      - name: build provenance attestation (Docker Hub image)
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.DOCKERHUB_IMAGE }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
@@ -351,6 +383,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-dist
@@ -368,12 +403,19 @@ jobs:
           set -euo pipefail
           notes="$RUNNER_TEMP/notes.md"
           {
-            echo "Container image: \`${IMAGE}@${DIGEST}\`"
+            # This version's CHANGELOG.md section (checked to exist by the meta job).
+            awk -v h="## [${TAG#v}] - " 'index($0, h) == 1 {f = 1; next} f && /^## \[/ {exit} f && !/^\[[^]]+\]: http/' CHANGELOG.md |
+              sed -E "s#\]\(([A-Za-z][^):]*)\)#](https://github.com/${GH_REPO}/blob/${TAG}/\1)#g"   # relative links
+            echo
+            echo "Container image (same digest in both registries):"
+            echo
+            echo "- \`${DOCKERHUB_IMAGE}:${TAG#v}\` (\`${DOCKERHUB_IMAGE}@${DIGEST}\`)"
+            echo "- \`${IMAGE}:${TAG#v}\` (\`${IMAGE}@${DIGEST}\`)"
             echo
             echo "Verify downloads: \`sha256sum --check SHA256SUMS\` and"
             echo "\`gh attestation verify <file> --repo ${GH_REPO}\` (see docs/operator/install.md)."
             echo
-            echo "See CHANGELOG.md for changes."
+            echo "Full history: [CHANGELOG.md](https://github.com/${GH_REPO}/blob/${TAG}/CHANGELOG.md)."
           } >"$notes"
           flags=(--draft --verify-tag --title "$TAG" --notes-file "$notes")
           if [[ "$PRERELEASE" == "true" ]]; then flags+=(--prerelease); fi

@@ -85,9 +85,16 @@ which **has not been externally reviewed** (review item R-02).
 
 ## Release status
 
-HallPass is pre-release and not production-ready. No version has been tagged. The release gates, including a 24-hour
-soak, the external review of the recording format, CI on GitHub and a license decision, are tracked in
-[release-gates.md](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/evidence/unreleased/release-gates.md).
+The current release is 0.1.0, a pre-1.0 version. Its known limitations:
+
+- The HPREC1 recording format, the keyring and field encryption have had internal review only, no external
+  cryptographic review (R-02).
+- No 24-hour soak test and no benchmarks on the reference hardware. Short soak runs and smoke benchmarks passed.
+- Slack and Telegram approvals are tested against recorded and fake provider APIs, not live workspaces.
+- Browser end-to-end tests cover the main workflows in Chromium only. There are no visual regression snapshots.
+
+The per-gate evaluation is in [release-gates.md](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/evidence/v0.1.0/release-gates.md), and per-requirement status in
+[PLAN.md §21](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/PLAN.md).
 
 ## Reporting vulnerabilities
 

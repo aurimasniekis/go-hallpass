@@ -5,55 +5,71 @@ All notable changes to HallPass are documented in this file. The format follows
 [docs/VERSIONING.md](docs/VERSIONING.md) (Semantic Versioning for the binary, with separate versioning for the REST API,
 agent JSON schemas, the recording format and the database schema).
 
-Status words follow [docs/GOAL.md](docs/GOAL.md) §7. *Implemented* means the code exists. *Tested* means automated tests
-cover it, and so far they have only been run locally because nothing has been pushed. Nothing here is *externally verified*
-yet. The authoritative per-work-package status is [docs/PLAN.md](docs/PLAN.md) §19.2.
-
 ## [Unreleased]
 
-No release has been tagged. This section lists what exists on `main`. HallPass is licensed under Apache-2.0
-(LICENSE, NOTICE).
+## [0.1.0] - 2026-10-24
+
+First release. HallPass is a terminating SSH gateway for AI agents: agents use plain `ssh` with their own key,
+policy and a human decide what they may reach and for how long, and HallPass logs in to the destination with a
+credential the agent never sees and records the session.
 
 > **Recording format and keyring not externally reviewed** (RG-9, review item R-02). The HPREC1 format, the keyring
-> and field encryption have had internal review only (docs/security/review-2026-10-24.md).
+> and field encryption have had internal review only ([docs/security/review-2026-10-24.md](docs/security/review-2026-10-24.md)).
+
+### Known limitations
+
+- Pre-1.0: interfaces may change between minor versions ([docs/VERSIONING.md](docs/VERSIONING.md)).
+- No 24-hour soak test and no benchmarks on reference hardware (RG-5, RG-6). Short soak runs and smoke benchmarks
+  passed.
+- Slack and Telegram approvals are tested against recorded and fake provider APIs, not live workspaces.
+- Browser end-to-end tests cover the main workflows in Chromium only. There are no visual regression snapshots.
+- Not every requirement in [docs/GOAL.md](docs/GOAL.md) is complete. The per-requirement status is in
+  [docs/PLAN.md](docs/PLAN.md) §21, and the gate evaluation in
+  [docs/evidence/v0.1.0/release-gates.md](docs/evidence/v0.1.0/release-gates.md).
 
 ### Added
 
-- **Foundation (WP01–WP03, tested locally):** Go module, `hallpass version`, lint/vet configuration with the custom
-  analyzers `nohostkeyignore` and `txscope`, CI workflow, coverage floor, gitleaks configuration; strict YAML configuration
-  with `HALLPASS_*` overrides and production/development modes (`hallpass config check|env`); ECS-aligned JSON logging with
-  a redaction layer; SQLite storage (pure-Go driver, WAL, writer/reader pools, process lock, network-filesystem refusal,
-  permission checks, forward-only migrations with pre-migration snapshots, `hallpass migrate`).
-- **Keys and encryption at rest (WP04, tested locally):** KEK file handling with permission checks, AES-256-GCM purpose
-  keys with location-bound associated data, purpose-key and offline KEK rotation (`hallpass keys init-kek|status|rotate|rotate-kek`).
-- **Audit, jobs, outbox (WP05, tested locally):** hash-chained audit log, leased durable job queue, encrypted outbox with
-  retries and dead-lettering, bounded event bus.
-- **Agents and keys (WP06, tested locally):** agent registration, strict key parsing and algorithm policy, global key
-  uniqueness, revocation, enable/disable, source CIDRs.
-- **Servers and credentials (WP07, tested locally):** servers, roles, aliases, destination host identities and host CAs,
-  managed/imported login keys, user CAs with per-connection certificates, gateway host keys with staged rotation,
-  anti-SSRF egress guard, a single strict outbound SSH dialer.
-- **Policy (WP08, tested locally):** label-selector policy rules, approver rules, immutable compiled policy snapshots,
-  effective-access evaluation and what-if.
-- **Access lifecycle (WP09, tested locally):** requests with deduplication and rate limits, decisions, grants with
-  time-authoritative expiry, sessions, lockdown, cascades, enforcer, startup reconciliation.
-- **SSH gateway (WP10–WP12, implemented; partial tests):** agent SSH front end with a shell-free command grammar
-  (`list`, `roles`, `request`, `status`, `cancel`, `sessions`, `whoami`, `version`, `help`) and published JSON schemas
-  (`hallpass.*/v1`); data plane for exec, shell and PTY with an environment allowlist, signals, exit propagation, strict
-  destination host verification, enforced termination and graceful drain (`hallpass serve`); mandatory encrypted recording
-  in the HPREC1 format with integrity chain, reconciliation, retention and `hallpass verify`; `hallpass hostkey show|stage|promote`.
-  Open items: keepalive and load tests, recording idempotency keys, per-class retention, external crypto review.
-- **Operator authentication service layer (WP13, in progress):** Argon2id passwords, TOTP, recovery codes, one-time tokens,
-  server-side sessions, reauthentication, last-admin protection, break-glass primitives. HTTP endpoints arrive with WP15.
-- **Web UI foundation (WP19, in progress):** design system with light/dark tokens, API and SSE clients, login/setup
-  routes, CSP-safe production build check. Not yet served by the binary (HP-UI-016).
-- **Packaging and release pipeline (WP24, in progress):** distroless non-root multi-arch container image, Docker Compose
-  example, hardened systemd unit, release workflow (static binaries for linux/amd64, linux/arm64, darwin/arm64; checksums;
-  syft SBOMs; GitHub build provenance attestations; Trivy gate; GHCR push on tags only), container smoke test, operator
-  install/container/upgrade guides, this changelog and the versioning policy. The release workflow has not run on GitHub yet.
+- **Agent SSH gateway.** A shell-free command grammar (`list`, `roles`, `request`, `status`, `cancel`, `connect`,
+  `exec`, `sessions`, `whoami`, `version`, `help`) with versioned JSON output (`hallpass.*/v1`) and stable exit codes
+  80–90. Exec, interactive shells and PTYs with an environment allowlist, signals and exit-status propagation.
+  Port forwarding, agent forwarding, X11 and subsystems are refused and audited. Hidden and unknown servers give the
+  same answer.
+- **Destination credentials agents never see.** Managed Ed25519 login keys per server role, encrypted at rest, with
+  a suggested `restrict,from="…"` line and overlap rotation, or OpenSSH user certificates from a HallPass CA that live
+  about two minutes. Strict destination host-key pinning or host-CA trust, with no trust on first use. Anti-SSRF
+  egress allowlist. A guided server-onboarding wizard.
+- **Policy.** Default-deny rules by agent, server and role (names, groups or label selectors) with deny overrides,
+  auto-approval limits, approver rules, an effective-access preview per agent or server, and a what-if preview of
+  unsaved rule changes. Self-approval is prohibited by default.
+- **Requests, approvals and grants.** Deduplicated requests with reasons, approvals in the web console, Slack and
+  Telegram (chat buttons re-check the approver's authority at click time), time-bound grants that never extend,
+  revocation, lockdown, and termination of live sessions within 5 seconds of expiry or revocation.
+- **Recording and audit.** Mandatory, fail-closed session recording in the encrypted, integrity-chained HPREC1
+  format; reconciliation after crashes; retention classes; export; `hallpass verify`; browser replay next to a session
+  timeline; a hash-chained audit log with integrity anchors. An optional destination-side exec collector
+  (`hallpass-collector`) adds correlated, unverified destination records.
+- **Operators.** Local accounts with Argon2id passwords, TOTP and recovery codes; OIDC single sign-on with PKCE and
+  group mapping; administrator, approver, auditor and viewer roles; invitations; recent-authentication checks for
+  sensitive actions; a break-glass recovery command.
+- **Web console and API.** A React web console embedded in the binary (light and dark themes): dashboard, requests,
+  sessions with live activities, agents, servers, policy, operators, integrations, audit and system pages. A REST API
+  (`/api/v1`, OpenAPI 3.1) and server-sent events for live updates.
+- **Operations.** One static Go binary with SQLite storage (WAL, `synchronous=FULL`), forward-only migrations with
+  pre-migration snapshots, a KEK with purpose-key and KEK rotation, backup, restore and verification, Prometheus
+  metrics, `/healthz` and `/readyz`, optional OpenTelemetry tracing, and ECS-aligned JSON logs with redaction.
+- **Distribution.** Static binaries for linux/amd64, linux/arm64 and darwin/arm64 with SHA-256 checksums, SPDX SBOMs
+  and GitHub build provenance attestations. A distroless, non-root, multi-arch container image on Docker Hub
+  (`aurimasniekis/hallpass`) and GHCR (`ghcr.io/aurimasniekis/go-hallpass`). A Docker Compose example and a hardened
+  systemd unit.
+- **Documentation.** Operator, agent, destination-hardening, API and recording-format documentation, incident
+  runbooks, a security guarantees page, and the website at <https://aurimasniekis.github.io/go-hallpass/>.
+- **Agent skill.** A `hallpass` skill and Claude Code plugin that teach coding agents to use the gateway properly.
 
 ### Security
 
+- Internal security review ([docs/security/review-2026-10-24.md](docs/security/review-2026-10-24.md)), performed by AI
+  agents: both HIGH and all MEDIUM findings fixed with regression tests. One LOW is accepted and one LOW is open.
 - The recording format and keyring have not been externally reviewed (RG-9, R-02).
 
-[Unreleased]: #unreleased
+[Unreleased]: https://github.com/aurimasniekis/go-hallpass/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/aurimasniekis/go-hallpass/releases/tag/v0.1.0

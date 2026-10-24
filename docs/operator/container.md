@@ -71,7 +71,7 @@ docker run -d --name hallpass \
   -v /srv/hallpass/hallpass.yaml:/etc/hallpass/hallpass.yaml:ro \
   -v /srv/hallpass/hallpass.kek:/run/secrets/hallpass_kek:ro \
   --stop-timeout 45 \
-  ghcr.io/<owner>/<repo>:X.Y.Z serve
+  aurimasniekis/hallpass:X.Y.Z serve
 ```
 
 Offline commands (`migrate`, `keys status`, `hostkey show`, `verify`) take the data-directory lock: stop the serving
@@ -98,6 +98,7 @@ It does not yet cover `/readyz` (WP22) or an agent running `ssh center list` aga
 
 Base images (Node, Go, distroless) are pinned by digest in the `Dockerfile`. The release workflow
 ([`.github/workflows/release.yaml`](../../.github/workflows/release.yaml)) scans each platform image with Trivy before
-publishing and fails on HIGH/CRITICAL vulnerabilities that have a fix. It pushes to GHCR only for `v*` tags, with BuildKit
-SBOM and provenance attestations plus a GitHub build provenance attestation on the image digest.
-Verify with `gh attestation verify oci://ghcr.io/<owner>/<repo>:X.Y.Z --repo <owner>/<repo>`.
+publishing and fails on HIGH/CRITICAL vulnerabilities that have a fix. Only for `v*` tags, it pushes one multi-arch
+manifest to Docker Hub (`docker.io/aurimasniekis/hallpass`) and GHCR (`ghcr.io/aurimasniekis/go-hallpass`), with BuildKit
+SBOM and provenance attestations plus a GitHub build provenance attestation on the image digest in each registry.
+Verify with `gh attestation verify oci://docker.io/aurimasniekis/hallpass:X.Y.Z --repo aurimasniekis/go-hallpass`.

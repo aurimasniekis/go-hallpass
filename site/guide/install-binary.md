@@ -12,16 +12,28 @@ This is the standalone install on a Linux host (amd64 or arm64). The full refere
 
 ## 1. Get the binary
 
-No release has been tagged yet. Until then, build it with the UI embedded (Go 1.27+, Node 24, pnpm):
+Download the archive for your architecture, `SHA256SUMS`, and verify both the checksum and the build provenance
+before installing. The latest version is on the [releases page](https://github.com/aurimasniekis/go-hallpass/releases).
+
+```sh
+V=0.1.0 ARCH=amd64      # or arm64
+base=https://github.com/aurimasniekis/go-hallpass/releases/download/v$V
+curl -fLO "$base/hallpass_${V}_linux_${ARCH}.tar.gz" -fLO "$base/SHA256SUMS"
+sha256sum --check --ignore-missing SHA256SUMS
+gh attestation verify "hallpass_${V}_linux_${ARCH}.tar.gz" --repo aurimasniekis/go-hallpass
+tar -xzf "hallpass_${V}_linux_${ARCH}.tar.gz" && cd "hallpass_${V}_linux_${ARCH}"
+```
+
+The archive holds the static `hallpass` binary with the web UI embedded, the optional destination-side
+`hallpass-collector`, the example configuration, the systemd unit, the changelog, LICENSE and NOTICE.
+
+To build from source instead (Go 1.27+, Node 24, pnpm):
 
 ```sh
 git clone https://github.com/aurimasniekis/go-hallpass.git && cd go-hallpass
 (cd web && pnpm install --frozen-lockfile && pnpm build)
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags embedui -trimpath -o hallpass ./cmd/hallpass
 ```
-
-Releases will ship `hallpass_X.Y.Z_linux_amd64.tar.gz` (and arm64) with the example configuration and the systemd
-unit, plus `SHA256SUMS`, SBOMs and build provenance. Verify both the checksum and the attestation before installing.
 
 ## 2. Service user, binary and master key
 

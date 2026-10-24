@@ -50,8 +50,8 @@ HallPass controls **who** gets a session, **when**, and records **what passed th
 
 ## Status
 
-HallPass is **pre-release**. No version has been tagged. The release gates (24-hour soak, external review of the
-recording format, CI on GitHub, a license decision, and more) are not met yet. The current evaluation is in
-[release-gates.md](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/evidence/unreleased/release-gates.md).
+The current release is **0.1.0**. Versions before 1.0 may change interfaces between minor releases
+([versioning](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/VERSIONING.md)). Read the
+[known limitations](/security/#release-status) before you deploy it.
 
 Next: [Concepts](/guide/concepts).

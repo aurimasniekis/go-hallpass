@@ -20,7 +20,9 @@ Each interface below has its own version and compatibility rules. A release list
 The release workflow rejects any other tag format.
 
 The version is embedded at link time (`internal/buildinfo`) and printed by `hallpass version` and over SSH by `version`.
-Container image tags drop the `v` (`ghcr.io/<owner>/<repo>:X.Y.Z`), and `latest` only follows final releases.
+Container image tags drop the `v` (`aurimasniekis/hallpass:X.Y.Z` on Docker Hub, mirrored to
+`ghcr.io/aurimasniekis/go-hallpass:X.Y.Z`), and `latest` only follows final releases. The release procedure is in
+[RELEASING.md](RELEASING.md).
 
 The binary version summarizes the interfaces below:
 

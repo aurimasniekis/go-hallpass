@@ -4,8 +4,8 @@ HallPass is a security-sensitive gateway that can see plaintext SSH sessions. Pl
 
 ## Reporting
 
-- Use GitHub's private vulnerability reporting ("Report a vulnerability" on the repository's Security tab) once the
-  repository is public. Until then, contact the maintainer directly.
+- Use GitHub's private vulnerability reporting: "Report a vulnerability" on the repository's
+  [Security tab](https://github.com/aurimasniekis/go-hallpass/security/advisories/new).
 - Do not open public issues for suspected vulnerabilities.
 - Include affected versions, configuration, reproduction steps and impact. Never include real credentials, KEKs,
   recordings or production data.

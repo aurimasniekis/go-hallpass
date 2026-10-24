@@ -52,8 +52,8 @@ features:
 
 <div class="hp-status">
 
-**Pre-release.** No version has been tagged and the release gates are not met yet. Read the
-[security model](/security/) before you run HallPass anywhere that matters.
+**Version 0.1.0.** Read the [security model](/security/) and its known limitations before you run HallPass
+anywhere that matters.
 
 </div>
 
