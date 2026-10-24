@@ -1,0 +1,2 @@
+go test fuzz v1
+string("status req_00x0000000000A000000000000")

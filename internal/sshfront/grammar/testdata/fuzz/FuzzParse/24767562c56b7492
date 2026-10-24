@@ -1,0 +1,2 @@
+go test fuzz v1
+string("\uf271\uf271\uf271\uf279\uf279\uf271\uf279\uf279")
