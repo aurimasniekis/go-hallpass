@@ -47,6 +47,8 @@ export const qk = {
   groups: ['groups'] as const,
   groupList: (kind: string | undefined) => ['groups', kind ?? 'all'] as const,
 
+  apiTokens: ['api-tokens'] as const,
+
   servers: ['servers'] as const,
   server: (id: string) => ['server', id] as const,
   hostIdentities: (serverId: string) => ['server', serverId, 'host-identities'] as const,

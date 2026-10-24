@@ -5,7 +5,8 @@ info:
   description: |
     The operator API behind the HallPass web UI (PLAN §8). JSON only; errors are RFC 9457 problem details.
     Authentication uses the `__Host-hp_session` cookie. Mutations require the `X-CSRF-Token` header and a same-origin
-    `Origin`. Changes within v1 are additive only (HP-API-002).
+    `Origin`. Automation (Terraform, scripts) uses an API token as a bearer token instead, on the operations marked
+    `x-token`. Changes within v1 are additive only (HP-API-002).
 
     Vendor extensions on every operation:
     - `x-permission`: the single RBAC permission checked server-side (`public`, `session`, `session.limited` or a
@@ -14,6 +15,8 @@ info:
     - `x-mfa`: password sessions must have completed MFA recently; otherwise `mfa_required`.
     - `x-idempotency-key`: the `Idempotency-Key` header is honored for 24 h per operator (HP-API-006).
     - `x-stream`: Server-Sent Events. `x-redirect`: a browser redirect, not JSON.
+    - `x-token`: automation tokens (`Authorization: Bearer hallpass_at_…`) may call it. Every other operation needs a
+      browser session. Token requests skip the Origin and CSRF checks and the recent-authentication requirement.
 
     Durations are integer seconds. Timestamps are RFC 3339 UTC. Destination addresses, ports and host-key details
     are returned only with `inventory.address.read` (HP-SRV-010).
@@ -423,6 +426,42 @@ paths:
         "200": {description: single-use invitation token, content: {application/json: {schema: {$ref: "#/components/schemas/OneTimeToken"}}}}
         default: {$ref: "#/components/responses/Problem"}
 
+  # ---------------------------------------------------------------- API tokens
+  /api/v1/api-tokens:
+    get:
+      operationId: listAPITokens
+      tags: [operators]
+      x-permission: operators.manage
+      summary: Automation tokens (metadata only; the token itself is shown once at creation).
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/APIToken"}}}}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      operationId: createAPIToken
+      tags: [operators]
+      x-permission: operators.manage
+      x-reauth: true
+      x-mfa: true
+      x-idempotency-key: true
+      summary: >-
+        Issue an automation token for yourself with one of your roles. It is shown once. It works only while you are
+        enabled and still hold the role, and only on operations marked x-token.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/APITokenInput"}}}
+      responses:
+        "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/APITokenCreated"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/api-tokens/{id}:
+    delete:
+      operationId: revokeAPIToken
+      tags: [operators]
+      x-permission: operators.manage
+      x-reauth: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/APIToken"}}}}
+        default: {$ref: "#/components/responses/Problem"}
   # ---------------------------------------------------------------- agents
   /api/v1/invitations/{id}:
     delete:
@@ -440,12 +479,14 @@ paths:
       operationId: listAgents
       tags: [agents]
       x-permission: inventory.read
+      x-token: true
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Agent"}}}}}}}
     post:
       operationId: createAgent
       tags: [agents]
       x-permission: inventory.write
+      x-token: true
       x-idempotency-key: true
       requestBody:
         required: true
@@ -458,6 +499,7 @@ paths:
       operationId: getAgent
       tags: [agents]
       x-permission: inventory.read
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AgentDetail"}}}}
@@ -466,6 +508,7 @@ paths:
       operationId: updateAgent
       tags: [agents]
       x-permission: inventory.write
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       requestBody:
         required: true
@@ -478,6 +521,7 @@ paths:
       operationId: disableAgent
       tags: [agents]
       x-permission: inventory.write
+      x-token: true
       x-idempotency-key: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       requestBody:
@@ -490,6 +534,7 @@ paths:
       operationId: enableAgent
       tags: [agents]
       x-permission: inventory.write
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Agent"}}}}
@@ -499,6 +544,7 @@ paths:
       operationId: addAgentKey
       tags: [agents]
       x-permission: inventory.write
+      x-token: true
       x-idempotency-key: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       requestBody:
@@ -512,6 +558,7 @@ paths:
       operationId: revokeAgentKey
       tags: [agents]
       x-permission: inventory.write
+      x-token: true
       x-idempotency-key: true
       parameters:
         - {$ref: "#/components/parameters/ID"}
@@ -526,6 +573,7 @@ paths:
       operationId: getAgentOwners
       tags: [agents, policy]
       x-permission: policy.read
+      x-token: true
       summary: Operators who own the agent; owners may not approve its requests while self-approval is prohibited (HP-POL-012).
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
@@ -535,6 +583,7 @@ paths:
       operationId: setAgentOwners
       tags: [agents, policy]
       x-permission: policy.write
+      x-token: true
       x-reauth: true
       x-mfa: true
       parameters: [{$ref: "#/components/parameters/ID"}]
@@ -547,6 +596,7 @@ paths:
       operationId: getAgentEffectiveAccess
       tags: [agents, policy]
       x-permission: policy.read
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/EffectiveAccess"}}}}
@@ -558,6 +608,7 @@ paths:
       operationId: listGroups
       tags: [inventory]
       x-permission: inventory.read
+      x-token: true
       parameters:
         - {name: kind, in: query, schema: {type: string, enum: [agent, server, operator]}}
       responses:
@@ -567,6 +618,7 @@ paths:
       operationId: listServers
       tags: [inventory]
       x-permission: inventory.read
+      x-token: true
       parameters:
         - {name: include_deleted, in: query, schema: {type: boolean}, description: "Also return deleted servers and git remotes (deleted_at set), for naming them in history."}
       responses:
@@ -575,6 +627,7 @@ paths:
       operationId: createServer
       tags: [inventory]
       x-permission: inventory.write
+      x-token: true
       x-idempotency-key: true
       requestBody:
         required: true
@@ -587,6 +640,7 @@ paths:
       operationId: getServer
       tags: [inventory]
       x-permission: inventory.read
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Server"}}}}
@@ -595,6 +649,7 @@ paths:
       operationId: updateServer
       tags: [inventory]
       x-permission: inventory.write
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       requestBody:
         required: true
@@ -606,6 +661,7 @@ paths:
       operationId: deleteServer
       tags: [inventory]
       x-permission: inventory.write
+      x-token: true
       x-reauth: true
       summary: >-
         Delete a server or git remote and all its roles: access ends, pending requests are canceled and login keys are
@@ -619,6 +675,7 @@ paths:
       operationId: disableServer
       tags: [inventory]
       x-permission: inventory.write
+      x-token: true
       summary: Disable a server or git remote; its active grants are revoked and pending requests canceled.
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
@@ -629,6 +686,7 @@ paths:
       operationId: enableServer
       tags: [inventory]
       x-permission: inventory.write
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Server"}}}}
@@ -638,6 +696,7 @@ paths:
       operationId: getServerEffectiveAccess
       tags: [inventory, policy]
       x-permission: policy.read
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/EffectiveAccess"}}}}
@@ -647,6 +706,7 @@ paths:
       operationId: listHostIdentities
       tags: [inventory]
       x-permission: inventory.address.read
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/HostIdentity"}}}}}}}
@@ -654,6 +714,7 @@ paths:
       operationId: addHostIdentity
       tags: [inventory]
       x-permission: inventory.write
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       requestBody:
         required: true
@@ -666,6 +727,7 @@ paths:
       operationId: scanHostIdentities
       tags: [inventory]
       x-permission: inventory.write
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: scanned keys (pending confirmation), content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/HostIdentity"}}}}}}}
@@ -675,6 +737,7 @@ paths:
       operationId: confirmHostIdentity
       tags: [inventory]
       x-permission: inventory.write
+      x-token: true
       x-reauth: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
@@ -685,6 +748,7 @@ paths:
       operationId: retireHostIdentity
       tags: [inventory]
       x-permission: inventory.write
+      x-token: true
       x-reauth: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
@@ -695,6 +759,7 @@ paths:
       operationId: createHostCA
       tags: [inventory]
       x-permission: inventory.write
+      x-token: true
       x-reauth: true
       requestBody:
         required: true
@@ -707,6 +772,7 @@ paths:
       operationId: bindHostCA
       tags: [inventory]
       x-permission: inventory.write
+      x-token: true
       x-reauth: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       requestBody:
@@ -720,6 +786,7 @@ paths:
       operationId: addHostDuplicateException
       tags: [inventory]
       x-permission: inventory.write
+      x-token: true
       x-reauth: true
       requestBody:
         required: true
@@ -732,6 +799,7 @@ paths:
       operationId: listRoles
       tags: [inventory]
       x-permission: inventory.read
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Role"}}}}}}}
@@ -739,6 +807,7 @@ paths:
       operationId: createRole
       tags: [inventory]
       x-permission: inventory.write
+      x-token: true
       x-idempotency-key: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       requestBody:
@@ -752,6 +821,7 @@ paths:
       operationId: getRole
       tags: [inventory]
       x-permission: inventory.read
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Role"}}}}
@@ -760,6 +830,7 @@ paths:
       operationId: updateRole
       tags: [inventory]
       x-permission: inventory.write
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       requestBody:
         required: true
@@ -773,6 +844,7 @@ paths:
       operationId: deleteRole
       tags: [inventory]
       x-permission: inventory.write
+      x-token: true
       x-reauth: true
       summary: >-
         Delete a role or access profile: access ends, pending requests are canceled and login keys are revoked. The
@@ -786,6 +858,7 @@ paths:
       operationId: disableRole
       tags: [inventory]
       x-permission: inventory.write
+      x-token: true
       summary: Disable a role or access profile; its active grants are revoked and pending requests canceled.
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
@@ -796,6 +869,7 @@ paths:
       operationId: enableRole
       tags: [inventory]
       x-permission: inventory.write
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Role"}}}}
@@ -806,6 +880,7 @@ paths:
       operationId: listCredentials
       tags: [credentials]
       x-permission: credentials.manage
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/LoginCredential"}}}}}}}
@@ -814,6 +889,7 @@ paths:
       operationId: generateCredential
       tags: [credentials]
       x-permission: credentials.manage
+      x-token: true
       x-reauth: true
       x-mfa: true
       x-idempotency-key: true
@@ -826,6 +902,7 @@ paths:
       operationId: importCredential
       tags: [credentials]
       x-permission: credentials.manage
+      x-token: true
       x-reauth: true
       x-mfa: true
       parameters: [{$ref: "#/components/parameters/ID"}]
@@ -840,6 +917,7 @@ paths:
       operationId: probeCredential
       tags: [credentials]
       x-permission: credentials.manage
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/LoginCredential"}}}}
@@ -849,6 +927,7 @@ paths:
       operationId: activateCredential
       tags: [credentials]
       x-permission: credentials.manage
+      x-token: true
       x-reauth: true
       x-mfa: true
       parameters:
@@ -862,6 +941,7 @@ paths:
       operationId: revokeCredential
       tags: [credentials]
       x-permission: credentials.manage
+      x-token: true
       x-reauth: true
       x-mfa: true
       x-idempotency-key: true
@@ -876,12 +956,14 @@ paths:
       operationId: listUserCAs
       tags: [credentials]
       x-permission: credentials.manage
+      x-token: true
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/UserCA"}}}}}}}
     post:
       operationId: createUserCA
       tags: [credentials]
       x-permission: credentials.manage
+      x-token: true
       x-reauth: true
       x-mfa: true
       requestBody:
@@ -895,6 +977,7 @@ paths:
       operationId: bindRoleCert
       tags: [credentials]
       x-permission: credentials.manage
+      x-token: true
       x-reauth: true
       x-mfa: true
       parameters: [{$ref: "#/components/parameters/ID"}]
@@ -908,6 +991,7 @@ paths:
       operationId: unbindRoleCert
       tags: [credentials]
       x-permission: credentials.manage
+      x-token: true
       x-reauth: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
@@ -920,12 +1004,14 @@ paths:
       operationId: listPolicyRules
       tags: [policy]
       x-permission: policy.read
+      x-token: true
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/PolicyRule"}}}}}}}
     post:
       operationId: createPolicyRule
       tags: [policy]
       x-permission: policy.write
+      x-token: true
       x-idempotency-key: true
       requestBody:
         required: true
@@ -938,6 +1024,7 @@ paths:
       operationId: getPolicyRule
       tags: [policy]
       x-permission: policy.read
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/PolicyRule"}}}}
@@ -946,6 +1033,7 @@ paths:
       operationId: updatePolicyRule
       tags: [policy]
       x-permission: policy.write
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       requestBody:
         required: true
@@ -957,6 +1045,7 @@ paths:
       operationId: deletePolicyRule
       tags: [policy]
       x-permission: policy.write
+      x-token: true
       x-reauth: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
@@ -967,12 +1056,14 @@ paths:
       operationId: listApproverRules
       tags: [policy]
       x-permission: policy.read
+      x-token: true
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/ApproverRule"}}}}}}}
     post:
       operationId: createApproverRule
       tags: [policy]
       x-permission: policy.write
+      x-token: true
       x-reauth: true
       x-idempotency-key: true
       requestBody:
@@ -986,6 +1077,7 @@ paths:
       operationId: updateApproverRule
       tags: [policy]
       x-permission: policy.write
+      x-token: true
       x-reauth: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       requestBody:
@@ -998,6 +1090,7 @@ paths:
       operationId: deleteApproverRule
       tags: [policy]
       x-permission: policy.write
+      x-token: true
       x-reauth: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
@@ -1008,6 +1101,7 @@ paths:
       operationId: getSelfApprovalSetting
       tags: [policy]
       x-permission: policy.read
+      x-token: true
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/SelfApprovalSetting"}}}}
         default: {$ref: "#/components/responses/Problem"}
@@ -1015,6 +1109,7 @@ paths:
       operationId: setSelfApprovalSetting
       tags: [policy]
       x-permission: policy.write
+      x-token: true
       x-reauth: true
       x-mfa: true
       requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/SelfApprovalSetting"}}}}
@@ -1026,6 +1121,7 @@ paths:
       operationId: previewPolicyChange
       tags: [policy]
       x-permission: policy.read
+      x-token: true
       summary: >-
         What-if evaluation of an unsaved rule change for one agent or one server (HP-POL-009): effective access before
         and after, with the deciding rules. Nothing is saved.
@@ -1040,6 +1136,7 @@ paths:
       operationId: getPolicyVersion
       tags: [policy]
       x-permission: policy.read
+      x-token: true
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [version], properties: {version: {type: integer}}}}}}
 
@@ -1049,6 +1146,7 @@ paths:
       operationId: listRequests
       tags: [access]
       x-permission: requests.read
+      x-token: true
       parameters:
         - {$ref: "#/components/parameters/Limit"}
         - {$ref: "#/components/parameters/Cursor"}
@@ -1063,6 +1161,7 @@ paths:
       operationId: getRequest
       tags: [access]
       x-permission: requests.read
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AccessRequest"}}}}
@@ -1107,6 +1206,7 @@ paths:
       operationId: listGrants
       tags: [access]
       x-permission: requests.read
+      x-token: true
       parameters:
         - {$ref: "#/components/parameters/Limit"}
         - {$ref: "#/components/parameters/Cursor"}
@@ -1121,6 +1221,7 @@ paths:
       operationId: getGrant
       tags: [access]
       x-permission: requests.read
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Grant"}}}}
@@ -1142,6 +1243,7 @@ paths:
       operationId: listAccessSessions
       tags: [sessions]
       x-permission: sessions.read
+      x-token: true
       parameters:
         - {$ref: "#/components/parameters/Limit"}
         - {$ref: "#/components/parameters/Cursor"}
@@ -1156,6 +1258,7 @@ paths:
       operationId: getAccessSession
       tags: [sessions]
       x-permission: sessions.read
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AccessSession"}}}}
@@ -1165,6 +1268,7 @@ paths:
       operationId: getSessionTimeline
       tags: [sessions]
       x-permission: sessions.read
+      x-token: true
       parameters:
         - {$ref: "#/components/parameters/ID"}
         - {$ref: "#/components/parameters/Limit"}
@@ -1177,6 +1281,7 @@ paths:
       operationId: listSessionChannels
       tags: [sessions]
       x-permission: sessions.read
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Channel"}}}}}}}
@@ -1186,6 +1291,7 @@ paths:
       operationId: listSessionSegments
       tags: [sessions]
       x-permission: sessions.read
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Segment"}}}}}}}
@@ -1228,6 +1334,7 @@ paths:
       operationId: listSessionDestinationRecords
       tags: [sessions]
       x-permission: sessions.read
+      x-token: true
       summary: Destination-reported exec records correlated to the session (metadata only, unverified; HP-REC-012).
       parameters:
         - {$ref: "#/components/parameters/ID"}
@@ -1250,6 +1357,7 @@ paths:
       operationId: listDestinationCollectors
       tags: [credentials]
       x-permission: inventory.read
+      x-token: true
       parameters:
         - {name: server_id, in: query, schema: {type: string}}
       responses:
@@ -1259,6 +1367,7 @@ paths:
       operationId: registerDestinationCollector
       tags: [credentials]
       x-permission: credentials.manage
+      x-token: true
       x-reauth: true
       x-mfa: true
       summary: Enroll a destination audit collector's Ed25519 public key for one server. Its batches can attach records to every session on that server.
@@ -1273,6 +1382,7 @@ paths:
       operationId: getDestinationCollector
       tags: [credentials]
       x-permission: inventory.read
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/DestinationCollector"}}}}
@@ -1282,6 +1392,7 @@ paths:
       operationId: revokeDestinationCollector
       tags: [credentials]
       x-permission: credentials.manage
+      x-token: true
       x-reauth: true
       x-idempotency-key: true
       parameters: [{$ref: "#/components/parameters/ID"}]
@@ -1295,6 +1406,7 @@ paths:
       operationId: listActivities
       tags: [sessions]
       x-permission: sessions.read
+      x-token: true
       summary: Live channels.
       parameters:
         - {name: ended_since, in: query, description: Also list channels that ended within this many seconds (max 7 days, at most 200)., schema: {type: integer, minimum: 1, maximum: 604800}}
@@ -1317,6 +1429,7 @@ paths:
       operationId: listAuditEvents
       tags: [audit]
       x-permission: audit.read
+      x-token: true
       parameters:
         - {$ref: "#/components/parameters/Limit"}
         - {$ref: "#/components/parameters/Cursor"}
@@ -1331,6 +1444,7 @@ paths:
       operationId: verifyAuditChain
       tags: [audit]
       x-permission: audit.verify
+      x-token: true
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AuditVerify"}}}}
 
@@ -1340,12 +1454,14 @@ paths:
       operationId: listOIDCProviders
       tags: [sso]
       x-permission: auth.settings
+      x-token: true
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/OIDCProvider"}}}}}}}
     post:
       operationId: createOIDCProvider
       tags: [sso]
       x-permission: auth.settings
+      x-token: true
       x-reauth: true
       x-mfa: true
       requestBody:
@@ -1359,6 +1475,7 @@ paths:
       operationId: getOIDCProvider
       tags: [sso]
       x-permission: auth.settings
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/OIDCProvider"}}}}
@@ -1367,6 +1484,7 @@ paths:
       operationId: updateOIDCProvider
       tags: [sso]
       x-permission: auth.settings
+      x-token: true
       x-reauth: true
       x-mfa: true
       parameters: [{$ref: "#/components/parameters/ID"}]
@@ -1380,6 +1498,7 @@ paths:
       operationId: deleteOIDCProvider
       tags: [sso]
       x-permission: auth.settings
+      x-token: true
       x-reauth: true
       x-mfa: true
       parameters: [{$ref: "#/components/parameters/ID"}]
@@ -1391,6 +1510,7 @@ paths:
       operationId: listOIDCMappings
       tags: [sso]
       x-permission: auth.settings
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/OIDCMapping"}}}}}}}
@@ -1398,6 +1518,7 @@ paths:
       operationId: addOIDCMapping
       tags: [sso]
       x-permission: auth.settings
+      x-token: true
       x-reauth: true
       x-mfa: true
       parameters: [{$ref: "#/components/parameters/ID"}]
@@ -1412,6 +1533,7 @@ paths:
       operationId: deleteOIDCMapping
       tags: [sso]
       x-permission: auth.settings
+      x-token: true
       x-reauth: true
       parameters:
         - {$ref: "#/components/parameters/ID"}
@@ -1434,12 +1556,14 @@ paths:
       operationId: getAuthSettings
       tags: [sso]
       x-permission: auth.settings
+      x-token: true
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AuthSettings"}}}}
     put:
       operationId: putAuthSettings
       tags: [sso]
       x-permission: auth.settings
+      x-token: true
       x-reauth: true
       x-mfa: true
       requestBody:
@@ -1455,12 +1579,14 @@ paths:
       operationId: listIntegrations
       tags: [integrations]
       x-permission: integrations.manage
+      x-token: true
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Integration"}}}}}}}
     post:
       operationId: createIntegration
       tags: [integrations]
       x-permission: integrations.manage
+      x-token: true
       x-reauth: true
       x-mfa: true
       requestBody:
@@ -1474,6 +1600,7 @@ paths:
       operationId: getIntegration
       tags: [integrations]
       x-permission: integrations.manage
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Integration"}}}}
@@ -1482,6 +1609,7 @@ paths:
       operationId: updateIntegration
       tags: [integrations]
       x-permission: integrations.manage
+      x-token: true
       x-reauth: true
       x-mfa: true
       parameters: [{$ref: "#/components/parameters/ID"}]
@@ -1495,6 +1623,7 @@ paths:
       operationId: deleteIntegration
       tags: [integrations]
       x-permission: integrations.manage
+      x-token: true
       x-reauth: true
       x-mfa: true
       parameters: [{$ref: "#/components/parameters/ID"}]
@@ -1506,12 +1635,14 @@ paths:
       operationId: listNotificationRoutes
       tags: [integrations]
       x-permission: integrations.manage
+      x-token: true
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/NotificationRoute"}}}}}}}
     post:
       operationId: createNotificationRoute
       tags: [integrations]
       x-permission: integrations.manage
+      x-token: true
       x-reauth: true
       requestBody:
         required: true
@@ -1524,6 +1655,7 @@ paths:
       operationId: deleteNotificationRoute
       tags: [integrations]
       x-permission: integrations.manage
+      x-token: true
       x-reauth: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
@@ -1534,6 +1666,7 @@ paths:
       operationId: listNotificationDeliveries
       tags: [integrations]
       x-permission: integrations.manage
+      x-token: true
       summary: Outbox delivery history including dead letters (HP-NTF-001).
       parameters:
         - {$ref: "#/components/parameters/Limit"}
@@ -1614,6 +1747,7 @@ paths:
       operationId: getSystemStatus
       tags: [system]
       x-permission: dashboard.view
+      x-token: true
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/SystemStatus"}}}}
   /api/v1/system/lockdown:
@@ -1652,6 +1786,7 @@ paths:
       operationId: listSSHBans
       tags: [system]
       x-permission: system.read
+      x-token: true
       summary: Active SSH source bans (fail2ban-style protection of the agent SSH port, HP-SSH-026).
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/SSHBan"}}}}}}}
@@ -1672,6 +1807,7 @@ paths:
       operationId: listGatewayHostKeys
       tags: [system]
       x-permission: dashboard.view
+      x-token: true
       summary: Public gateway host keys for agent known_hosts pinning (not secret).
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/GatewayHostKey"}}}}}}}
@@ -1680,6 +1816,7 @@ paths:
       operationId: getStatsOverview
       tags: [system]
       x-permission: dashboard.view
+      x-token: true
       parameters:
         - {name: range, in: query, schema: {type: string, enum: [24h, 7d, 30d], default: 24h}}
       responses:
@@ -1819,6 +1956,35 @@ components:
             expires_at: {$ref: "#/components/schemas/Timestamp"}
             limited: {type: boolean}
             needs_enroll: {type: boolean}
+    APIToken:
+      type: object
+      required: [id, name, operator_id, role, hint, created_at, expires_at]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        operator_id: {type: string, description: The operator the token acts for.}
+        role: {type: string, enum: [administrator, approver, auditor, viewer]}
+        hint: {type: string, description: Last four characters of the token, to recognize it.}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+        expires_at: {$ref: "#/components/schemas/Timestamp"}
+        last_used_at: {$ref: "#/components/schemas/Timestamp"}
+        last_used_ip: {type: string}
+        revoked_at: {$ref: "#/components/schemas/Timestamp"}
+        revoked_by: {type: string}
+    APITokenInput:
+      type: object
+      required: [name, role, expires_in_days]
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+        role: {type: string, enum: [administrator, approver, auditor, viewer]}
+        expires_in_days: {type: integer, minimum: 1, maximum: 366}
+    APITokenCreated:
+      type: object
+      required: [token, api_token]
+      properties:
+        token: {type: string, description: "hallpass_at_…; shown only in this response."}
+        api_token: {$ref: "#/components/schemas/APIToken"}
     Operator:
       type: object
       required: [id, display_name, enabled, provisioned_via, roles, role_assignments, groups, has_password, mfa_enrolled, mfa_required, version, created_at]

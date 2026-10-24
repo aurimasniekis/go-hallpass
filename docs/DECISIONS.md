@@ -911,6 +911,32 @@
 - **Consequences:** policy rules that select roles by name match a new role with a reused name; rules that select by ID
   keep pointing at the deleted one and match nothing. A deletion cannot be undone.
 
+### ADR-0052 — API tokens for automation (security-relevant change)
+
+- **Status:** accepted (operator request, 2026-10-24). **Security-relevant change, flagged for operator review.**
+- **Context:** a Terraform provider and scripts need non-interactive access to the API. Until now the API accepted only
+  browser sessions, with CSRF, Origin checks and step-up (HP-AUTH-013, HP-AUTH-014).
+- **Decision:**
+  - `hallpass_at_<43 base64url chars>` bearer tokens (32 random bytes), stored only as an HMAC under the keyring token
+    key, shown once, with a mandatory expiry of 1–366 days, last-used time and address, and revocation. Issuing and
+    revoking need `operators.manage`; issuing also needs recent authentication and MFA (`createAPIToken` is `x-reauth`
+    and `x-mfa`, and its idempotent replay never repeats the token).
+  - A token acts for its creator with one role the creator held when issuing it, and only while the creator is enabled
+    and still holds that role. Tokens cannot issue tokens.
+  - Tokens work only on operations marked `x-token` in the API document: reads within the role, and configuration
+    changes (agents, inventory, credentials, policy, SSO, integrations). Decisions, cancellations, grant revocation,
+    activity termination, recording content and export, operators, tokens, `/me`, `auth`, the event stream and
+    lockdown stay browser-only.
+  - **Relaxations:** token requests skip the Origin and CSRF checks (no ambient credential) and **skip recent
+    authentication and MFA** on the `x-token` operations that normally require them (HP-AUTH-014), because issuing the
+    token required both.
+  - Audit events of token requests are attributed to the creating operator with `via: api_token:<id>` in the details,
+    so the existing actor types and the hash-chained audit table are unchanged.
+- **Alternatives:** per-operation step-up for tokens (unusable for automation); a separate service-account principal
+  (decouples tokens from an accountable person and needs its own role assignment).
+- **Consequences:** a leaked token can change configuration until it expires or is revoked (THREAT_MODEL T-23), for
+  example add an agent key or widen a rule, but cannot approve the resulting requests.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

@@ -29,6 +29,9 @@ agent JSON schemas, the recording format and the database schema).
   (`POST …/disable`, `POST …/enable`, `DELETE`). Disabling ends active access and cancels pending requests. Deleting
   also revokes the login keys and frees the name; the record stays so past sessions and the audit log can still name
   it. Deleting a server or git remote needs its name typed and takes its roles with it.
+- **API tokens** for Terraform and scripts (**Administration → API tokens**, `/api/v1/api-tokens`): bearer tokens
+  that act for their creator with one of the creator's roles, expire after 1–366 days, and work only on configuration
+  and read operations (`x-token` in the API document).
 - Database growth bounds: delivered notifications are kept for 30 days and finished background jobs for 7 days; free
   pages are returned to the filesystem every 5 minutes; a writer queue-depth metric.
 
@@ -36,6 +39,11 @@ agent JSON schemas, the recording format and the database schema).
 
 - The policy page's effective-access preview names the deciding rules, and the server wizard recognizes rules that
   reach a server through groups or labels.
+
+### Security
+
+- API tokens skip recent authentication and MFA on the operations they may use, because issuing one requires both
+  (ADR-0052). They cannot decide requests, revoke grants, read recordings, manage operators or tokens, or use lockdown.
 
 ### Fixed
 

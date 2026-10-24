@@ -22,6 +22,8 @@ const (
 	MethodPassword   = "password"
 	MethodOIDC       = "oidc"
 	MethodBreakGlass = "breakglass"
+	// MethodToken marks a request authenticated with an automation token (Authorization: Bearer).
+	MethodToken = "token"
 )
 
 // Principal is the authenticated operator behind a request.
@@ -38,8 +40,10 @@ type Principal struct {
 	// Limited is set while MFA verification or enrollment is still required; only MFA endpoints may be used.
 	Limited     bool
 	NeedsEnroll bool
-	tokenHash   []byte
-	csrfSecret  []byte
+	// TokenID is set when the request used an automation token instead of a browser session.
+	TokenID    string
+	tokenHash  []byte
+	csrfSecret []byte
 }
 
 // MFASatisfied reports whether this session completed MFA (or does not need it).

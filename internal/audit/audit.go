@@ -48,6 +48,9 @@ const (
 type Actor struct {
 	Type string
 	ID   string
+	// Via names how an operator acted when it was not a browser session, e.g. "api_token:atk_…". It is recorded as
+	// the "via" detail, so the event stays attributed to the operator.
+	Via string
 }
 
 // System is the actor for automatic actions (expiry, reconciliation, jobs).
@@ -132,6 +135,12 @@ func (w *Writer) Append(ctx context.Context, tx *store.Tx, ev Event) (string, er
 		}
 	}
 	ev = withCorrelation(ctx, ev)
+	if ev.Actor.Via != "" {
+		d := make(map[string]any, len(ev.Details)+1)
+		maps.Copy(d, ev.Details)
+		d["via"] = ev.Actor.Via
+		ev.Details = d
+	}
 	details, err := canonicalJSON(ev.Details)
 	if err != nil {
 		return "", fmt.Errorf("audit details: %w", err)

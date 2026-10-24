@@ -54,6 +54,7 @@ export default defineConfig({
           { text: 'Slack approvals', link: '/operators/slack' },
           { text: 'Telegram approvals', link: '/operators/telegram' },
           { text: 'Single sign-on (OIDC)', link: '/operators/sso' },
+          { text: 'API tokens', link: '/operators/api-tokens' },
           { text: 'Sessions and recordings', link: '/operators/sessions' },
           { text: 'Home and lab servers', link: '/operators/remote-networks' },
           { text: 'Keys and the KEK', link: '/operators/keys' },

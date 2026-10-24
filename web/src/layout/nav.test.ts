@@ -16,6 +16,7 @@ const PLAN_LIST_ROUTES = [
   '/operators',
   '/settings/auth',
   '/settings/integrations',
+  '/settings/api-tokens',
   '/settings/storage',
   '/settings/system',
   '/audit',
@@ -44,7 +45,7 @@ describe('navigation', () => {
     expect(viewer).toContain('/agents');
     expect(viewer).not.toContain('/operators');
     expect(viewer).not.toContain('/settings/auth');
-    expect(paths(['operators.manage'])).toEqual(['/operators', '/me']);
+    expect(paths(['operators.manage'])).toEqual(['/operators', '/settings/api-tokens', '/me']);
     // Sections without visible items are dropped entirely.
     expect(visibleNavSections(['audit.read']).map((s) => s.label)).toEqual(['Governance', 'Account']);
   });

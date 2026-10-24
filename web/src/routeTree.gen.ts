@@ -36,6 +36,7 @@ import { Route as AppServersIdRouteImport } from './routes/_app/servers/$id'
 import { Route as AppServersOnboardRouteImport } from './routes/_app/servers/onboard'
 import { Route as AppSessionsIndexRouteImport } from './routes/_app/sessions/index'
 import { Route as AppSessionsIdRouteImport } from './routes/_app/sessions/$id'
+import { Route as AppSettingsApiTokensRouteImport } from './routes/_app/settings/api-tokens'
 import { Route as AppSettingsAuthRouteImport } from './routes/_app/settings/auth'
 import { Route as AppSettingsIntegrationsRouteImport } from './routes/_app/settings/integrations'
 import { Route as AppSettingsStorageRouteImport } from './routes/_app/settings/storage'
@@ -175,6 +176,11 @@ const AppSessionsIdRoute = AppSessionsIdRouteImport.update({
   path: '/sessions/$id',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSettingsApiTokensRoute = AppSettingsApiTokensRouteImport.update({
+  id: '/settings/api-tokens',
+  path: '/settings/api-tokens',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSettingsAuthRoute = AppSettingsAuthRouteImport.update({
   id: '/settings/auth',
   path: '/settings/auth',
@@ -217,6 +223,7 @@ export interface FileRoutesByFullPath {
   '/servers/$id': typeof AppServersIdRoute
   '/servers/onboard': typeof AppServersOnboardRoute
   '/sessions/$id': typeof AppSessionsIdRoute
+  '/settings/api-tokens': typeof AppSettingsApiTokensRoute
   '/settings/auth': typeof AppSettingsAuthRoute
   '/settings/integrations': typeof AppSettingsIntegrationsRoute
   '/settings/storage': typeof AppSettingsStorageRoute
@@ -249,6 +256,7 @@ export interface FileRoutesByTo {
   '/servers/$id': typeof AppServersIdRoute
   '/servers/onboard': typeof AppServersOnboardRoute
   '/sessions/$id': typeof AppSessionsIdRoute
+  '/settings/api-tokens': typeof AppSettingsApiTokensRoute
   '/settings/auth': typeof AppSettingsAuthRoute
   '/settings/integrations': typeof AppSettingsIntegrationsRoute
   '/settings/storage': typeof AppSettingsStorageRoute
@@ -283,6 +291,7 @@ export interface FileRoutesById {
   '/_app/servers/$id': typeof AppServersIdRoute
   '/_app/servers/onboard': typeof AppServersOnboardRoute
   '/_app/sessions/$id': typeof AppSessionsIdRoute
+  '/_app/settings/api-tokens': typeof AppSettingsApiTokensRoute
   '/_app/settings/auth': typeof AppSettingsAuthRoute
   '/_app/settings/integrations': typeof AppSettingsIntegrationsRoute
   '/_app/settings/storage': typeof AppSettingsStorageRoute
@@ -317,6 +326,7 @@ export interface FileRouteTypes {
     | '/servers/$id'
     | '/servers/onboard'
     | '/sessions/$id'
+    | '/settings/api-tokens'
     | '/settings/auth'
     | '/settings/integrations'
     | '/settings/storage'
@@ -349,6 +359,7 @@ export interface FileRouteTypes {
     | '/servers/$id'
     | '/servers/onboard'
     | '/sessions/$id'
+    | '/settings/api-tokens'
     | '/settings/auth'
     | '/settings/integrations'
     | '/settings/storage'
@@ -382,6 +393,7 @@ export interface FileRouteTypes {
     | '/_app/servers/$id'
     | '/_app/servers/onboard'
     | '/_app/sessions/$id'
+    | '/_app/settings/api-tokens'
     | '/_app/settings/auth'
     | '/_app/settings/integrations'
     | '/_app/settings/storage'
@@ -595,6 +607,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSessionsIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/settings/api-tokens': {
+      id: '/_app/settings/api-tokens'
+      path: '/settings/api-tokens'
+      fullPath: '/settings/api-tokens'
+      preLoaderRoute: typeof AppSettingsApiTokensRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/settings/auth': {
       id: '/_app/settings/auth'
       path: '/settings/auth'
@@ -641,6 +660,7 @@ interface AppRouteChildren {
   AppServersIdRoute: typeof AppServersIdRoute
   AppServersOnboardRoute: typeof AppServersOnboardRoute
   AppSessionsIdRoute: typeof AppSessionsIdRoute
+  AppSettingsApiTokensRoute: typeof AppSettingsApiTokensRoute
   AppSettingsAuthRoute: typeof AppSettingsAuthRoute
   AppSettingsIntegrationsRoute: typeof AppSettingsIntegrationsRoute
   AppSettingsStorageRoute: typeof AppSettingsStorageRoute
@@ -668,6 +688,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppServersIdRoute: AppServersIdRoute,
   AppServersOnboardRoute: AppServersOnboardRoute,
   AppSessionsIdRoute: AppSessionsIdRoute,
+  AppSettingsApiTokensRoute: AppSettingsApiTokensRoute,
   AppSettingsAuthRoute: AppSettingsAuthRoute,
   AppSettingsIntegrationsRoute: AppSettingsIntegrationsRoute,
   AppSettingsStorageRoute: AppSettingsStorageRoute,

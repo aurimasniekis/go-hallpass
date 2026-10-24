@@ -35,6 +35,7 @@ export type OperatorRole = Operator['roles'][number];
 export type OperatorCreate = S['OperatorCreate'];
 export type OperatorPatch = S['OperatorPatch'];
 export type InvitationCreate = S['InvitationCreate'];
+export type APIToken = S['APIToken'];
 
 // inventory
 export type Agent = S['Agent'];

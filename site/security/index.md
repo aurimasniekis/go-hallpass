@@ -68,6 +68,10 @@ yet.**
 - **High availability.** One active instance. Recovery is a restore onto a cold standby.
 - **Recovery without the KEK.** Losing it makes encrypted data unrecoverable, by design.
 
+- **API tokens skip step-up.** A configuration change that needs recent sign-in in the console does not with an
+  [API token](/operators/api-tokens). A leaked token can change configuration until it expires or is revoked, but it can
+  never approve requests, read recordings or manage operators.
+
 ## Assumptions
 
 1. The host OS, the Go runtime and the vetted crypto libraries behave correctly.

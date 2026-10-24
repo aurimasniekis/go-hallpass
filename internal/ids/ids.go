@@ -47,6 +47,7 @@ const (
 	Integration    = "int"
 	Route          = "rte"
 	SSHBan         = "ban"
+	APIToken       = "atk"
 	Boot           = "boot"
 )
 

@@ -229,6 +229,10 @@ func (s *Server) meta(r *http.Request) opauth.SessionMeta {
 	return opauth.SessionMeta{IP: s.clientIP(r), UserAgent: r.UserAgent()}
 }
 
+// errTokenNotAllowed refuses an automation token on an operation that needs a person (decisions, recording content,
+// operators, tokens, the caller's own account).
+var errTokenNotAllowed = apperr.New(apperr.CodeForbidden, "API tokens cannot use this operation; sign in to the web console instead")
+
 // ErrOrigin rejects cross-site mutations (HP-AUTH-013).
 var ErrOrigin = apperr.New(apperr.CodeForbidden, "cross-site request refused")
 
@@ -262,7 +266,10 @@ func (s *Server) wrap(op *gen.Operation, h gen.Handler) http.Handler {
 			s.problem(w, r, apperr.New(apperr.CodeRateLimited, "too many requests; slow down"))
 			return
 		}
-		if mutating(op.Method) && !op.Redirect {
+		// An automation token (Authorization: Bearer) replaces the session cookie entirely: it is never combined with
+		// one, and a request that presents an invalid token fails instead of falling back to the cookie (ADR-0052).
+		bearer, hasBearer := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if mutating(op.Method) && !op.Redirect && !hasBearer {
 			if err := s.checkOrigin(r); err != nil {
 				s.problem(w, r, err)
 				return
@@ -270,10 +277,29 @@ func (s *Server) wrap(op *gen.Operation, h gen.Handler) http.Handler {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		c := &gen.Call{W: w, R: r, Op: op}
-		if ck, err := r.Cookie(s.cookieName()); err == nil && ck.Value != "" {
-			c.SessionToken = ck.Value
-			if p, err := s.d.Auth.Authenticate(r.Context(), ck.Value); err == nil {
-				c.Principal = p
+		switch {
+		case hasBearer:
+			p, err := s.d.Auth.AuthenticateAPIToken(r.Context(), strings.TrimSpace(bearer), s.clientIP(r))
+			if err != nil {
+				if !s.limits.allowKey("anon:"+src, s.o.IPRate, true) {
+					w.Header().Set("Retry-After", "60")
+					s.problem(w, r, apperr.New(apperr.CodeRateLimited, "too many requests; slow down"))
+					return
+				}
+				s.problem(w, r, opauth.ErrUnauthorized)
+				return
+			}
+			if !op.Token {
+				s.problem(w, r, errTokenNotAllowed)
+				return
+			}
+			c.Principal = p
+		default:
+			if ck, err := r.Cookie(s.cookieName()); err == nil && ck.Value != "" {
+				c.SessionToken = ck.Value
+				if p, err := s.d.Auth.Authenticate(r.Context(), ck.Value); err == nil {
+					c.Principal = p
+				}
 			}
 		}
 		if (c.Principal == nil && !s.limits.allowKey("anon:"+src, s.o.IPRate, true)) ||
@@ -286,12 +312,13 @@ func (s *Server) wrap(op *gen.Operation, h gen.Handler) http.Handler {
 			s.problem(w, r, err)
 			return
 		}
-		if c.Principal != nil && op.Permission != string(rbac.Public) && mutating(op.Method) && !op.Redirect &&
+		if c.Principal != nil && c.Principal.TokenID == "" && op.Permission != string(rbac.Public) && mutating(op.Method) && !op.Redirect &&
 			!c.Principal.VerifyCSRF(r.Header.Get("X-CSRF-Token")) {
 			s.problem(w, r, apperr.New(apperr.CodeForbidden, "missing or invalid CSRF token"))
 			return
 		}
-		if op.Reauth || op.MFA {
+		// Tokens skip step-up: issuing one already required recent authentication and MFA (ADR-0052).
+		if (op.Reauth || op.MFA) && (c.Principal == nil || c.Principal.TokenID == "") {
 			if err := s.d.Auth.RequireRecentAuth(c.Principal, op.MFA); err != nil {
 				s.problem(w, r, err)
 				return
@@ -502,6 +529,9 @@ func list[T any](v []T) items[T] {
 func actor(c *gen.Call) audit.Actor {
 	if c.Principal == nil {
 		return audit.Actor{Type: audit.ActorSystem, ID: "api"}
+	}
+	if c.Principal.TokenID != "" {
+		return audit.Actor{Type: audit.ActorOperator, ID: c.Principal.Operator.ID, Via: "api_token:" + c.Principal.TokenID}
 	}
 	return audit.Actor{Type: audit.ActorOperator, ID: c.Principal.Operator.ID}
 }

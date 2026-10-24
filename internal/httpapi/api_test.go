@@ -1300,6 +1300,94 @@ func TestDisableAndDeleteAPI(t *testing.T) {
 	c.ok("createServer", 201, "POST", "/api/v1/servers", map[string]any{"kind": "git", "alias": "github", "address": "10.1.2.40"})
 }
 
+// bearerDo sends a request with an automation token only: no cookie, no Origin, no CSRF token.
+func (h *harness) bearerDo(token, method, path string, body any) resp {
+	h.t.Helper()
+	var rd io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		must(h.t, err)
+		rd = bytes.NewReader(b)
+	}
+	req, err := http.NewRequestWithContext(h.ctx, method, h.base+path, rd)
+	must(h.t, err)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	res, err := http.DefaultClient.Do(req)
+	must(h.t, err)
+	defer res.Body.Close()
+	b, _ := io.ReadAll(res.Body)
+	return resp{status: res.StatusCode, body: b, header: res.Header}
+}
+
+// Automation tokens through the API (ADR-0052): issued once under step-up, they work without cookie, Origin, CSRF or
+// recent authentication on x-token operations, within their role, are refused everywhere else, and are audited as the
+// token.
+func TestAPITokenAPI(t *testing.T) {
+	h := newHarness(t)
+	c := h.bootstrapAdmin()
+	var created struct {
+		Token    string
+		APIToken struct{ ID, Role string } `json:"api_token"`
+	}
+	c.ok("createAPIToken", 201, "POST", "/api/v1/api-tokens", map[string]any{"name": "terraform", "role": "administrator", "expires_in_days": 30},
+		"Idempotency-Key", "token-create-1").json(t, &created)
+	if !strings.HasPrefix(created.Token, "hallpass_at_") {
+		t.Fatalf("token: %+v", created)
+	}
+	if r := c.do("POST", "/api/v1/api-tokens", map[string]any{"name": "terraform", "role": "administrator", "expires_in_days": 30},
+		"Idempotency-Key", "token-create-1"); r.status != 409 || strings.Contains(string(r.body), created.Token) {
+		t.Fatalf("idempotent replay must not repeat the token: %d %s", r.status, r.body)
+	}
+	c.ok("listAPITokens", 200, "GET", "/api/v1/api-tokens", nil)
+
+	tok := created.Token
+	r := h.bearerDo(tok, "POST", "/api/v1/servers", map[string]any{"alias": "web1", "address": "10.1.2.3", "port": 22})
+	if r.status != 201 {
+		t.Fatalf("create server with a token: %d %s", r.status, r.body)
+	}
+	h.spec.validate(t, "createServer", r)
+	var srv struct{ ID string }
+	r.json(t, &srv)
+	if r := h.bearerDo(tok, "GET", "/api/v1/servers", nil); r.status != 200 {
+		t.Fatalf("list: %d %s", r.status, r.body)
+	}
+	// Step-up operations work: the token was issued under recent authentication and MFA.
+	if r := h.bearerDo(tok, "DELETE", "/api/v1/servers/"+srv.ID, nil); r.status != 204 {
+		t.Fatalf("delete (x-reauth) with a token: %d %s", r.status, r.body)
+	}
+	for _, path := range []struct{ method, path string }{
+		{"GET", "/api/v1/me"}, {"GET", "/api/v1/operators"}, {"GET", "/api/v1/api-tokens"},
+		{"POST", "/api/v1/api-tokens"}, {"POST", "/api/v1/requests/req_x/approve"}, {"POST", "/api/v1/system/lockdown"},
+	} {
+		if r := h.bearerDo(tok, path.method, path.path, map[string]any{}); r.status != 403 {
+			t.Errorf("%s %s with a token: %d %s", path.method, path.path, r.status, r.body)
+		}
+	}
+	if r := h.bearerDo("hallpass_at_"+strings.Repeat("x", 43), "GET", "/api/v1/servers", nil); r.status != 401 {
+		t.Fatalf("unknown token: %d", r.status)
+	}
+
+	var events struct {
+		Items []struct {
+			Action    string
+			ActorType string         `json:"actor_type"`
+			Details   map[string]any `json:"details"`
+		}
+	}
+	c.ok("listAuditEvents", 200, "GET", "/api/v1/audit-events?action=server.created", nil).json(t, &events)
+	if len(events.Items) == 0 || events.Items[0].ActorType != "operator" || events.Items[0].Details["via"] != "api_token:"+created.APIToken.ID {
+		t.Fatalf("audit attribution: %+v", events)
+	}
+
+	c.ok("revokeAPIToken", 200, "DELETE", "/api/v1/api-tokens/"+created.APIToken.ID, nil)
+	if r := h.bearerDo(tok, "GET", "/api/v1/servers", nil); r.status != 401 {
+		t.Fatalf("revoked token: %d", r.status)
+	}
+}
+
 // A role needing two approvers through the API: the first approval answers 202 with the request still pending and
 // the approval listed; the second distinct approver answers 200 with the grant.
 func TestMultiApprovalAPI(t *testing.T) {

@@ -480,6 +480,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/api-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Automation tokens (metadata only; the token itself is shown once at creation). */
+        get: operations["listAPITokens"];
+        put?: never;
+        /** Issue an automation token for yourself with one of your roles. It is shown once. It works only while you are enabled and still hold the role, and only on operations marked x-token. */
+        post: operations["createAPIToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/api-tokens/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["revokeAPIToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invitations/{id}": {
         parameters: {
             query?: never;
@@ -2003,6 +2037,33 @@ export interface components {
                 limited: boolean;
                 needs_enroll: boolean;
             };
+        };
+        APIToken: {
+            id: string;
+            name: string;
+            /** @description The operator the token acts for. */
+            operator_id: string;
+            /** @enum {string} */
+            role: "administrator" | "approver" | "auditor" | "viewer";
+            /** @description Last four characters of the token */
+            hint: string;
+            created_at: components["schemas"]["Timestamp"];
+            expires_at: components["schemas"]["Timestamp"];
+            last_used_at?: components["schemas"]["Timestamp"];
+            last_used_ip?: string;
+            revoked_at?: components["schemas"]["Timestamp"];
+            revoked_by?: string;
+        };
+        APITokenInput: {
+            name: string;
+            /** @enum {string} */
+            role: "administrator" | "approver" | "auditor" | "viewer";
+            expires_in_days: number;
+        };
+        APITokenCreated: {
+            /** @description hallpass_at_…; shown only in this response. */
+            token: string;
+            api_token: components["schemas"]["APIToken"];
         };
         Operator: {
             id: string;
@@ -3616,6 +3677,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OneTimeToken"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAPITokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["APIToken"][];
+                    };
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createAPIToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["APITokenInput"];
+            };
+        };
+        responses: {
+            /** @description created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APITokenCreated"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    revokeAPIToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIToken"];
                 };
             };
             default: components["responses"]["Problem"];

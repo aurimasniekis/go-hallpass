@@ -19,6 +19,7 @@ type Operation struct {
 	Idempotent bool   // x-idempotency-key: Idempotency-Key honored (HP-API-006)
 	Stream     bool   // x-stream: the handler writes the response itself (SSE)
 	Redirect   bool   // x-redirect: browser redirect endpoint outside the JSON API
+	Token      bool   // x-token: automation tokens may call it (ADR-0052); otherwise only browser sessions
 	Tags       []string
 }
 

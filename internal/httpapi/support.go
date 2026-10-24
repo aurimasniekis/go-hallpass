@@ -122,7 +122,7 @@ const idempotencyTTL = 24 * time.Hour
 // hash and status but never the body (SR-11); a replay is answered 409 instead of repeating the secret.
 var secretResponseOps = map[string]bool{
 	"createInvitation": true, "issueResetToken": true, "issueLinkInvite": true, "createProviderLinkCode": true, "recoverLogin": true,
-	"beginTOTP": true, "confirmTOTP": true, "regenerateRecoveryCodes": true,
+	"beginTOTP": true, "confirmTOTP": true, "regenerateRecoveryCodes": true, "createAPIToken": true,
 }
 
 var errSecretReplay = apperr.New(apperr.CodeConflict,

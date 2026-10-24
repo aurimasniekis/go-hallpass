@@ -1,0 +1,196 @@
+import { PlusOutlined } from '@ant-design/icons';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Alert, App, Button, Form, Input, InputNumber, Select } from 'antd';
+import { useState } from 'react';
+
+import { api } from '../../api/client';
+import { qk } from '../../api/queryKeys';
+import type { APIToken, OperatorRole } from '../../api/types';
+import { ConfirmAction } from '../../ds/ConfirmAction';
+import { DataTable } from '../../ds/DataTable';
+import { PageHeader } from '../../ds/PageHeader';
+import { PermissionDenied } from '../../ds/states';
+import { StatusBadge } from '../../ds/StatusBadge';
+import { formatDateTime } from '../../lib/format';
+import { useNow } from '../../lib/useNow';
+import { usePermissions } from '../../lib/usePermissions';
+import { OperatorName } from '../../shared/names';
+import { roleLabel } from '../operators/roles';
+import { useOneTimeSecret } from '../operators/useOneTimeSecret';
+import { FormModal } from '../servers/FormModal';
+
+interface TokenFormValues {
+  name: string;
+  role: OperatorRole;
+  expires_in_days: number;
+}
+
+function TokenState({ token, now }: { token: APIToken; now: number }) {
+  if (token.revoked_at) {
+    return <StatusBadge tone="neutral">Revoked</StatusBadge>;
+  }
+  if (new Date(token.expires_at).getTime() <= now) {
+    return <StatusBadge tone="warning">Expired</StatusBadge>;
+  }
+  return <StatusBadge tone="success">Active</StatusBadge>;
+}
+
+/**
+ * Automation tokens for Terraform and scripts (ADR-0052). A token acts for the operator who created it with one of
+ * their roles, only on configuration and read operations; it is shown once and stored only as a keyed hash.
+ */
+export function ApiTokensPage() {
+  const { can, me, loading } = usePermissions();
+  const queryClient = useQueryClient();
+  const { message } = App.useApp();
+  const secret = useOneTimeSecret();
+  const [creating, setCreating] = useState(false);
+  const now = useNow(60_000);
+  const tokens = useQuery({
+    queryKey: qk.apiTokens,
+    queryFn: async () => (await api.call('get', '/api/v1/api-tokens')).items,
+    enabled: can('operators.manage'),
+  });
+  if (!loading && !can('operators.manage')) {
+    return (
+      <>
+        <PageHeader title="API tokens" />
+        <PermissionDenied />
+      </>
+    );
+  }
+  const myRoles: OperatorRole[] = me?.operator.roles ?? [];
+  return (
+    <>
+      <PageHeader
+        title="API tokens"
+        description="Tokens for Terraform and scripts that manage HallPass through its API."
+        extra={
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setCreating(true);
+            }}
+          >
+            New token
+          </Button>
+        }
+      />
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+        title="What a token can do"
+        description={
+          <>
+            A token acts for you, with one of your roles, until it expires or is revoked. It stops working if
+            you lose that role or your account is disabled. It can read what the role allows and change
+            configuration: agents, servers, git remotes, roles, keys, policy, single sign-on and chat
+            integrations. It can never approve or deny requests, revoke access, read recordings, manage
+            operators or tokens, or use lockdown. Its changes are recorded in the audit log under your name,
+            marked with the token.
+          </>
+        }
+      />
+      <DataTable<APIToken>
+        caption="API tokens"
+        rowKey="id"
+        rows={tokens.data}
+        loading={tokens.isPending}
+        fetching={tokens.isFetching}
+        error={tokens.error}
+        onRetry={() => void tokens.refetch()}
+        emptyTitle="No API tokens"
+        emptyDescription="Create one for Terraform or a script. It is shown once."
+        columns={[
+          { key: 'name', title: 'Name', render: (_, t) => <strong>{t.name}</strong> },
+          {
+            key: 'hint',
+            title: 'Token',
+            render: (_, t) => <code className="hp-mono">hallpass_at_…{t.hint}</code>,
+          },
+          { key: 'operator', title: 'Acts for', render: (_, t) => <OperatorName id={t.operator_id} /> },
+          { key: 'role', title: 'Role', render: (_, t) => roleLabel(t.role) },
+          { key: 'state', title: 'Status', render: (_, t) => <TokenState token={t} now={now} /> },
+          { key: 'expires', title: 'Expires', render: (_, t) => formatDateTime(t.expires_at) },
+          {
+            key: 'used',
+            title: 'Last used',
+            render: (_, t) =>
+              t.last_used_at ? `${formatDateTime(t.last_used_at)} from ${t.last_used_ip ?? '?'}` : 'Never',
+          },
+          {
+            key: 'actions',
+            title: <span className="hp-visually-hidden">Actions</span>,
+            align: 'right',
+            render: (_, t) =>
+              t.revoked_at ? null : (
+                <ConfirmAction<undefined>
+                  label="Revoke"
+                  title={`Revoke the token ${t.name}?`}
+                  confirmLabel="Revoke"
+                  buttonProps={{ size: 'small', 'aria-label': `Revoke token ${t.name}` }}
+                  description="Anything using it stops working immediately. This cannot be undone."
+                  onConfirm={async () => {
+                    await api.call('delete', '/api/v1/api-tokens/{id}', { path: { id: t.id } });
+                    return undefined;
+                  }}
+                  onSuccess={() => {
+                    void message.success(`Token ${t.name} revoked`);
+                    void queryClient.invalidateQueries({ queryKey: qk.apiTokens });
+                  }}
+                />
+              ),
+          },
+        ]}
+      />
+      <FormModal<TokenFormValues>
+        open={creating}
+        title="New API token"
+        okText="Create token"
+        formLabel="New API token"
+        initialValues={{
+          role: myRoles.includes('administrator') ? 'administrator' : myRoles[0],
+          expires_in_days: 90,
+        }}
+        onCancel={() => {
+          setCreating(false);
+        }}
+        onSubmit={async (values, { idempotencyKey }) => {
+          const res = await api.call('post', '/api/v1/api-tokens', { body: values, idempotencyKey });
+          await queryClient.invalidateQueries({ queryKey: qk.apiTokens });
+          setCreating(false);
+          secret.show({
+            title: `Token ${res.api_token.name}`,
+            label: 'API token',
+            description:
+              'Copy it now: it is shown only once. Use it as a bearer token, for example HALLPASS_TOKEN for the Terraform provider.',
+            values: [res.token],
+          });
+        }}
+      >
+        <Form.Item
+          name="name"
+          label="Name"
+          extra="What uses it, e.g. terraform-prod."
+          rules={[{ required: true, max: 100, whitespace: true }]}
+        >
+          <Input autoComplete="off" />
+        </Form.Item>
+        <Form.Item name="role" label="Role" extra="One of your own roles." rules={[{ required: true }]}>
+          <Select options={myRoles.map((r) => ({ value: r, label: roleLabel(r) }))} />
+        </Form.Item>
+        <Form.Item
+          name="expires_in_days"
+          label="Expires after (days)"
+          extra="1 to 366 days. Rotate tokens before they expire."
+          rules={[{ required: true, type: 'integer', min: 1, max: 366 }]}
+        >
+          <InputNumber min={1} max={366} precision={0} />
+        </Form.Item>
+      </FormModal>
+      {secret.dialog}
+    </>
+  );
+}

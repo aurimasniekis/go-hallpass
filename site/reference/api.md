@@ -6,9 +6,10 @@ Everything the web console does goes through a JSON REST API under `/api/v1`. Th
 ## Conventions
 
 - **JSON only.** Errors are RFC 9457 problem details (`application/problem+json`) with a stable `code`.
-- **Authentication** uses the `__Host-hp_session` cookie from a browser sign-in (password plus TOTP, or SSO). There
-  are no API tokens.
-- **Mutations** require the `X-CSRF-Token` header and a same-origin `Origin` header.
+- **Authentication** uses the `__Host-hp_session` cookie from a browser sign-in (password plus TOTP, or SSO), or an
+  [API token](/operators/api-tokens) sent as `Authorization: Bearer hallpass_at_…` for automation.
+- **Mutations** with a session require the `X-CSRF-Token` header and a same-origin `Origin` header. Token requests need
+  neither.
 - **Durations** are integer seconds; **timestamps** are RFC 3339 UTC.
 - **Idempotency:** operations marked `x-idempotency-key` honor an `Idempotency-Key` header for 24 hours per operator,
   so a retried click never decides twice.
@@ -24,13 +25,14 @@ Each operation in the document carries vendor extensions:
 | `x-mfa` | Password sessions must have completed MFA recently; otherwise `mfa_required`. |
 | `x-idempotency-key` | `Idempotency-Key` is honored. |
 | `x-stream` | Server-Sent Events. |
+| `x-token` | API tokens may call it. Everything else needs a browser session. |
 
 ## Areas
 
 | Tag | Covers |
 |---|---|
 | `auth`, `me` | Sign-in, MFA, re-authentication, bootstrap, invitations, password reset, own sessions and chat links |
-| `operators` | Operators, invitations, roles, sessions, identities |
+| `operators` | Operators, invitations, roles, sessions, identities, API tokens |
 | `agents` | Agents, keys, effective access |
 | `inventory` | Servers and git remotes (`kind`), host identities and CAs, roles and access profiles, groups. Servers and roles can be disabled, enabled and deleted; deleted ones stay readable by ID for history. |
 | `credentials` | Login keys (generate, import, probe, activate, revoke), user CAs, certificate bindings |

@@ -105,6 +105,21 @@ type ApiIdempotency struct {
 	ExpiresAt   int64
 }
 
+type ApiToken struct {
+	ID         string
+	Name       string
+	OperatorID string
+	Role       string
+	Mac        []byte
+	Hint       string
+	CreatedAt  int64
+	ExpiresAt  int64
+	LastUsedAt sql.NullInt64
+	LastUsedIp sql.NullString
+	RevokedAt  sql.NullInt64
+	RevokedBy  sql.NullString
+}
+
 type ApprovalDecision struct {
 	ID                string
 	RequestID         string

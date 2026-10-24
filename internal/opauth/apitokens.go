@@ -1,0 +1,193 @@
+package opauth
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"slices"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/aurimasniekis/go-hallpass/internal/apperr"
+	"github.com/aurimasniekis/go-hallpass/internal/audit"
+	"github.com/aurimasniekis/go-hallpass/internal/ids"
+	"github.com/aurimasniekis/go-hallpass/internal/store"
+	"github.com/aurimasniekis/go-hallpass/internal/store/db"
+)
+
+// Automation (API) tokens: `hallpass_at_<43 base64url chars>` bearer tokens for Terraform and scripts. A token acts for
+// the operator who created it, with one role that operator held when creating it, and only while the operator is still
+// enabled and holds that role. Only a keyed MAC is stored.
+const (
+	APITokenPrefix = "hallpass_at_"
+	MinAPITokenTTL = 24 * time.Hour
+	MaxAPITokenTTL = 366 * 24 * time.Hour
+	// apiTokenTouchEvery bounds the writes that record when a token was last used.
+	apiTokenTouchEvery = time.Minute
+)
+
+// APIToken describes an automation token (never the token itself).
+type APIToken struct {
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	OperatorID string     `json:"operator_id"`
+	Role       string     `json:"role"`
+	Hint       string     `json:"hint"`
+	CreatedAt  time.Time  `json:"created_at"`
+	ExpiresAt  time.Time  `json:"expires_at"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	LastUsedIP string     `json:"last_used_ip,omitempty"`
+	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
+	RevokedBy  string     `json:"revoked_by,omitempty"`
+}
+
+func apiTokenFromRow(r db.ApiToken) *APIToken {
+	t := &APIToken{ID: r.ID, Name: r.Name, OperatorID: r.OperatorID, Role: r.Role, Hint: r.Hint,
+		CreatedAt: time.UnixMicro(r.CreatedAt).UTC(), ExpiresAt: time.UnixMicro(r.ExpiresAt).UTC(), LastUsedIP: r.LastUsedIp.String,
+		RevokedBy: r.RevokedBy.String}
+	if r.LastUsedAt.Valid {
+		v := time.UnixMicro(r.LastUsedAt.Int64).UTC()
+		t.LastUsedAt = &v
+	}
+	if r.RevokedAt.Valid {
+		v := time.UnixMicro(r.RevokedAt.Int64).UTC()
+		t.RevokedAt = &v
+	}
+	return t
+}
+
+// CreateAPIToken issues a token for the calling operator with one of their roles. The token is returned once.
+func (svc *Service) CreateAPIToken(ctx context.Context, p *Principal, name, role string, ttl time.Duration) (*APIToken, string, error) {
+	name = strings.TrimSpace(name)
+	v := &apperr.Validation{}
+	if name == "" || utf8.RuneCountInString(name) > 100 {
+		v.Add("name", "must be 1-100 characters")
+	}
+	if !slices.Contains(p.Operator.Roles, role) {
+		v.Add("role", "must be one of your own roles")
+	}
+	if ttl < MinAPITokenTTL || ttl > MaxAPITokenTTL {
+		v.Add("expires_in_days", "must be between 1 and 366 days")
+	}
+	if p.TokenID != "" {
+		return nil, "", apperr.New(apperr.CodeForbidden, "API tokens cannot issue tokens")
+	}
+	if err := v.Err(); err != nil {
+		return nil, "", err
+	}
+	secret, err := randomToken()
+	if err != nil {
+		return nil, "", err
+	}
+	token := APITokenPrefix + secret
+	mac, err := svc.tokenMAC(token)
+	if err != nil {
+		return nil, "", err
+	}
+	id := ids.New(ids.APIToken)
+	err = svc.s.W().TxNamed(ctx, "opauth.create_api_token", func(tx *store.Tx) error {
+		if err := tx.Q.InsertAPIToken(ctx, db.InsertAPITokenParams{ID: id, Name: name, OperatorID: p.Operator.ID, Role: role, Mac: mac,
+			Hint: token[len(token)-4:], CreatedAt: tx.NowMicros(), ExpiresAt: tx.Now.Add(ttl).UnixMicro()}); err != nil {
+			return err
+		}
+		_, err := svc.audit.Append(ctx, tx, audit.Event{Actor: audit.Actor{Type: audit.ActorOperator, ID: p.Operator.ID}, Action: "api_token.created",
+			Target: audit.Target{Type: "api_token", ID: id}, Details: map[string]any{"name": name, "role": role, "expires_in": ttl.String()}})
+		return err
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	t, err := svc.GetAPIToken(ctx, id)
+	return t, token, err
+}
+
+// GetAPIToken returns one token's metadata.
+func (svc *Service) GetAPIToken(ctx context.Context, id string) (*APIToken, error) {
+	r, err := svc.s.R().GetAPIToken(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, apperr.New(apperr.CodeNotFound, "API token not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return apiTokenFromRow(r), nil
+}
+
+// ListAPITokens returns every token, active first.
+func (svc *Service) ListAPITokens(ctx context.Context) ([]*APIToken, error) {
+	rows, err := svc.s.R().ListAPITokens(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*APIToken, len(rows))
+	for i, r := range rows {
+		out[i] = apiTokenFromRow(r)
+	}
+	return out, nil
+}
+
+// RevokeAPIToken stops a token at once. Revoking a revoked token is a no-op.
+func (svc *Service) RevokeAPIToken(ctx context.Context, actor audit.Actor, id string) (*APIToken, error) {
+	err := svc.s.W().TxNamed(ctx, "opauth.revoke_api_token", func(tx *store.Tx) error {
+		if _, err := tx.Q.GetAPIToken(ctx, id); errors.Is(err, sql.ErrNoRows) {
+			return apperr.New(apperr.CodeNotFound, "API token not found")
+		} else if err != nil {
+			return err
+		}
+		n, err := tx.Q.RevokeAPIToken(ctx, db.RevokeAPITokenParams{Now: sql.NullInt64{Int64: tx.NowMicros(), Valid: true},
+			Actor: sql.NullString{String: actorRef(actor), Valid: true}, ID: id})
+		if err != nil || n == 0 {
+			return err
+		}
+		_, err = svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "api_token.revoked", Target: audit.Target{Type: "api_token", ID: id}})
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return svc.GetAPIToken(ctx, id)
+}
+
+// AuthenticateAPIToken resolves a bearer token to a principal: the creating operator restricted to the token's role.
+// Unknown, revoked and expired tokens, and tokens whose operator is disabled or no longer holds the role, all fail
+// with the same error.
+func (svc *Service) AuthenticateAPIToken(ctx context.Context, token, ip string) (*Principal, error) {
+	if !strings.HasPrefix(token, APITokenPrefix) || len(token) != len(APITokenPrefix)+43 {
+		return nil, ErrUnauthorized
+	}
+	macs, err := svc.tokenMACs(token)
+	if err != nil {
+		return nil, err
+	}
+	var row db.ApiToken
+	found := false
+	for _, mac := range macs {
+		r, err := svc.s.R().GetAPITokenByMAC(ctx, mac)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		row, found = r, true
+		break
+	}
+	now := svc.opts.Clock.Now()
+	if !found || row.RevokedAt.Valid || !now.Before(time.UnixMicro(row.ExpiresAt)) {
+		return nil, ErrUnauthorized
+	}
+	op, err := svc.Get(ctx, row.OperatorID)
+	if err != nil || !op.Enabled || !slices.Contains(op.Roles, row.Role) {
+		return nil, ErrUnauthorized
+	}
+	if !row.LastUsedAt.Valid || now.Sub(time.UnixMicro(row.LastUsedAt.Int64)) >= apiTokenTouchEvery {
+		_ = svc.s.W().TxNamed(ctx, "opauth.touch_api_token", func(tx *store.Tx) error {
+			return tx.Q.TouchAPIToken(ctx, db.TouchAPITokenParams{Now: sql.NullInt64{Int64: tx.NowMicros(), Valid: true},
+				Ip: sql.NullString{String: ip, Valid: ip != ""}, ID: row.ID, Since: sql.NullInt64{Int64: tx.Now.Add(-apiTokenTouchEvery).UnixMicro(), Valid: true}})
+		})
+	}
+	scoped := *op
+	scoped.Roles = []string{row.Role}
+	return &Principal{Operator: &scoped, SessionID: row.ID, TokenID: row.ID, Method: MethodToken, AuthAt: now, ExpiresAt: time.UnixMicro(row.ExpiresAt)}, nil
+}
