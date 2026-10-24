@@ -1198,3 +1198,46 @@ func TestReviewSR11InvitationTokenNotCached(t *testing.T) {
 		t.Fatalf("replay: %d %s", r.status, r.body)
 	}
 }
+
+// Git remotes and their access profiles through the API: kind on create, git rules round trip and validation, and the
+// kind cannot change later.
+func TestGitRemoteAPI(t *testing.T) {
+	h := newHarness(t)
+	c := h.bootstrapAdmin()
+	r := c.ok("createServer", 201, "POST", "/api/v1/servers", map[string]any{"kind": "git", "alias": "github", "address": "10.1.2.40"})
+	var srv struct {
+		ID, Kind string
+		Version  int64
+	}
+	r.json(t, &srv)
+	if srv.Kind != "git" {
+		t.Fatalf("kind: %s", r.body)
+	}
+	rules := map[string]any{"repos": []string{"acme/{api,web}"}, "push": map[string]any{"branches": []string{"agent/**"}, "protected_branches": []string{"main"}}}
+	r = c.ok("createRole", 201, "POST", "/api/v1/servers/"+srv.ID+"/roles", map[string]any{"alias": "acme-push",
+		"capabilities": []string{"git-read", "git-write"}, "git": rules})
+	var role struct {
+		RemoteUser string `json:"remote_user"`
+		Git        struct {
+			Repos []string
+			Push  struct {
+				Branches          []string
+				ProtectedBranches []string `json:"protected_branches"`
+			}
+		}
+	}
+	r.json(t, &role)
+	if role.RemoteUser != "git" || role.Git.Repos[0] != "acme/{api,web}" || role.Git.Push.ProtectedBranches[0] != "main" {
+		t.Fatalf("profile: %s", r.body)
+	}
+	if r := c.do("POST", "/api/v1/servers/"+srv.ID+"/roles", map[string]any{"alias": "bad", "git": map[string]any{"repos": []string{"acme/{api"}}}); r.status != 422 {
+		t.Fatalf("bad repository pattern: %d %s", r.status, r.body)
+	}
+	if r := c.do("POST", "/api/v1/servers/"+srv.ID+"/roles", map[string]any{"alias": "shell", "capabilities": []string{"exec"},
+		"git": map[string]any{"repos": []string{"x/y"}}}); r.status != 422 {
+		t.Fatalf("exec on a git remote: %d %s", r.status, r.body)
+	}
+	if r := c.do("PATCH", "/api/v1/servers/"+srv.ID, map[string]any{"kind": "ssh"}, "If-Match", fmt.Sprintf(`"%d"`, srv.Version)); r.status != 422 {
+		t.Fatalf("kind change: %d %s", r.status, r.body)
+	}
+}

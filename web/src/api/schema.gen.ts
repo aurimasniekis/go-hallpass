@@ -2065,6 +2065,11 @@ export interface components {
         };
         Server: {
             id: string;
+            /**
+             * @description ssh: a destination for shell and exec; git: a git host agents reach with plain git
+             * @enum {string}
+             */
+            kind: "ssh" | "git";
             alias: string;
             display_name: string;
             description?: string;
@@ -2087,6 +2092,11 @@ export interface components {
         };
         ServerInput: {
             version?: number;
+            /**
+             * @description Set on create only (default ssh); it cannot change later.
+             * @enum {string}
+             */
+            kind?: "ssh" | "git";
             alias?: string;
             display_name?: string;
             description?: string;
@@ -2127,6 +2137,21 @@ export interface components {
             version: number;
             created_at?: components["schemas"]["Timestamp"];
             updated_at?: components["schemas"]["Timestamp"];
+            git?: components["schemas"]["GitRules"];
+        };
+        /** @description What an access profile on a git remote covers. Repository patterns match the repository path without ".git", case-insensitively: * matches within one segment, ** across segments, ? one character, {a,b} alternatives. Push rules apply with the git-write capability; branch and tag patterns are relative to refs/heads/ and refs/tags/. */
+        GitRules: {
+            repos: string[];
+            push?: {
+                /** @description Branches that may be created and updated. */
+                branches?: string[];
+                /** @description Branches never changed, even when branches matches. */
+                protected_branches?: string[];
+                /** @description Tags that may be created; existing tags are never moved or deleted. */
+                tags?: string[];
+                /** @description Allow deleting branches that branches matches and protected_branches does not. */
+                allow_delete?: boolean;
+            };
         };
         RoleInput: {
             version?: number;
@@ -2151,6 +2176,7 @@ export interface components {
                 [key: string]: string;
             };
             enabled?: boolean;
+            git?: components["schemas"]["GitRules"];
         };
         HostIdentity: {
             id: string;
@@ -2439,6 +2465,13 @@ export interface components {
             grant_expires_at?: components["schemas"]["NullableTimestamp"];
             exit_status?: number | null;
             exit_signal?: string;
+            /**
+             * @description Git operation on a git remote.
+             * @enum {string}
+             */
+            git_service?: "git-upload-pack" | "git-receive-pack" | "git-upload-archive";
+            /** @description Normalized repository of a git operation. */
+            git_repo?: string;
         };
         SSHBan: {
             id: string;

@@ -15,6 +15,8 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/apperr"
 	"github.com/aurimasniekis/go-hallpass/internal/buildinfo"
 	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
+	"github.com/aurimasniekis/go-hallpass/internal/gitproto"
+	"github.com/aurimasniekis/go-hallpass/internal/inventory"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
 	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/policy"
@@ -29,6 +31,7 @@ const startTimeout = 30 * time.Second
 type Handler struct {
 	Access      *access.Service
 	Engine      *policy.Engine
+	Inventory   *inventory.Service // server kinds and git access profiles
 	Proxy       *sshproxy.Proxy
 	Bus         *eventbus.Bus
 	Log         *slog.Logger
@@ -52,6 +55,7 @@ type session struct {
 	diag  io.Writer // gateway messages: stderr, or the terminal when a PTY is allocated
 	snap  *policy.Snapshot
 	jsonE bool // errors as JSON
+	git   bool // a git operation: errors as text lines git shows to its user
 }
 
 // HandleSession implements SessionHandler.
@@ -140,7 +144,7 @@ func (s *session) exit(code int) {
 
 // fail writes a gateway error: one JSON line on stderr for JSON mode or non-PTY sessions, text otherwise.
 func (s *session) fail(err error) int {
-	if s.jsonE || s.pty == nil {
+	if s.jsonE || (s.pty == nil && !s.git) {
 		_, _ = s.ch.Stderr().Write(grammar.ErrorJSON(err))
 	} else {
 		_, _ = io.WriteString(s.diag, grammar.ErrorText(err))
@@ -185,6 +189,17 @@ func publicMessage(err error) string {
 }
 
 func (s *session) run(ctx context.Context, command string) int {
+	if gc, ok, err := gitproto.ParseCommand(command); ok {
+		s.git = true
+		if err != nil {
+			return s.fail(grammar.Usage("invalid git command"))
+		}
+		if s.snap, err = s.h.Engine.Current(ctx); err != nil {
+			s.h.Log.Error("policy snapshot unavailable", obs.Err(err))
+			return s.fail(grammar.Internal())
+		}
+		return s.gitOp(ctx, gc)
+	}
 	cmd, err := grammar.Parse(command)
 	if err != nil {
 		return s.fail(err)
@@ -287,7 +302,10 @@ func (s *session) list(ctx context.Context, c grammar.List) int {
 		if c.Server != "" && vs.Server.Alias != c.Server {
 			continue
 		}
-		ls := grammar.ListServer{Alias: vs.Server.Alias, Description: vs.Server.Description}
+		ls := grammar.ListServer{Alias: vs.Server.Alias, Description: vs.Server.Description, Kind: inventory.KindSSH}
+		if s.isGitRemote(ctx, vs.Server.ID) {
+			ls.Kind = inventory.KindGit
+		}
 		for _, r := range vs.Roles {
 			ls.Roles = append(ls.Roles, grammar.ListRole{Alias: r.Role.Name, Description: r.Role.Description, Level: level(r.Decision.Level),
 				ActiveGrant: activeOf(active[r.Role.ID])})
@@ -572,32 +590,12 @@ func (s *session) connect(ctx context.Context, alias string, o grammar.Opts, wai
 	if err != nil {
 		return s.fail(err)
 	}
-	g, err := s.h.Access.FindActiveGrant(ctx, s.c.AgentID, vs.Server.ID, vr.Role.ID)
-	if err != nil {
-		return s.fail(grammar.Internal())
+	if s.isGitRemote(ctx, vs.Server.ID) {
+		return s.fail(grammar.Usage(alias + " is a git remote: use git with the remote " + alias + "/<repository>.git"))
 	}
+	g, code := s.obtainGrant(ctx, vs, vr, o, wait)
 	if g == nil {
-		res, code := s.createRequest(ctx, vs, vr, o)
-		if res == nil {
-			return code
-		}
-		switch {
-		case res.Grant != nil:
-			g = res.Grant
-		case res.Request.Terminal():
-			return s.fail(grammar.NewError(grammar.ExitCode(stateExit(res.Request.State)), "request "+res.Request.State).WithRequestID(res.Request.ID))
-		case !wait:
-			return s.fail(grammar.NewError(grammar.ExitWaitTimeout, "request pending approval; connect again when approved").WithRequestID(res.Request.ID))
-		default:
-			req, rg, err := s.wait(ctx, res.Request, o.EffectiveWaitTimeout())
-			if err != nil {
-				return s.fail(err)
-			}
-			if req.State != access.ReqApproved || rg == nil {
-				return s.fail(grammar.NewError(grammar.ExitCode(stateExit(req.State)), "request "+req.State).WithRequestID(req.ID))
-			}
-			g = rg
-		}
+		return code
 	}
 	if s.pty != nil {
 		s.notice(fmt.Sprintf("connecting to %s as %s (access until %s)", vs.Server.Alias, vr.Role.Name, g.ExpiresAt.UTC().Format(time.RFC3339)))
@@ -606,10 +604,47 @@ func (s *session) connect(ctx context.Context, alias string, o grammar.Opts, wai
 		// piped scripts but confusing interactively, so say so (stderr only; stdout stays the destination's).
 		s.notice("no terminal requested: this is a non-interactive shell (no prompt); use ssh -t for an interactive session")
 	}
-	res := s.h.Proxy.Run(ctx, &sshproxy.Session{
+	return s.proxy(ctx, &sshproxy.Session{
 		ConnectionID: s.c.ID, AgentID: s.c.AgentID, KeyID: s.c.KeyID, SourceIP: s.c.SourceIP.String(), Grant: g, Kind: kind,
 		Command: remote, PTY: s.pty, Env: s.env, Agent: s.ch, AgentReqs: s.reqs, Notify: s.notice,
 	})
+}
+
+// obtainGrant reuses an active grant or requests access and waits for the decision (PLAN §7.6). It returns the
+// grant, or nil and the exit code after writing the error.
+func (s *session) obtainGrant(ctx context.Context, vs policy.VisibleServer, vr policy.VisibleRole, o grammar.Opts, wait bool) (*access.Grant, int) {
+	g, err := s.h.Access.FindActiveGrant(ctx, s.c.AgentID, vs.Server.ID, vr.Role.ID)
+	if err != nil {
+		return nil, s.fail(grammar.Internal())
+	}
+	if g != nil {
+		return g, 0
+	}
+	res, code := s.createRequest(ctx, vs, vr, o)
+	if res == nil {
+		return nil, code
+	}
+	switch {
+	case res.Grant != nil:
+		return res.Grant, 0
+	case res.Request.Terminal():
+		return nil, s.fail(grammar.NewError(grammar.ExitCode(stateExit(res.Request.State)), "request "+res.Request.State).WithRequestID(res.Request.ID))
+	case !wait:
+		return nil, s.fail(grammar.NewError(grammar.ExitWaitTimeout, "request pending approval; connect again when approved").WithRequestID(res.Request.ID))
+	}
+	req, rg, err := s.wait(ctx, res.Request, o.EffectiveWaitTimeout())
+	if err != nil {
+		return nil, s.fail(err)
+	}
+	if req.State != access.ReqApproved || rg == nil {
+		return nil, s.fail(grammar.NewError(grammar.ExitCode(stateExit(req.State)), "request "+req.State).WithRequestID(req.ID))
+	}
+	return rg, 0
+}
+
+// proxy runs the destination channel and maps a gateway-side failure to the agent's exit code.
+func (s *session) proxy(ctx context.Context, ps *sshproxy.Session) int {
+	res := s.h.Proxy.Run(ctx, ps)
 	if res.Delivered {
 		return -1
 	}

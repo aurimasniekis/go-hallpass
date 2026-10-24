@@ -136,8 +136,8 @@ UPDATE ssh_connections SET state = 'interrupted', closed_at = ?, close_reason = 
 
 -- name: InsertChannel :exec
 INSERT INTO ssh_channels (id, connection_id, access_session_id, grant_id, agent_id, role_id, kind, pty, credential_ref, state,
-  opened_at, boot_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'opening', ?, ?);
+  opened_at, boot_id, git_service, git_repo)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'opening', ?, ?, ?, ?);
 
 -- name: GetChannel :one
 SELECT * FROM ssh_channels WHERE id = ?;

@@ -45,7 +45,7 @@ func (a *App) Serve(ctx context.Context, sshLn net.Listener) error {
 		_ = tp.Shutdown(sctx)
 		cancel()
 	}()
-	h := &sshfront.Handler{Access: a.Access, Engine: a.Engine, Proxy: a.Proxy, Bus: a.Bus, Log: a.Log,
+	h := &sshfront.Handler{Access: a.Access, Engine: a.Engine, Inventory: a.Inventory, Proxy: a.Proxy, Bus: a.Bus, Log: a.Log,
 		WaitDefault: a.Cfg.Access.WaitTimeoutDefault.D(), WaitMax: a.Cfg.Access.WaitTimeoutMax.D(), Metrics: a.Metrics}
 	srv := sshfront.New(sshfront.Options{Config: a.Cfg.SSH, Agents: a.Agents, Access: a.Access, Audit: a.Audit, Store: a.Store,
 		Hosts: a.Credentials, Handler: h, Bans: a.Bans, Logger: a.Log, Metrics: a.Metrics, Bus: a.Bus})

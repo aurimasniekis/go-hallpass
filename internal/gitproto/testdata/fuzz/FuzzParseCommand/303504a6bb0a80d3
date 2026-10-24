@@ -1,0 +1,2 @@
+go test fuzz v1
+string("git upload-pack '0/..0'")

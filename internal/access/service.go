@@ -184,6 +184,12 @@ const (
 	EvExecRequested   = "exec.requested"
 	EvRecordingFailed = "recording.failed"
 	EvSessionClosed   = "access_session.closed"
+	// Git operations on git remotes record metadata only (no pack data): the service and repository, the ref updates
+	// of a push (allowed or refused), and the bytes transferred.
+	EvGitRequested   = "git.requested"
+	EvGitPush        = "git.push"
+	EvGitPushRefused = "git.push_refused"
+	EvGitTransferred = "git.transferred"
 	// EvDestinationExec is a destination-reported exec record ingested from a signed collector (WP25, HP-REC-012).
 	// It is never verified by HallPass; its data carries provenance "destination-audit" and verified=false.
 	EvDestinationExec = "destination.exec"

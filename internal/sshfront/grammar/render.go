@@ -89,7 +89,11 @@ func RenderList(doc ListDoc) string {
 	}
 	rows := [][]string{{"SERVER", "ROLE", "ACCESS", "ACTIVE", "DESCRIPTION"}}
 	for _, s := range doc.Servers {
-		rows = append(rows, []string{sanitizeLine(s.Alias), "", "", "", sanitizeLine(s.Description)})
+		name := sanitizeLine(s.Alias)
+		if s.Kind == "git" {
+			name += " (git)"
+		}
+		rows = append(rows, []string{name, "", "", "", sanitizeLine(s.Description)})
 		for _, r := range s.Roles {
 			rows = append(rows, []string{"", sanitizeLine(r.Alias), cell(r.Level), activeCell(r.ActiveGrant), sanitizeLine(r.Description)})
 		}

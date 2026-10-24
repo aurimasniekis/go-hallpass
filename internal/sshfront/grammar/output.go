@@ -159,6 +159,7 @@ type ListDoc struct {
 // ListServer is one visible server.
 type ListServer struct {
 	Alias       string     `json:"alias"`
+	Kind        string     `json:"kind"` // "ssh" or "git"
 	Description string     `json:"description"`
 	Roles       []ListRole `json:"roles"`
 }
@@ -175,6 +176,9 @@ type ListRole struct {
 func NewListDoc(now time.Time, servers []ListServer) ListDoc {
 	out := make([]ListServer, len(servers))
 	for i, s := range servers {
+		if s.Kind == "" {
+			s.Kind = "ssh"
+		}
 		roles := make([]ListRole, len(s.Roles))
 		for j, r := range s.Roles {
 			r.ActiveGrant = cloneActive(r.ActiveGrant)

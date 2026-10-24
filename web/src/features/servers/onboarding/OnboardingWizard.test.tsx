@@ -23,6 +23,7 @@ const ALL = [
 
 const server: Server = {
   id: 'srv_1',
+  kind: 'ssh',
   alias: 'web1',
   display_name: 'web1',
   enabled: true,

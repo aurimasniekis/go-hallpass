@@ -1894,9 +1894,10 @@ components:
       properties: {id: {type: string}, kind: {type: string}, name: {type: string}}
     Server:
       type: object
-      required: [id, alias, display_name, enabled, groups, labels, version, created_at, updated_at, address_redacted]
+      required: [id, kind, alias, display_name, enabled, groups, labels, version, created_at, updated_at, address_redacted]
       properties:
         id: {type: string}
+        kind: {type: string, enum: [ssh, git], description: "ssh: a destination for shell and exec; git: a git host agents reach with plain git"}
         alias: {type: string}
         display_name: {type: string}
         description: {type: string}
@@ -1918,6 +1919,7 @@ components:
       type: object
       properties:
         version: {type: integer}
+        kind: {type: string, enum: [ssh, git], description: "Set on create only (default ssh); it cannot change later."}
         alias: {type: string}
         display_name: {type: string}
         description: {type: string}
@@ -1954,6 +1956,23 @@ components:
         version: {type: integer}
         created_at: {$ref: "#/components/schemas/Timestamp"}
         updated_at: {$ref: "#/components/schemas/Timestamp"}
+        git: {$ref: "#/components/schemas/GitRules"}
+    GitRules:
+      type: object
+      description: >-
+        What an access profile on a git remote covers. Repository patterns match the repository path without ".git",
+        case-insensitively: * matches within one segment, ** across segments, ? one character, {a,b} alternatives.
+        Push rules apply with the git-write capability; branch and tag patterns are relative to refs/heads/ and refs/tags/.
+      required: [repos]
+      properties:
+        repos: {type: array, items: {type: string}}
+        push:
+          type: object
+          properties:
+            branches: {type: array, items: {type: string}, description: "Branches that may be created and updated."}
+            protected_branches: {type: array, items: {type: string}, description: "Branches never changed, even when branches matches."}
+            tags: {type: array, items: {type: string}, description: "Tags that may be created; existing tags are never moved or deleted."}
+            allow_delete: {type: boolean, description: "Allow deleting branches that branches matches and protected_branches does not."}
     RoleInput:
       type: object
       properties:
@@ -1975,6 +1994,7 @@ components:
         retention_class: {type: string}
         labels: {type: object, additionalProperties: {type: string}}
         enabled: {type: boolean}
+        git: {$ref: "#/components/schemas/GitRules"}
     HostIdentity:
       type: object
       required: [id, server_id, algorithm, public_key, fingerprint, state, enrolled_via, created_at]
@@ -2297,6 +2317,8 @@ components:
         grant_expires_at: {$ref: "#/components/schemas/NullableTimestamp", description: "Grant expiry for live channels: the remaining time is grant_expires_at minus the corrected server clock (HP-SES-005)."}
         exit_status: {type: [integer, "null"]}
         exit_signal: {type: string}
+        git_service: {type: string, enum: [git-upload-pack, git-receive-pack, git-upload-archive], description: Git operation on a git remote.}
+        git_repo: {type: string, description: Normalized repository of a git operation.}
     SSHBan:
       type: object
       required: [id, address, failures, reason, banned_at, expires_at]

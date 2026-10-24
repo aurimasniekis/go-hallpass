@@ -805,6 +805,31 @@
 - **Open before tagging (operator):** R-08 (name/trademark check) and R-15 (versioning commitments) are marked as
   blocking a public release and are not resolved by this ADR.
 
+### ADR-0047 — Git remotes: plain git through the gateway, repository and ref rules, metadata-only recording
+
+- **Status:** accepted (operator decision, 2026-10-24). **Security-relevant change** (git operations are not recorded
+  as byte streams); flagged for operator review.
+- **Context:** the operator asked for agents to push and pull with git through HallPass, with request/approval,
+  limits on which repositories (patterns such as `acme/{api,web}`) and which refs, on a page separate from servers.
+- **Decision:**
+  - A git remote is a server with `kind = git` (fixed at creation). Its roles are access profiles with the
+    capabilities `git-read` and/or `git-write` (never shell/exec/pty) and `git` rules: repository patterns and push
+    rules (allowed branches, protected branches, tag patterns, branch deletion). Policy rules, requests, approvals
+    and grants work unchanged.
+  - Agents use plain git with the gateway as the SSH host (`git clone center:github/acme/api.git`). The gateway
+    recognizes `git-upload-pack`, `git-receive-pack` and `git-upload-archive` before its own grammar, validates the
+    path (safe segments only, no `..`), chooses the profile covering the repository and operation (active grant, then
+    auto-approve, then requestable), requests access and waits like `connect`, and runs the service on the git host
+    with the profile's credential. A hidden remote, an unknown repository and a forbidden operation give one answer.
+  - For a push, the ref-update commands are read and checked before anything is sent to the host; any refused ref
+    ends the session, so the host never sees the push. Signed pushes are refused.
+  - **Recording:** git channels record metadata only (service, repository, every ref update with old and new object
+    IDs, refusals, bytes transferred) in the session timeline and the channel row. Pack data is not recorded: it is the
+    repository content, which the host keeps. This deviates from mandatory byte-stream recording for this channel type.
+  - Only `GIT_PROTOCOL` is forwarded from the agent's environment.
+- **Limits:** force-push detection and multi-approver requests are separate follow-ups. Until then, protect branches
+  on the host as well; HallPass restricts which refs may change, not whether an update is a fast-forward.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

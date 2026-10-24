@@ -9,6 +9,7 @@ import (
 
 	"github.com/aurimasniekis/go-hallpass/internal/apperr"
 	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
+	"github.com/aurimasniekis/go-hallpass/internal/gitproto"
 	"github.com/aurimasniekis/go-hallpass/internal/ids"
 	"github.com/aurimasniekis/go-hallpass/internal/inventory"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
@@ -80,6 +81,10 @@ type RegisterInput struct {
 	GrantID      string
 	Kind         string // shell | exec
 	PTY          bool
+	// GitService and GitRepo describe a git operation on a git remote (an exec of the git service). The role must
+	// grant git-write for git-receive-pack and git-read otherwise, instead of exec.
+	GitService string
+	GitRepo    string
 }
 
 // ChannelReg is a registered (opening) channel.
@@ -155,8 +160,16 @@ func (svc *Service) RegisterChannel(ctx context.Context, in RegisterInput) (*Cha
 		}
 		role := inventory.RoleFromRow(roleRow)
 		need := inventory.CapExec
-		if in.Kind == KindShell {
+		switch {
+		case in.GitService == gitproto.ReceivePack:
+			need = inventory.CapGitWrite
+		case in.GitService != "":
+			need = inventory.CapGitRead
+		case in.Kind == KindShell:
 			need = inventory.CapShell
+		}
+		if in.GitService != "" && (in.Kind != KindExec || in.PTY) {
+			return ErrCapability
 		}
 		if !slices.Contains(g.Capabilities, need) || !role.Has(need) || (in.PTY && (!role.Has(inventory.CapPTY) || !slices.Contains(g.Capabilities, inventory.CapPTY))) {
 			return ErrCapability
@@ -183,6 +196,7 @@ func (svc *Service) RegisterChannel(ctx context.Context, in RegisterInput) (*Cha
 		if err := tx.Q.InsertChannel(ctx, db.InsertChannelParams{
 			ID: chID, ConnectionID: in.ConnectionID, AccessSessionID: sess.ID, GrantID: g.ID, AgentID: g.AgentID, RoleID: g.RoleID,
 			Kind: in.Kind, Pty: b2i(in.PTY), OpenedAt: tx.NowMicros(), BootID: svc.opts.BootID,
+			GitService: optString(in.GitService), GitRepo: optString(in.GitRepo),
 		}); err != nil {
 			return err
 		}
@@ -313,3 +327,6 @@ func truncate(s string, n int) string {
 	}
 	return s[:n]
 }
+
+// optString maps "" to NULL.
+func optString(s string) sql.NullString { return sql.NullString{String: s, Valid: s != ""} }

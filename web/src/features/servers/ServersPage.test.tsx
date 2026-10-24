@@ -8,6 +8,7 @@ import { renderInventory, ts } from './testApp';
 
 const visible: Server = {
   id: 'srv_1',
+  kind: 'ssh',
   alias: 'db1',
   display_name: 'Database',
   enabled: true,

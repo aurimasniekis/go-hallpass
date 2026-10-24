@@ -164,7 +164,7 @@ func (q *Queries) GetHostIdentityByFingerprint(ctx context.Context, arg GetHostI
 }
 
 const getRole = `-- name: GetRole :one
-SELECT id, server_id, alias, display_name, description, remote_user, capabilities_json, default_duration_s, max_duration_s, max_concurrent, max_concurrent_per_agent, record_input, recording_mode, env_allow_json, approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by FROM server_roles WHERE id = ?
+SELECT id, server_id, alias, display_name, description, remote_user, capabilities_json, default_duration_s, max_duration_s, max_concurrent, max_concurrent_per_agent, record_input, recording_mode, env_allow_json, approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by, git_rules_json FROM server_roles WHERE id = ?
 `
 
 func (q *Queries) GetRole(ctx context.Context, id string) (ServerRole, error) {
@@ -193,12 +193,13 @@ func (q *Queries) GetRole(ctx context.Context, id string) (ServerRole, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.UpdatedBy,
+		&i.GitRulesJson,
 	)
 	return i, err
 }
 
 const getRoleByAlias = `-- name: GetRoleByAlias :one
-SELECT id, server_id, alias, display_name, description, remote_user, capabilities_json, default_duration_s, max_duration_s, max_concurrent, max_concurrent_per_agent, record_input, recording_mode, env_allow_json, approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by FROM server_roles WHERE server_id = ? AND alias = ?
+SELECT id, server_id, alias, display_name, description, remote_user, capabilities_json, default_duration_s, max_duration_s, max_concurrent, max_concurrent_per_agent, record_input, recording_mode, env_allow_json, approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by, git_rules_json FROM server_roles WHERE server_id = ? AND alias = ?
 `
 
 type GetRoleByAliasParams struct {
@@ -232,12 +233,13 @@ func (q *Queries) GetRoleByAlias(ctx context.Context, arg GetRoleByAliasParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.UpdatedBy,
+		&i.GitRulesJson,
 	)
 	return i, err
 }
 
 const getServer = `-- name: GetServer :one
-SELECT id, alias, display_name, description, environment, address, port, enabled, host_ca_id, metadata_json, version, created_at, created_by, updated_at, updated_by FROM servers WHERE id = ?
+SELECT id, alias, display_name, description, environment, address, port, enabled, host_ca_id, metadata_json, version, created_at, created_by, updated_at, updated_by, kind FROM servers WHERE id = ?
 `
 
 func (q *Queries) GetServer(ctx context.Context, id string) (Server, error) {
@@ -259,12 +261,13 @@ func (q *Queries) GetServer(ctx context.Context, id string) (Server, error) {
 		&i.CreatedBy,
 		&i.UpdatedAt,
 		&i.UpdatedBy,
+		&i.Kind,
 	)
 	return i, err
 }
 
 const getServerByAlias = `-- name: GetServerByAlias :one
-SELECT id, alias, display_name, description, environment, address, port, enabled, host_ca_id, metadata_json, version, created_at, created_by, updated_at, updated_by FROM servers WHERE alias = ?
+SELECT id, alias, display_name, description, environment, address, port, enabled, host_ca_id, metadata_json, version, created_at, created_by, updated_at, updated_by, kind FROM servers WHERE alias = ?
 `
 
 func (q *Queries) GetServerByAlias(ctx context.Context, alias string) (Server, error) {
@@ -286,6 +289,7 @@ func (q *Queries) GetServerByAlias(ctx context.Context, alias string) (Server, e
 		&i.CreatedBy,
 		&i.UpdatedAt,
 		&i.UpdatedBy,
+		&i.Kind,
 	)
 	return i, err
 }
@@ -419,8 +423,9 @@ func (q *Queries) InsertHostIdentity(ctx context.Context, arg InsertHostIdentity
 const insertRole = `-- name: InsertRole :exec
 INSERT INTO server_roles (id, server_id, alias, display_name, description, remote_user, capabilities_json, default_duration_s,
   max_duration_s, max_concurrent, max_concurrent_per_agent, record_input, recording_mode, env_allow_json,
-  approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+  approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by,
+  git_rules_json)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
 `
 
 type InsertRoleParams struct {
@@ -445,6 +450,7 @@ type InsertRoleParams struct {
 	CreatedAt             int64
 	UpdatedAt             int64
 	UpdatedBy             string
+	GitRulesJson          sql.NullString
 }
 
 func (q *Queries) InsertRole(ctx context.Context, arg InsertRoleParams) error {
@@ -470,14 +476,15 @@ func (q *Queries) InsertRole(ctx context.Context, arg InsertRoleParams) error {
 		arg.CreatedAt,
 		arg.UpdatedAt,
 		arg.UpdatedBy,
+		arg.GitRulesJson,
 	)
 	return err
 }
 
 const insertServer = `-- name: InsertServer :exec
 INSERT INTO servers (id, alias, display_name, description, environment, address, port, enabled, metadata_json, version,
-  created_at, created_by, updated_at, updated_by)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+  created_at, created_by, updated_at, updated_by, kind)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
 `
 
 type InsertServerParams struct {
@@ -494,6 +501,7 @@ type InsertServerParams struct {
 	CreatedBy    string
 	UpdatedAt    int64
 	UpdatedBy    string
+	Kind         string
 }
 
 func (q *Queries) InsertServer(ctx context.Context, arg InsertServerParams) error {
@@ -511,6 +519,7 @@ func (q *Queries) InsertServer(ctx context.Context, arg InsertServerParams) erro
 		arg.CreatedBy,
 		arg.UpdatedAt,
 		arg.UpdatedBy,
+		arg.Kind,
 	)
 	return err
 }
@@ -530,7 +539,7 @@ func (q *Queries) InsertServerGroup(ctx context.Context, arg InsertServerGroupPa
 }
 
 const listAllRoles = `-- name: ListAllRoles :many
-SELECT id, server_id, alias, display_name, description, remote_user, capabilities_json, default_duration_s, max_duration_s, max_concurrent, max_concurrent_per_agent, record_input, recording_mode, env_allow_json, approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by FROM server_roles ORDER BY server_id, alias
+SELECT id, server_id, alias, display_name, description, remote_user, capabilities_json, default_duration_s, max_duration_s, max_concurrent, max_concurrent_per_agent, record_input, recording_mode, env_allow_json, approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by, git_rules_json FROM server_roles ORDER BY server_id, alias
 `
 
 func (q *Queries) ListAllRoles(ctx context.Context) ([]ServerRole, error) {
@@ -565,6 +574,7 @@ func (q *Queries) ListAllRoles(ctx context.Context) ([]ServerRole, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.UpdatedBy,
+			&i.GitRulesJson,
 		); err != nil {
 			return nil, err
 		}
@@ -717,7 +727,7 @@ func (q *Queries) ListHostIdentities(ctx context.Context, serverID string) ([]Ho
 }
 
 const listRoles = `-- name: ListRoles :many
-SELECT id, server_id, alias, display_name, description, remote_user, capabilities_json, default_duration_s, max_duration_s, max_concurrent, max_concurrent_per_agent, record_input, recording_mode, env_allow_json, approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by FROM server_roles WHERE server_id = ? ORDER BY alias
+SELECT id, server_id, alias, display_name, description, remote_user, capabilities_json, default_duration_s, max_duration_s, max_concurrent, max_concurrent_per_agent, record_input, recording_mode, env_allow_json, approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by, git_rules_json FROM server_roles WHERE server_id = ? ORDER BY alias
 `
 
 func (q *Queries) ListRoles(ctx context.Context, serverID string) ([]ServerRole, error) {
@@ -752,6 +762,7 @@ func (q *Queries) ListRoles(ctx context.Context, serverID string) ([]ServerRole,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.UpdatedBy,
+			&i.GitRulesJson,
 		); err != nil {
 			return nil, err
 		}
@@ -794,7 +805,7 @@ func (q *Queries) ListServerGroupNames(ctx context.Context, serverID string) ([]
 }
 
 const listServers = `-- name: ListServers :many
-SELECT id, alias, display_name, description, environment, address, port, enabled, host_ca_id, metadata_json, version, created_at, created_by, updated_at, updated_by FROM servers ORDER BY alias
+SELECT id, alias, display_name, description, environment, address, port, enabled, host_ca_id, metadata_json, version, created_at, created_by, updated_at, updated_by, kind FROM servers ORDER BY alias
 `
 
 func (q *Queries) ListServers(ctx context.Context) ([]Server, error) {
@@ -822,6 +833,7 @@ func (q *Queries) ListServers(ctx context.Context) ([]Server, error) {
 			&i.CreatedBy,
 			&i.UpdatedAt,
 			&i.UpdatedBy,
+			&i.Kind,
 		); err != nil {
 			return nil, err
 		}
@@ -929,7 +941,7 @@ const updateRole = `-- name: UpdateRole :execrows
 UPDATE server_roles SET alias = ?, display_name = ?, description = ?, remote_user = ?, capabilities_json = ?,
   default_duration_s = ?, max_duration_s = ?, max_concurrent = ?, max_concurrent_per_agent = ?, record_input = ?,
   recording_mode = ?, env_allow_json = ?, approval_channels_json = ?, restriction_notes = ?, retention_class = ?,
-  version = version + 1, updated_at = ?, updated_by = ?
+  git_rules_json = ?, version = version + 1, updated_at = ?, updated_by = ?
 WHERE id = ? AND version = ?
 `
 
@@ -949,6 +961,7 @@ type UpdateRoleParams struct {
 	ApprovalChannelsJson  string
 	RestrictionNotes      string
 	RetentionClass        string
+	GitRulesJson          sql.NullString
 	UpdatedAt             int64
 	UpdatedBy             string
 	ID                    string
@@ -972,6 +985,7 @@ func (q *Queries) UpdateRole(ctx context.Context, arg UpdateRoleParams) (int64, 
 		arg.ApprovalChannelsJson,
 		arg.RestrictionNotes,
 		arg.RetentionClass,
+		arg.GitRulesJson,
 		arg.UpdatedAt,
 		arg.UpdatedBy,
 		arg.ID,

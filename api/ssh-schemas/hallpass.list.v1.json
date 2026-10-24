@@ -18,12 +18,20 @@
         "type": "object",
         "required": [
           "alias",
+          "kind",
           "description",
           "roles"
         ],
         "properties": {
           "alias": {
             "$ref": "#/$defs/alias"
+          },
+          "kind": {
+            "enum": [
+              "ssh",
+              "git"
+            ],
+            "description": "ssh: a server for exec and connect; git: a git remote, used with plain git (git clone <gateway>:<alias>/<repository>.git)."
           },
           "description": {
             "type": "string"

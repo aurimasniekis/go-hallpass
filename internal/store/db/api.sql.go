@@ -11,7 +11,7 @@ import (
 )
 
 const channelsForSessionAPI = `-- name: ChannelsForSessionAPI :many
-SELECT id, connection_id, access_session_id, grant_id, agent_id, role_id, kind, pty, credential_ref, state, exit_status, exit_signal, opened_at, closed_at, close_reason, boot_id, close_detail, gateway_exit_code FROM ssh_channels WHERE access_session_id = ? ORDER BY opened_at, id
+SELECT id, connection_id, access_session_id, grant_id, agent_id, role_id, kind, pty, credential_ref, state, exit_status, exit_signal, opened_at, closed_at, close_reason, boot_id, close_detail, gateway_exit_code, git_service, git_repo FROM ssh_channels WHERE access_session_id = ? ORDER BY opened_at, id
 `
 
 func (q *Queries) ChannelsForSessionAPI(ctx context.Context, accessSessionID string) ([]SshChannel, error) {
@@ -42,6 +42,8 @@ func (q *Queries) ChannelsForSessionAPI(ctx context.Context, accessSessionID str
 			&i.BootID,
 			&i.CloseDetail,
 			&i.GatewayExitCode,
+			&i.GitService,
+			&i.GitRepo,
 		); err != nil {
 			return nil, err
 		}

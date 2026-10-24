@@ -31,15 +31,24 @@ const (
 	MaxNameLen        = 128
 )
 
-// Capabilities a role can grant (channel types; not a command sandbox, HP-POL-014).
+// Capabilities a role can grant (channel types; not a command sandbox, HP-POL-014). Git remotes use only the git
+// capabilities; SSH servers only the others.
 const (
-	CapShell = "shell"
-	CapExec  = "exec"
-	CapPTY   = "pty"
+	CapShell    = "shell"
+	CapExec     = "exec"
+	CapPTY      = "pty"
+	CapGitRead  = "git-read"  // clone, fetch, archive
+	CapGitWrite = "git-write" // push
 )
 
 // AllCapabilities lists valid capabilities.
-var AllCapabilities = []string{CapShell, CapExec, CapPTY}
+var AllCapabilities = []string{CapShell, CapExec, CapPTY, CapGitRead, CapGitWrite}
+
+// Server kinds.
+const (
+	KindSSH = "ssh" // a destination host agents reach with shell and exec
+	KindGit = "git" // a git host agents reach with plain git through the gateway
+)
 
 // Approval channels.
 var AllApprovalChannels = []string{"web", "slack", "telegram"}
@@ -47,6 +56,7 @@ var AllApprovalChannels = []string{"web", "slack", "telegram"}
 // Server is a destination host.
 type Server struct {
 	ID           string            `json:"id"`
+	Kind         string            `json:"kind"`
 	Alias        string            `json:"alias"`
 	DisplayName  string            `json:"display_name"`
 	Description  string            `json:"description"`
@@ -90,6 +100,8 @@ type Role struct {
 	Version               int64             `json:"version"`
 	CreatedAt             time.Time         `json:"created_at"`
 	UpdatedAt             time.Time         `json:"updated_at"`
+	// Git holds the repository and push rules of a git remote's access profile; nil for SSH roles.
+	Git *GitRules `json:"git,omitempty"`
 }
 
 // Has reports whether the role grants capability c.
@@ -177,6 +189,7 @@ func (svc *Service) publish(tx *store.Tx, topic, key string) {
 // ServerInput creates or updates a server. On update, nil pointer fields keep current values.
 type ServerInput struct {
 	Version     int64              `json:"version,omitempty"`
+	Kind        *string            `json:"kind,omitempty"` // set on create only
 	Alias       *string            `json:"alias,omitempty"`
 	DisplayName *string            `json:"display_name,omitempty"`
 	Description *string            `json:"description,omitempty"`
@@ -197,6 +210,9 @@ func deref[T any](p *T, def T) T {
 }
 
 func (svc *Service) validateServer(v *apperr.Validation, s *Server) {
+	if s.Kind != KindSSH && s.Kind != KindGit {
+		v.Add("kind", "must be ssh or git")
+	}
 	if !ValidAlias(s.Alias) {
 		v.Add("alias", "%s", AliasRule)
 	}
@@ -224,6 +240,7 @@ func (svc *Service) validateServer(v *apperr.Validation, s *Server) {
 // CreateServer adds a destination server.
 func (svc *Service) CreateServer(ctx context.Context, actor audit.Actor, in ServerInput) (*Server, error) {
 	srv := &Server{
+		Kind:  deref(in.Kind, KindSSH),
 		Alias: deref(in.Alias, ""), DisplayName: deref(in.DisplayName, ""), Description: deref(in.Description, ""),
 		Environment: deref(in.Environment, ""), Address: deref(in.Address, ""), Port: deref(in.Port, 22),
 		Enabled: deref(in.Enabled, true), Metadata: deref(in.Metadata, map[string]string{}),
@@ -249,6 +266,7 @@ func (svc *Service) CreateServer(ctx context.Context, actor audit.Actor, in Serv
 			ID: id, Alias: srv.Alias, DisplayName: srv.DisplayName, Description: srv.Description, Environment: srv.Environment,
 			Address: srv.Address, Port: int64(srv.Port), Enabled: b2i(srv.Enabled), MetadataJson: string(meta),
 			CreatedAt: tx.NowMicros(), CreatedBy: actorRef(actor), UpdatedAt: tx.NowMicros(), UpdatedBy: actorRef(actor),
+			Kind: srv.Kind,
 		}); err != nil {
 			return err
 		}
@@ -259,7 +277,7 @@ func (svc *Service) CreateServer(ctx context.Context, actor audit.Actor, in Serv
 			return err
 		}
 		_, err := svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "server.created", Target: audit.Target{Type: "server", ID: id},
-			Details: map[string]any{"alias": srv.Alias, "address": srv.Address, "port": srv.Port, "enabled": srv.Enabled}})
+			Details: map[string]any{"kind": srv.Kind, "alias": srv.Alias, "address": srv.Address, "port": srv.Port, "enabled": srv.Enabled}})
 		svc.publish(tx, eventbus.TopicInventoryChanged, id)
 		return err
 	})
@@ -307,6 +325,9 @@ func (svc *Service) UpdateServer(ctx context.Context, actor audit.Actor, id stri
 	next.Groups = deref(in.Groups, cur.Groups)
 	next.Labels = deref(in.Labels, cur.Labels)
 	v := &apperr.Validation{}
+	if in.Kind != nil && *in.Kind != cur.Kind {
+		v.Add("kind", "cannot be changed after the server is created")
+	}
 	svc.validateServer(v, &next)
 	if err := v.Err(); err != nil {
 		return nil, err
@@ -471,7 +492,7 @@ func (svc *Service) ListServers(ctx context.Context) ([]*Server, error) {
 
 func serverFromRow(r db.Server) *Server {
 	s := &Server{
-		ID: r.ID, Alias: r.Alias, DisplayName: r.DisplayName, Description: r.Description, Environment: r.Environment,
+		ID: r.ID, Kind: r.Kind, Alias: r.Alias, DisplayName: r.DisplayName, Description: r.Description, Environment: r.Environment,
 		Address: r.Address, Port: int(r.Port), Enabled: r.Enabled == 1, HostCAID: r.HostCaID.String, Version: r.Version,
 		CreatedAt: time.UnixMicro(r.CreatedAt).UTC(), UpdatedAt: time.UnixMicro(r.UpdatedAt).UTC(), UpdatedBy: r.UpdatedBy,
 		Metadata: map[string]string{}, Groups: []string{}, Labels: map[string]string{}, Principals: []string{},

@@ -15,6 +15,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/audit"
 	"github.com/aurimasniekis/go-hallpass/internal/egress"
 	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
+	"github.com/aurimasniekis/go-hallpass/internal/gitproto"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring/keyringtest"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 	"github.com/aurimasniekis/go-hallpass/internal/store/storetest"
@@ -283,5 +284,69 @@ func TestScanAndConfirm(t *testing.T) {
 	}
 	if v, err := svc.NewVerifier(ctx, srv.ID); err != nil || len(v.Algorithms) != 1 {
 		t.Fatalf("%v %v", v, err)
+	}
+}
+
+// Git remotes: access profiles use only git capabilities and need repository patterns; push needs ref rules; the
+// kind is fixed at creation; SSH roles cannot carry git rules.
+func TestGitRemoteProfiles(t *testing.T) {
+	svc, _ := newSvc(t)
+	ctx := context.Background()
+	git, err := svc.CreateServer(ctx, admin, ServerInput{Kind: ptr(KindGit), Alias: ptr("github"), Address: ptr("10.0.0.40"), Port: ptr(22)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if git.Kind != KindGit {
+		t.Fatalf("kind = %q", git.Kind)
+	}
+	ssh := mkServer(t, svc, "web1", "10.0.0.41", 22)
+	if ssh.Kind != KindSSH {
+		t.Fatalf("default kind = %q", ssh.Kind)
+	}
+	if _, err := svc.UpdateServer(ctx, admin, git.ID, ServerInput{Version: git.Version, Kind: ptr(KindSSH)}); !errors.Is(err, apperr.ErrInvalid) {
+		t.Fatalf("kind change accepted: %v", err)
+	}
+	if _, err := svc.CreateServer(ctx, admin, ServerInput{Kind: ptr("ftp"), Alias: ptr("x"), Address: ptr("10.0.0.42")}); !errors.Is(err, apperr.ErrInvalid) {
+		t.Fatalf("unknown kind accepted: %v", err)
+	}
+
+	read, err := svc.CreateRole(ctx, admin, git.ID, RoleInput{Alias: ptr("acme-read"), Git: &GitRules{Repos: []string{"acme/*", "platform/{infra,terraform}"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read.RemoteUser != "git" || !read.Has(CapGitRead) || read.Has(CapExec) || read.Git == nil || len(read.Git.Repos) != 2 {
+		t.Fatalf("git profile defaults: %+v", read)
+	}
+	if got, _ := svc.GetRole(ctx, read.ID); got.Git == nil || got.Git.Repos[0] != "acme/*" {
+		t.Fatalf("git rules not stored: %+v", got.Git)
+	}
+	push := &GitRules{Repos: []string{"acme/api"}, Push: gitproto.RefRules{Branches: []string{"agent/**"}, ProtectedBranches: []string{"main"}}}
+	if _, err := svc.CreateRole(ctx, admin, git.ID, RoleInput{Alias: ptr("acme-push"), Capabilities: ptr([]string{CapGitRead, CapGitWrite}), Git: push}); err != nil {
+		t.Fatal(err)
+	}
+	for name, in := range map[string]RoleInput{
+		"no repos":            {Alias: ptr("a1")},
+		"empty repos":         {Alias: ptr("a2"), Git: &GitRules{}},
+		"bad pattern":         {Alias: ptr("a3"), Git: &GitRules{Repos: []string{"acme/{api"}}},
+		"ssh capability":      {Alias: ptr("a4"), Capabilities: ptr([]string{CapExec}), Git: &GitRules{Repos: []string{"x/y"}}},
+		"write without refs":  {Alias: ptr("a5"), Capabilities: ptr([]string{CapGitWrite}), Git: &GitRules{Repos: []string{"x/y"}}},
+		"push rules no write": {Alias: ptr("a6"), Git: &GitRules{Repos: []string{"x/y"}, Push: gitproto.RefRules{Branches: []string{"a/*"}}}},
+		"record input":        {Alias: ptr("a7"), RecordInput: ptr(true), Git: &GitRules{Repos: []string{"x/y"}}},
+	} {
+		if _, err := svc.CreateRole(ctx, admin, git.ID, in); !errors.Is(err, apperr.ErrInvalid) {
+			t.Errorf("%s: accepted (%v)", name, err)
+		}
+	}
+	for name, in := range map[string]RoleInput{
+		"git capability on ssh": {Alias: ptr("b1"), RemoteUser: ptr("deploy"), Capabilities: ptr([]string{CapGitRead})},
+		"git rules on ssh":      {Alias: ptr("b2"), RemoteUser: ptr("deploy"), Git: &GitRules{Repos: []string{"x/y"}}},
+	} {
+		if _, err := svc.CreateRole(ctx, admin, ssh.ID, in); !errors.Is(err, apperr.ErrInvalid) {
+			t.Errorf("%s: accepted (%v)", name, err)
+		}
+	}
+	upd, err := svc.UpdateRole(ctx, admin, read.ID, RoleInput{Version: read.Version, Git: &GitRules{Repos: []string{"acme/api"}}})
+	if err != nil || len(upd.Git.Repos) != 1 {
+		t.Fatalf("update git rules: %+v %v", upd, err)
 	}
 }

@@ -24,6 +24,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/credentials"
 	"github.com/aurimasniekis/go-hallpass/internal/destssh"
 	"github.com/aurimasniekis/go-hallpass/internal/egress"
+	"github.com/aurimasniekis/go-hallpass/internal/gitproto"
 	"github.com/aurimasniekis/go-hallpass/internal/inventory"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
 	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
@@ -129,7 +130,21 @@ type Session struct {
 	AgentReqs    <-chan *ssh.Request
 	// Notify writes a gateway message to the agent (stderr for non-PTY, terminal for PTY).
 	Notify func(msg string)
+	// Git marks a git operation on a git remote (Kind is exec, there is no PTY).
+	Git *GitOp
 }
+
+// GitOp is a git operation on a git remote. The service runs on the upstream host with the forwarded path; only
+// metadata is recorded (no pack data), and a push passes the ref policy before any of it reaches the host.
+type GitOp struct {
+	Service string
+	Repo    string              // normalized repository, for the timeline and audit
+	Forward string              // path sent to the upstream host
+	Push    *gitproto.RefPolicy // receive-pack only
+}
+
+// CodeNotPermitted is the gateway exit code for a refused git push (the agent's ref updates are not allowed).
+const CodeNotPermitted = 82
 
 // Result reports how the session ended. GatewayCode is non-zero when the gateway (not the destination) ended it.
 type Result struct {
@@ -149,8 +164,12 @@ func (p *Proxy) Run(ctx context.Context, s *Session) Result {
 	kind := metrics.ChannelKind(s.Kind)
 	_, span := tracing.Start(ctx, tracing.SpanAuthorize, tracing.AgentID(s.AgentID), tracing.GrantID(s.Grant.ID),
 		tracing.ConnectionID(s.ConnectionID))
-	reg, err := p.o.Access.RegisterChannel(ctx, access.RegisterInput{ConnectionID: s.ConnectionID, AgentID: s.AgentID, KeyID: s.KeyID,
-		GrantID: s.Grant.ID, Kind: s.Kind, PTY: s.PTY != nil})
+	in := access.RegisterInput{ConnectionID: s.ConnectionID, AgentID: s.AgentID, KeyID: s.KeyID,
+		GrantID: s.Grant.ID, Kind: s.Kind, PTY: s.PTY != nil}
+	if s.Git != nil {
+		in.GitService, in.GitRepo = s.Git.Service, s.Git.Repo
+	}
+	reg, err := p.o.Access.RegisterChannel(ctx, in)
 	tracing.End(span, err)
 	if err != nil {
 		p.o.Metrics.SSHChannel(kind, registerResult(err))
@@ -226,9 +245,12 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 	fail := func(code int, stage string, err error) Result {
 		return Result{GatewayCode: code, Reason: "failed_before_start", Detail: failureDetail(stage, err), Err: fmt.Errorf("%s: %w", stage, err)}
 	}
-	// 1. Recording must be established before anything is forwarded (mandatory mode).
+	// 1. Recording must be established before anything is forwarded (mandatory mode). Git operations record
+	// metadata only: the timeline events below, never the pack data.
 	var rec Recorder
-	if p.o.Recorders != nil {
+	if s.Git != nil {
+		rec = nopRecorder{}
+	} else if p.o.Recorders != nil {
 		r, err := p.o.Recorders.Open(ctx, reg, s.Kind, s.PTY != nil)
 		if err != nil {
 			if reg.Role.RecordingMode == "mandatory" {
@@ -238,7 +260,7 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 		} else {
 			rec = r
 		}
-	} else if reg.Role.RecordingMode == "mandatory" {
+	} else if reg.Role.RecordingMode == "mandatory" && s.Git == nil {
 		return fail(CodeInternal, "recording unavailable", errors.New("no recorder configured"))
 	}
 	if rec == nil {
@@ -320,6 +342,9 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 		_ = rec.PTY(s.PTY)
 	}
 	env := FilterEnv(s.Env, p.o.EnvAllow, reg.Role.EnvAllow)
+	if s.Git != nil {
+		env = gitEnv(s.Env)
+	}
 	p.o.Metrics.SSHEnvRejected(len(s.Env) - len(env)) // HP-SSH-008: names are never exported
 	for _, kv := range env {
 		_ = sess.Setenv(kv[0], kv[1]) // destination sshd AcceptEnv decides; failures are not fatal
@@ -337,7 +362,11 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 		return fail(CodeInternal, "stderr", err)
 	}
 	data := map[string]any{"kind": s.Kind, "pty": s.PTY != nil, "credential_kind": auth.Kind, "segment_id": rec.SegmentID()}
-	if s.Kind == access.KindExec {
+	if s.Git != nil {
+		data["git_service"], data["repo"] = s.Git.Service, s.Git.Repo
+		_ = p.o.Access.AppendSessionEvent(ctx, reg, access.EvGitRequested, "", map[string]any{"service": s.Git.Service, "repo": s.Git.Repo})
+		err = sess.Start(s.Git.Service + " " + gitproto.Quote(s.Git.Forward))
+	} else if s.Kind == access.KindExec {
 		if err := rec.ExecRequested(s.Command); err != nil {
 			recFailed.Store(true)
 			rec.Abort(err)
@@ -387,9 +416,20 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 		return !mandatory
 	}
 	var outputs sync.WaitGroup
-	outputs.Go(func() { pump(stdout, s.Agent, outStream, rec, touch, recFail) })
+	var bytesIn, bytesOut atomic.Int64
+	agentOut := io.Writer(s.Agent)
+	if s.Git != nil {
+		agentOut = countingWriter{w: s.Agent, n: &bytesOut}
+	}
+	outputs.Go(func() { pump(stdout, agentOut, outStream, rec, touch, recFail) })
 	outputs.Go(func() { pump(stderr, s.Agent.Stderr(), errStream, rec, touch, recFail) })
 	go func() {
+		if s.Git != nil && s.Git.Service == gitproto.ReceivePack {
+			if !p.gitPushGate(ctx, s, reg, t, stdin, &bytesIn) {
+				return
+			}
+			touch()
+		}
 		buf := make([]byte, 32*1024)
 		for {
 			n, err := s.Agent.Read(buf)
@@ -400,6 +440,7 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 						return
 					}
 				}
+				bytesIn.Add(int64(n))
 				if _, werr := stdin.Write(buf[:n]); werr != nil {
 					return
 				}
@@ -424,6 +465,10 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 	outputs.Wait()
 	waitErr := sess.Wait()
 	close(stopIdle)
+	if s.Git != nil {
+		_ = p.o.Access.AppendSessionEvent(context.WithoutCancel(ctx), reg, access.EvGitTransferred, "",
+			map[string]any{"service": s.Git.Service, "repo": s.Git.Repo, "bytes_in": bytesIn.Load(), "bytes_out": bytesOut.Load()})
+	}
 
 	res := Result{Reason: "exit"}
 	if reason := t.reason(); reason != "" {
@@ -431,6 +476,8 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 		switch {
 		case reason == "recording_failed":
 			res.GatewayCode = CodeInternal
+		case reason == "git_push_refused":
+			res.GatewayCode = CodeNotPermitted
 		case strings.HasPrefix(reason, "destination_keepalive"):
 			res.GatewayCode = CodeDestinationUnavailable
 		}
@@ -542,7 +589,12 @@ type terminator struct {
 	notified chan struct{} // closed when the termination notice has been written
 }
 
-func (t *terminator) terminate(reason string) {
+func (t *terminator) terminate(reason string) { t.end(reason, "access ended ("+reason+")") }
+
+// refuse ends the session like terminate but without the "access ended" notice: the caller already told the agent why.
+func (t *terminator) refuse(reason string) { t.end(reason, "") }
+
+func (t *terminator) end(reason, notice string) {
 	t.mu.Lock()
 	if t.why != "" {
 		t.mu.Unlock()
@@ -553,8 +605,8 @@ func (t *terminator) terminate(reason string) {
 	t.mu.Unlock()
 	go func() {
 		defer close(t.notified)
-		if t.notify != nil {
-			t.notify("access ended (" + reason + ")")
+		if t.notify != nil && notice != "" {
+			t.notify(notice)
 		}
 	}()
 	_ = t.sess.Signal(ssh.SIGHUP)

@@ -661,6 +661,7 @@ type Server struct {
 	CreatedBy    string
 	UpdatedAt    int64
 	UpdatedBy    string
+	Kind         string
 }
 
 type ServerGroup struct {
@@ -691,6 +692,7 @@ type ServerRole struct {
 	CreatedAt             int64
 	UpdatedAt             int64
 	UpdatedBy             string
+	GitRulesJson          sql.NullString
 }
 
 type Setting struct {
@@ -731,6 +733,8 @@ type SshChannel struct {
 	BootID          string
 	CloseDetail     sql.NullString
 	GatewayExitCode sql.NullInt64
+	GitService      sql.NullString
+	GitRepo         sql.NullString
 }
 
 type SshConnection struct {

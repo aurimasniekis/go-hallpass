@@ -5,6 +5,7 @@ import { serverAddress, serverFormValues, toServerInput } from './serverForm';
 
 const base: Server = {
   id: 's1',
+  kind: 'ssh',
   alias: 'db1',
   display_name: 'Database 1',
   enabled: true,

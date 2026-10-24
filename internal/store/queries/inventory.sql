@@ -1,7 +1,7 @@
 -- name: InsertServer :exec
 INSERT INTO servers (id, alias, display_name, description, environment, address, port, enabled, metadata_json, version,
-  created_at, created_by, updated_at, updated_by)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?);
+  created_at, created_by, updated_at, updated_by, kind)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?);
 
 -- name: GetServer :one
 SELECT * FROM servers WHERE id = ?;
@@ -88,8 +88,9 @@ SELECT count(*) FROM host_duplicate_exceptions WHERE fingerprint_sha256 = ? AND 
 -- name: InsertRole :exec
 INSERT INTO server_roles (id, server_id, alias, display_name, description, remote_user, capabilities_json, default_duration_s,
   max_duration_s, max_concurrent, max_concurrent_per_agent, record_input, recording_mode, env_allow_json,
-  approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?);
+  approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by,
+  git_rules_json)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?);
 
 -- name: GetRole :one
 SELECT * FROM server_roles WHERE id = ?;
@@ -107,7 +108,7 @@ SELECT * FROM server_roles ORDER BY server_id, alias;
 UPDATE server_roles SET alias = ?, display_name = ?, description = ?, remote_user = ?, capabilities_json = ?,
   default_duration_s = ?, max_duration_s = ?, max_concurrent = ?, max_concurrent_per_agent = ?, record_input = ?,
   recording_mode = ?, env_allow_json = ?, approval_channels_json = ?, restriction_notes = ?, retention_class = ?,
-  version = version + 1, updated_at = ?, updated_by = ?
+  git_rules_json = ?, version = version + 1, updated_at = ?, updated_by = ?
 WHERE id = ? AND version = ?;
 
 -- name: SetRoleEnabled :execrows

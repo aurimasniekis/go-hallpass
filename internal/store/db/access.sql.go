@@ -198,7 +198,7 @@ func (q *Queries) ActiveGrantsForAgent(ctx context.Context, agentID string) ([]G
 }
 
 const channelsForSession = `-- name: ChannelsForSession :many
-SELECT id, connection_id, access_session_id, grant_id, agent_id, role_id, kind, pty, credential_ref, state, exit_status, exit_signal, opened_at, closed_at, close_reason, boot_id, close_detail, gateway_exit_code FROM ssh_channels WHERE access_session_id = ? ORDER BY opened_at
+SELECT id, connection_id, access_session_id, grant_id, agent_id, role_id, kind, pty, credential_ref, state, exit_status, exit_signal, opened_at, closed_at, close_reason, boot_id, close_detail, gateway_exit_code, git_service, git_repo FROM ssh_channels WHERE access_session_id = ? ORDER BY opened_at
 `
 
 func (q *Queries) ChannelsForSession(ctx context.Context, accessSessionID string) ([]SshChannel, error) {
@@ -229,6 +229,8 @@ func (q *Queries) ChannelsForSession(ctx context.Context, accessSessionID string
 			&i.BootID,
 			&i.CloseDetail,
 			&i.GatewayExitCode,
+			&i.GitService,
+			&i.GitRepo,
 		); err != nil {
 			return nil, err
 		}
@@ -577,7 +579,7 @@ func (q *Queries) FindActiveGrant(ctx context.Context, arg FindActiveGrantParams
 }
 
 const getChannel = `-- name: GetChannel :one
-SELECT id, connection_id, access_session_id, grant_id, agent_id, role_id, kind, pty, credential_ref, state, exit_status, exit_signal, opened_at, closed_at, close_reason, boot_id, close_detail, gateway_exit_code FROM ssh_channels WHERE id = ?
+SELECT id, connection_id, access_session_id, grant_id, agent_id, role_id, kind, pty, credential_ref, state, exit_status, exit_signal, opened_at, closed_at, close_reason, boot_id, close_detail, gateway_exit_code, git_service, git_repo FROM ssh_channels WHERE id = ?
 `
 
 func (q *Queries) GetChannel(ctx context.Context, id string) (SshChannel, error) {
@@ -602,6 +604,8 @@ func (q *Queries) GetChannel(ctx context.Context, id string) (SshChannel, error)
 		&i.BootID,
 		&i.CloseDetail,
 		&i.GatewayExitCode,
+		&i.GitService,
+		&i.GitRepo,
 	)
 	return i, err
 }
@@ -894,8 +898,8 @@ func (q *Queries) GrantsChangedAfter(ctx context.Context, arg GrantsChangedAfter
 
 const insertChannel = `-- name: InsertChannel :exec
 INSERT INTO ssh_channels (id, connection_id, access_session_id, grant_id, agent_id, role_id, kind, pty, credential_ref, state,
-  opened_at, boot_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'opening', ?, ?)
+  opened_at, boot_id, git_service, git_repo)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'opening', ?, ?, ?, ?)
 `
 
 type InsertChannelParams struct {
@@ -910,6 +914,8 @@ type InsertChannelParams struct {
 	CredentialRef   sql.NullString
 	OpenedAt        int64
 	BootID          string
+	GitService      sql.NullString
+	GitRepo         sql.NullString
 }
 
 func (q *Queries) InsertChannel(ctx context.Context, arg InsertChannelParams) error {
@@ -925,6 +931,8 @@ func (q *Queries) InsertChannel(ctx context.Context, arg InsertChannelParams) er
 		arg.CredentialRef,
 		arg.OpenedAt,
 		arg.BootID,
+		arg.GitService,
+		arg.GitRepo,
 	)
 	return err
 }
@@ -1246,7 +1254,7 @@ func (q *Queries) ListRequestsForAgent(ctx context.Context, arg ListRequestsForA
 }
 
 const liveChannels = `-- name: LiveChannels :many
-SELECT id, connection_id, access_session_id, grant_id, agent_id, role_id, kind, pty, credential_ref, state, exit_status, exit_signal, opened_at, closed_at, close_reason, boot_id, close_detail, gateway_exit_code FROM ssh_channels WHERE state IN ('opening', 'active') ORDER BY opened_at
+SELECT id, connection_id, access_session_id, grant_id, agent_id, role_id, kind, pty, credential_ref, state, exit_status, exit_signal, opened_at, closed_at, close_reason, boot_id, close_detail, gateway_exit_code, git_service, git_repo FROM ssh_channels WHERE state IN ('opening', 'active') ORDER BY opened_at
 `
 
 func (q *Queries) LiveChannels(ctx context.Context) ([]SshChannel, error) {
@@ -1277,6 +1285,8 @@ func (q *Queries) LiveChannels(ctx context.Context) ([]SshChannel, error) {
 			&i.BootID,
 			&i.CloseDetail,
 			&i.GatewayExitCode,
+			&i.GitService,
+			&i.GitRepo,
 		); err != nil {
 			return nil, err
 		}
@@ -1465,7 +1475,7 @@ func (q *Queries) RecentGrantsForAgent(ctx context.Context, arg RecentGrantsForA
 }
 
 const recentlyEndedChannels = `-- name: RecentlyEndedChannels :many
-SELECT id, connection_id, access_session_id, grant_id, agent_id, role_id, kind, pty, credential_ref, state, exit_status, exit_signal, opened_at, closed_at, close_reason, boot_id, close_detail, gateway_exit_code FROM ssh_channels WHERE closed_at >= ?1 ORDER BY closed_at DESC LIMIT ?2
+SELECT id, connection_id, access_session_id, grant_id, agent_id, role_id, kind, pty, credential_ref, state, exit_status, exit_signal, opened_at, closed_at, close_reason, boot_id, close_detail, gateway_exit_code, git_service, git_repo FROM ssh_channels WHERE closed_at >= ?1 ORDER BY closed_at DESC LIMIT ?2
 `
 
 type RecentlyEndedChannelsParams struct {
@@ -1501,6 +1511,8 @@ func (q *Queries) RecentlyEndedChannels(ctx context.Context, arg RecentlyEndedCh
 			&i.BootID,
 			&i.CloseDetail,
 			&i.GatewayExitCode,
+			&i.GitService,
+			&i.GitRepo,
 		); err != nil {
 			return nil, err
 		}
