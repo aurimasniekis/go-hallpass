@@ -26,6 +26,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/inventory"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
 	"github.com/aurimasniekis/go-hallpass/internal/policy"
+	"github.com/aurimasniekis/go-hallpass/internal/recording"
 	"github.com/aurimasniekis/go-hallpass/internal/testutil/sshkeys"
 	"github.com/aurimasniekis/go-hallpass/internal/testutil/sshtest"
 )
@@ -131,6 +132,25 @@ func (g *gw) stop() {
 	}
 }
 
+// recordingsFinalized waits until n segments exist and none is open, then verifies them: the agent sees the exit
+// status a moment before the recorder commits the final frame.
+func (g *gw) recordingsFinalized(n int) *recording.VerifyResult {
+	g.t.Helper()
+	ctx := context.Background()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		var total, open int
+		must(g.t, g.a.Store.ReadDB().QueryRowContext(ctx, `SELECT count(*), coalesce(sum(state = 'open'), 0) FROM recording_segments`).Scan(&total, &open))
+		if total >= n && open == 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	vr, err := g.a.Recording.Verify(ctx, "")
+	must(g.t, err)
+	return vr
+}
+
 func (g *gw) client(key sshkeys.Key) (*ssh.Client, error) {
 	return ssh.Dial("tcp", g.addr, &ssh.ClientConfig{User: "agent", Auth: []ssh.AuthMethod{ssh.PublicKeys(key.Signer)},
 		HostKeyCallback: ssh.FixedHostKey(g.hostPK), Timeout: 5 * time.Second})
@@ -183,9 +203,7 @@ func TestGatewayExecEndToEnd(t *testing.T) {
 	if code != 7 {
 		t.Fatalf("second exec %d", code)
 	}
-	vr, err := g.a.Recording.Verify(context.Background(), "")
-	must(t, err)
-	if !vr.OK || len(vr.Segments) != 2 {
+	if vr := g.recordingsFinalized(2); !vr.OK || len(vr.Segments) != 2 {
 		t.Fatalf("recordings: %+v", vr)
 	}
 }
@@ -385,9 +403,7 @@ func TestGatewayPTYShell(t *testing.T) {
 	if err := s.Wait(); err != nil {
 		t.Fatalf("shell exit: %v", err)
 	}
-	vr, err := g.a.Recording.Verify(context.Background(), "")
-	must(t, err)
-	if !vr.OK || len(vr.Segments) != 1 {
+	if vr := g.recordingsFinalized(1); !vr.OK || len(vr.Segments) != 1 {
 		t.Fatalf("%+v", vr)
 	}
 }

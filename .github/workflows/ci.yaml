@@ -42,6 +42,10 @@ jobs:
       - name: analyzer tests
         run: make tools-test
       - name: race tests
+        # The race detector slows SQLite transactions several-fold on shared runners; the 100 ms HP-DB-004 guard is
+        # still enforced by the non-race coverage run below.
+        env:
+          HALLPASS_TEST_TX_MAX: 500ms
         run: make race
       - name: coverage floor (HP-TST-009)
         run: make coverage
