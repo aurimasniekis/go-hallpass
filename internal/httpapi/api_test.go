@@ -1245,6 +1245,61 @@ func TestGitRemoteAPI(t *testing.T) {
 	}
 }
 
+// Disabling, enabling and deleting roles and servers through the API. PATCH honors enabled; deleted servers are
+// listed only with include_deleted, under their former alias.
+func TestDisableAndDeleteAPI(t *testing.T) {
+	h := newHarness(t)
+	c := h.bootstrapAdmin()
+	var srv, role struct {
+		ID      string
+		Alias   string
+		Enabled bool
+		Version int64
+		Deleted *string `json:"deleted_at"`
+	}
+	c.ok("createServer", 201, "POST", "/api/v1/servers", map[string]any{"kind": "git", "alias": "github", "address": "10.1.2.40"}).json(t, &srv)
+	c.ok("createRole", 201, "POST", "/api/v1/servers/"+srv.ID+"/roles", map[string]any{"alias": "ci-work",
+		"capabilities": []string{"git-read"}, "git": map[string]any{"repos": []string{"acme/*"}}}).json(t, &role)
+
+	c.ok("disableRole", 200, "POST", "/api/v1/roles/"+role.ID+"/disable", nil).json(t, &role)
+	if role.Enabled {
+		t.Fatal("role still enabled")
+	}
+	c.ok("enableRole", 200, "POST", "/api/v1/roles/"+role.ID+"/enable", nil).json(t, &role)
+	c.ok("updateRole", 200, "PATCH", "/api/v1/roles/"+role.ID, map[string]any{"enabled": false}, "If-Match", fmt.Sprintf(`"%d"`, role.Version)).json(t, &role)
+	if role.Enabled {
+		t.Fatal("PATCH enabled=false ignored")
+	}
+	c.ok("disableServer", 200, "POST", "/api/v1/servers/"+srv.ID+"/disable", nil)
+	c.ok("enableServer", 200, "POST", "/api/v1/servers/"+srv.ID+"/enable", nil)
+
+	c.ok("deleteRole", 204, "DELETE", "/api/v1/roles/"+role.ID, nil)
+	c.ok("getRole", 200, "GET", "/api/v1/roles/"+role.ID, nil).json(t, &role)
+	if role.Deleted == nil || role.Alias != "ci-work" {
+		t.Fatalf("deleted role: %+v", role)
+	}
+	if r := c.do("POST", "/api/v1/roles/"+role.ID+"/enable", nil); r.status != 404 {
+		t.Fatalf("enabling a deleted role: %d %s", r.status, r.body)
+	}
+	c.ok("deleteServer", 204, "DELETE", "/api/v1/servers/"+srv.ID, nil)
+	var listed struct{ Items []struct{ ID string } }
+	c.ok("listServers", 200, "GET", "/api/v1/servers", nil).json(t, &listed)
+	if len(listed.Items) != 0 {
+		t.Fatalf("deleted server listed: %+v", listed)
+	}
+	var all struct {
+		Items []struct {
+			Alias   string
+			Deleted *string `json:"deleted_at"`
+		}
+	}
+	c.ok("listServers", 200, "GET", "/api/v1/servers?include_deleted=true", nil).json(t, &all)
+	if len(all.Items) != 1 || all.Items[0].Deleted == nil || all.Items[0].Alias != "github" {
+		t.Fatalf("include_deleted: %+v", all)
+	}
+	c.ok("createServer", 201, "POST", "/api/v1/servers", map[string]any{"kind": "git", "alias": "github", "address": "10.1.2.40"})
+}
+
 // A role needing two approvers through the API: the first approval answers 202 with the request still pending and
 // the approval listed; the second distinct approver answers 200 with the grant.
 func TestMultiApprovalAPI(t *testing.T) {

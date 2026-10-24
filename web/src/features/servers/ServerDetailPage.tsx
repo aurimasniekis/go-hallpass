@@ -17,6 +17,7 @@ import { EnabledBadge, TagList } from '../agents/AgentsPage';
 import { DestinationCollectors } from './DestinationCollectors';
 import { EffectiveAccessCard } from './EffectiveAccessTable';
 import { FormModal } from './FormModal';
+import { LifecycleActions } from './LifecycleActions';
 import { orDash } from './formUtils';
 import { HostCAPanel } from './HostCA';
 import { HostIdentities } from './HostIdentities';
@@ -74,9 +75,18 @@ export function ServerDetailPage({
   }
   const server = query.data;
 
-  const setupIncomplete = needsOnboarding(server, roles.data?.items);
+  const deleted = Boolean(server.deleted_at);
+  const setupIncomplete = !deleted && needsOnboarding(server, roles.data?.items);
   const overview = (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+      {server.deleted_at ? (
+        <Alert
+          type="warning"
+          showIcon
+          title={`Deleted ${formatDateTime(server.deleted_at)}`}
+          description="Kept only so past sessions and the audit log can name it. Agents cannot reach it."
+        />
+      ) : null}
       {setupIncomplete && canWrite ? (
         <Alert
           type="warning"
@@ -134,7 +144,7 @@ export function ServerDetailPage({
         title={server.alias}
         description={server.display_name !== server.alias ? server.display_name : undefined}
         extra={
-          canWrite ? (
+          canWrite && !deleted ? (
             <Space wrap>
               <Button
                 icon={<RocketOutlined />}
@@ -151,6 +161,13 @@ export function ServerDetailPage({
               >
                 Edit
               </Button>
+              <LifecycleActions
+                kind="server"
+                target={server}
+                onDeleted={() => {
+                  void navigate({ to: '/servers' });
+                }}
+              />
             </Space>
           ) : null
         }

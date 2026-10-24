@@ -15,6 +15,11 @@ SELECT * FROM login_credentials WHERE role_id = ? AND state = 'active';
 -- name: RecordProbe :exec
 UPDATE login_credentials SET probe_ok_at = ?, probe_error = ?, updated_at = ? WHERE id = ?;
 
+-- name: RevokeRoleLoginCredentials :many
+UPDATE login_credentials SET state = 'revoked', revoked_at = sqlc.arg(now), updated_at = sqlc.arg(now)
+WHERE role_id = sqlc.arg(role_id) AND state NOT IN ('revoked', 'retired')
+RETURNING id;
+
 -- name: SetLoginCredentialState :execrows
 UPDATE login_credentials SET state = sqlc.arg(state), activated_at = coalesce(sqlc.narg(activated_at), activated_at),
   retire_after = coalesce(sqlc.narg(retire_after), retire_after), retired_at = coalesce(sqlc.narg(retired_at), retired_at),

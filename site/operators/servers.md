@@ -73,7 +73,16 @@ AuthorizedPrincipalsFile /etc/ssh/principals/%u
 Put the principal shown on the role page in `/etc/ssh/principals/<account>`. Certificates are valid for about two
 minutes. They also make destination-side audit correlation exact; see [destination-side audit](/destinations/audit).
 
-## Disabling
+## Disabling and deleting
 
-Disabling a server or role hides it from agents at once and ends its live sessions within 5 seconds. Every change to
-servers, roles, groups or labels bumps the policy version; grants that are no longer allowed are revoked.
+**Disable** (on the server page, or on a role's page) when access should stop for now. Agents no longer see the
+server or role, live sessions end within 5 seconds, active grants are revoked and pending requests are canceled.
+**Enable** brings it back, and policy decides again who can use it.
+
+**Delete** when it is gone for good. It does everything disabling does, and also revokes the login keys, so remove
+them from the destination too. Deleting a server deletes all of its roles; you confirm by typing the server's name.
+A deleted server or role disappears from the console and from agents, and its name can be used again. Past sessions,
+recordings and the audit log still show it, marked as deleted. A deletion cannot be undone.
+
+Every change to servers, roles, groups or labels bumps the policy version; grants that are no longer allowed are
+revoked.

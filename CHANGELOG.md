@@ -25,6 +25,10 @@ agent JSON schemas, the recording format and the database schema).
 - `ssh <gateway> list` marks git remotes (`kind` in `hallpass.list/v1`), and `help` shows how to use git and file
   transfer.
 - The session timeline describes git operations, file operations and partial approvals in words.
+- **Disable, enable and delete** servers, git remotes, roles and access profiles from the console and the API
+  (`POST …/disable`, `POST …/enable`, `DELETE`). Disabling ends active access and cancels pending requests. Deleting
+  also revokes the login keys and frees the name; the record stays so past sessions and the audit log can still name
+  it. Deleting a server or git remote needs its name typed and takes its roles with it.
 - Database growth bounds: delivered notifications are kept for 30 days and finished background jobs for 7 days; free
   pages are returned to the filesystem every 5 minutes; a writer queue-depth metric.
 
@@ -41,6 +45,8 @@ agent JSON schemas, the recording format and the database schema).
   entry.
 - A retired host key can be enrolled again: scanning offers it as pending for confirmation, pasting it trusts it. Both
   failed before, because the retired entry blocked the same key.
+- `enabled` in a server or role `PATCH` was silently ignored, and the console had no way to disable either. It is
+  applied now.
 - Git access profiles show the bare public key to add on the git host. They showed an `authorized_keys` line with
   options, which GitHub and other git hosts reject.
 

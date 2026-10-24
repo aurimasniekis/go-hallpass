@@ -672,6 +672,9 @@ type Server struct {
 	UpdatedAt    int64
 	UpdatedBy    string
 	Kind         string
+	DeletedAt    sql.NullInt64
+	DeletedBy    sql.NullString
+	DeletedAlias sql.NullString
 }
 
 type ServerGroup struct {
@@ -704,6 +707,9 @@ type ServerRole struct {
 	UpdatedBy             string
 	GitRulesJson          sql.NullString
 	ApprovalsRequired     int64
+	DeletedAt             sql.NullInt64
+	DeletedBy             sql.NullString
+	DeletedAlias          sql.NullString
 }
 
 type Setting struct {

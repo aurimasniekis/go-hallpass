@@ -156,6 +156,13 @@ export const serversQueryOptions = () =>
     queryFn: ({ signal }) => api.call('get', '/api/v1/servers', { signal }),
   });
 
+/** Every server including deleted ones, only for naming servers in history (sessions, requests, audit). */
+export const serverNamesQueryOptions = () =>
+  queryOptions({
+    queryKey: [...qk.servers, { include_deleted: true }] as const,
+    queryFn: ({ signal }) => api.call('get', '/api/v1/servers', { query: { include_deleted: true }, signal }),
+  });
+
 export const serverQueryOptions = (id: string) =>
   queryOptions({
     queryKey: qk.server(id),

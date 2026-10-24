@@ -235,7 +235,7 @@ func jsonList(l []string) string {
 // CreateRole adds a role to a server. Defaults: capabilities shell+exec+pty, 30m default, 6h max (≤ global),
 // concurrency 10/2, mandatory recording, input not recorded.
 func (svc *Service) CreateRole(ctx context.Context, actor audit.Actor, serverID string, in RoleInput) (*Role, error) {
-	srv, err := svc.GetServer(ctx, serverID)
+	srv, err := svc.liveServer(ctx, serverID)
 	if err != nil {
 		return nil, err
 	}
@@ -303,6 +303,9 @@ func (svc *Service) CreateRole(ctx context.Context, actor audit.Actor, serverID 
 // UpdateRole changes a role (optimistic concurrency on Version).
 func (svc *Service) UpdateRole(ctx context.Context, actor audit.Actor, id string, in RoleInput) (*Role, error) {
 	cur, err := svc.GetRole(ctx, id)
+	if err == nil && cur.Deleted() {
+		err = apperr.New(apperr.CodeNotFound, "role not found")
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -364,7 +367,7 @@ func (svc *Service) UpdateRole(ctx context.Context, actor audit.Actor, id string
 func (svc *Service) SetRoleEnabled(ctx context.Context, actor audit.Actor, id string, enabled bool) (*Role, error) {
 	err := svc.s.W().TxNamed(ctx, "inventory.role_enabled", func(tx *store.Tx) error {
 		r, err := tx.Q.GetRole(ctx, id)
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) || (err == nil && r.DeletedAt.Valid) {
 			return apperr.New(apperr.CodeNotFound, "role not found")
 		} else if err != nil {
 			return err
@@ -396,7 +399,43 @@ func (svc *Service) SetRoleEnabled(ctx context.Context, actor audit.Actor, id st
 	return svc.GetRole(ctx, id)
 }
 
-// GetRole returns a role with labels.
+// DeleteRole deletes a role or access profile: it is disabled (revoking grants and canceling pending requests), its
+// login keys are revoked, and it disappears from lists and policy. The row stays so history can name it, and the
+// alias becomes free for reuse.
+func (svc *Service) DeleteRole(ctx context.Context, actor audit.Actor, id string) error {
+	return svc.s.W().TxNamed(ctx, "inventory.delete_role", func(tx *store.Tx) error {
+		r, err := tx.Q.GetRole(ctx, id)
+		if errors.Is(err, sql.ErrNoRows) || (err == nil && r.DeletedAt.Valid) {
+			return apperr.New(apperr.CodeNotFound, "role not found")
+		} else if err != nil {
+			return err
+		}
+		revoked, err := svc.deleteRoleTx(ctx, tx, actor, id)
+		if err != nil {
+			return err
+		}
+		if err := svc.bumpPolicy(ctx, tx); err != nil {
+			return err
+		}
+		_, err = svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "role.deleted", Target: audit.Target{Type: "role", ID: id},
+			Details: map[string]any{"server_id": r.ServerID, "alias": r.Alias, "revoked_credentials": revoked}})
+		svc.publish(tx, eventbus.TopicTargetDisabled, id)
+		return err
+	})
+}
+
+// deleteRoleTx marks a role deleted, ends its access and revokes its login keys; it returns the revoked key IDs.
+func (svc *Service) deleteRoleTx(ctx context.Context, tx *store.Tx, actor audit.Actor, id string) ([]string, error) {
+	if _, err := tx.Q.DeleteRole(ctx, db.DeleteRoleParams{Now: nullNow(tx), Actor: nullActor(actor), ID: id}); err != nil {
+		return nil, err
+	}
+	if err := svc.runDisableHooks(ctx, tx, "role", id); err != nil {
+		return nil, err
+	}
+	return tx.Q.RevokeRoleLoginCredentials(ctx, db.RevokeRoleLoginCredentialsParams{Now: nullNow(tx), RoleID: id})
+}
+
+// GetRole returns a role with labels. A deleted role is returned too, with DeletedAt set; changes to it are refused.
 func (svc *Service) GetRole(ctx context.Context, id string) (*Role, error) {
 	r, err := svc.s.R().GetRole(ctx, id)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -452,6 +491,10 @@ func RoleFromRow(r db.ServerRole) *Role {
 		if json.Unmarshal([]byte(r.GitRulesJson.String), &g) == nil {
 			role.Git = &g
 		}
+	}
+	if r.DeletedAt.Valid {
+		t := time.UnixMicro(r.DeletedAt.Int64).UTC()
+		role.DeletedAt, role.Alias, role.Enabled = &t, r.DeletedAlias.String, false
 	}
 	return role
 }

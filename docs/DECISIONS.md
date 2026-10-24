@@ -892,6 +892,25 @@
 - **Consequences:** the removed text is in git history (`git show b298d76:<path>`). GOAL.md no longer names a source
   brief.
 
+### ADR-0051 — Disabling and soft-deleting servers and roles
+
+- **Status:** accepted (operator request, 2026-10-24). Not security-relevant: nothing is relaxed. Deleting ends access
+  like disabling (HP-SRV-008) and additionally revokes login keys.
+- **Context:** servers, git remotes, roles and access profiles could not be deleted, and disabling them was implemented
+  in the service but not reachable: `enabled` in a `PATCH` was ignored and the console had no control.
+- **Decision:** `POST /servers/{id}/disable|enable` and `POST /roles/{id}/disable|enable`, and `PATCH` applies
+  `enabled`. `DELETE /servers/{id}` and `DELETE /roles/{id}` (recent authentication) soft-delete: the row is disabled,
+  marked `deleted_at`/`deleted_by`, grants are revoked and pending requests canceled through the disable hook, login
+  keys are revoked, and the alias is replaced by a tombstone (`~<id>`, never a valid alias) with the former name in
+  `deleted_alias`, so the name can be reused. Deleting a server deletes its roles. Deleted rows are left out of lists
+  and the policy snapshot, refuse every change, and remain readable by ID (and `GET /servers?include_deleted=true`) so
+  sessions, recordings and the audit log keep naming them. Deleting a server needs typed confirmation (HP-UI-010).
+- **Alternatives:** hard delete (breaks the foreign keys from grants, sessions and recordings, and loses names in
+  history); a rebuilt table with a partial unique index instead of the alias tombstone (a risky rebuild of tables many
+  others reference).
+- **Consequences:** policy rules that select roles by name match a new role with a reused name; rules that select by ID
+  keep pointing at the deleted one and match nothing. A deletion cannot be undone.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

@@ -220,7 +220,11 @@ func (s *Server) ListGroups(c *gen.Call) (*gen.Result, error) {
 // ---- servers
 
 func (s *Server) ListServers(c *gen.Call) (*gen.Result, error) {
-	v, err := s.d.Inventory.ListServers(c.R.Context())
+	load := s.d.Inventory.ListServers
+	if c.R.URL.Query().Get("include_deleted") == "true" {
+		load = s.d.Inventory.ListServersWithDeleted
+	}
+	v, err := load(c.R.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -265,6 +269,30 @@ func (s *Server) UpdateServer(c *gen.Call) (*gen.Result, error) {
 		return nil, apperr.New(apperr.CodeForbidden, "changing the address needs inventory.address.read")
 	}
 	srv, err := s.d.Inventory.UpdateServer(c.R.Context(), actor(c), c.R.PathValue("id"), in)
+	if err != nil {
+		return nil, err
+	}
+	if in.Enabled != nil && *in.Enabled != srv.Enabled {
+		if srv, err = s.d.Inventory.SetServerEnabled(c.R.Context(), actor(c), srv.ID, *in.Enabled); err != nil {
+			return nil, err
+		}
+	}
+	return ok(s.server(c, srv))
+}
+
+func (s *Server) DeleteServer(c *gen.Call) (*gen.Result, error) {
+	if err := s.d.Inventory.DeleteServer(c.R.Context(), actor(c), c.R.PathValue("id")); err != nil {
+		return nil, err
+	}
+	return noContent()
+}
+
+func (s *Server) DisableServer(c *gen.Call) (*gen.Result, error) { return s.setServerEnabled(c, false) }
+
+func (s *Server) EnableServer(c *gen.Call) (*gen.Result, error) { return s.setServerEnabled(c, true) }
+
+func (s *Server) setServerEnabled(c *gen.Call, enabled bool) (*gen.Result, error) {
+	srv, err := s.d.Inventory.SetServerEnabled(c.R.Context(), actor(c), c.R.PathValue("id"), enabled)
 	if err != nil {
 		return nil, err
 	}
@@ -420,6 +448,30 @@ func (s *Server) UpdateRole(c *gen.Call) (*gen.Result, error) {
 	}
 	in.Version = v
 	r, err := s.d.Inventory.UpdateRole(c.R.Context(), actor(c), c.R.PathValue("id"), in.input())
+	if err != nil {
+		return nil, err
+	}
+	if in.Enabled != nil && *in.Enabled != r.Enabled {
+		if r, err = s.d.Inventory.SetRoleEnabled(c.R.Context(), actor(c), r.ID, *in.Enabled); err != nil {
+			return nil, err
+		}
+	}
+	return ok(role(r))
+}
+
+func (s *Server) DeleteRole(c *gen.Call) (*gen.Result, error) {
+	if err := s.d.Inventory.DeleteRole(c.R.Context(), actor(c), c.R.PathValue("id")); err != nil {
+		return nil, err
+	}
+	return noContent()
+}
+
+func (s *Server) DisableRole(c *gen.Call) (*gen.Result, error) { return s.setRoleEnabled(c, false) }
+
+func (s *Server) EnableRole(c *gen.Call) (*gen.Result, error) { return s.setRoleEnabled(c, true) }
+
+func (s *Server) setRoleEnabled(c *gen.Call, enabled bool) (*gen.Result, error) {
+	r, err := s.d.Inventory.SetRoleEnabled(c.R.Context(), actor(c), c.R.PathValue("id"), enabled)
 	if err != nil {
 		return nil, err
 	}

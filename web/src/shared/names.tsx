@@ -5,7 +5,7 @@ import {
   agentsQueryOptions,
   operatorsQueryOptions,
   roleQueryOptions,
-  serversQueryOptions,
+  serverNamesQueryOptions,
 } from '../api/queries';
 import { shortId } from '../lib/format';
 import { usePermissions } from '../lib/usePermissions';
@@ -43,13 +43,16 @@ export function AgentName({ id, link = true }: { id: string | null | undefined; 
 
 export function ServerName({ id, link = true }: { id: string | null | undefined; link?: boolean }) {
   const { can } = usePermissions();
-  const servers = useQuery({ ...serversQueryOptions(), enabled: can('inventory.read') });
+  const servers = useQuery({ ...serverNamesQueryOptions(), enabled: can('inventory.read') });
   if (!id) {
     return <>—</>;
   }
   const server = servers.data?.items.find((s) => s.id === id);
   const content = server ? (
-    <span title={server.display_name || id}>{server.alias}</span>
+    <span title={server.display_name || id}>
+      {server.alias}
+      {server.deleted_at ? <span className="hp-legend"> (deleted)</span> : null}
+    </span>
   ) : (
     <IdFallback id={id} />
   );
@@ -68,7 +71,14 @@ export function RoleName({ id, link = true }: { id: string | null | undefined; l
   if (!id) {
     return <>—</>;
   }
-  const content = role.data ? <span title={id}>{role.data.alias}</span> : <IdFallback id={id} />;
+  const content = role.data ? (
+    <span title={id}>
+      {role.data.alias}
+      {role.data.deleted_at ? <span className="hp-legend"> (deleted)</span> : null}
+    </span>
+  ) : (
+    <IdFallback id={id} />
+  );
   return link && can('inventory.read') ? (
     <Link to="/roles/$id" params={{ id }}>
       {content}

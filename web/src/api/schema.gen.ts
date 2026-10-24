@@ -668,10 +668,44 @@ export interface paths {
         get: operations["getServer"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete a server or git remote and all its roles: access ends, pending requests are canceled and login keys are revoked. The record stays for history (deleted_at set) and the alias can be reused. */
+        delete: operations["deleteServer"];
         options?: never;
         head?: never;
         patch: operations["updateServer"];
+        trace?: never;
+    };
+    "/api/v1/servers/{id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disable a server or git remote; its active grants are revoked and pending requests canceled. */
+        post: operations["disableServer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{id}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["enableServer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/servers/{id}/effective-access": {
@@ -828,10 +862,44 @@ export interface paths {
         get: operations["getRole"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete a role or access profile: access ends, pending requests are canceled and login keys are revoked. The record stays for history (deleted_at set) and the alias can be reused. */
+        delete: operations["deleteRole"];
         options?: never;
         head?: never;
         patch: operations["updateRole"];
+        trace?: never;
+    };
+    "/api/v1/roles/{id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disable a role or access profile; its active grants are revoked and pending requests canceled. */
+        post: operations["disableRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/roles/{id}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["enableRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/roles/{id}/credentials": {
@@ -2089,6 +2157,8 @@ export interface components {
             created_at: components["schemas"]["Timestamp"];
             updated_at: components["schemas"]["Timestamp"];
             active_host_identities?: number;
+            /** @description Set when the server was deleted; alias is then the name it had. */
+            deleted_at?: components["schemas"]["Timestamp"];
         };
         ServerInput: {
             version?: number;
@@ -2140,6 +2210,8 @@ export interface components {
             git?: components["schemas"]["GitRules"];
             /** @description Distinct approvers needed (1-5). Above 1, policy auto-approval does not apply. */
             approvals_required?: number;
+            /** @description Set when the role was deleted; alias is then the name it had. */
+            deleted_at?: components["schemas"]["Timestamp"];
         };
         /** @description What an access profile on a git remote covers. Repository patterns match the repository path without ".git", case-insensitively: * matches within one segment, ** across segments, ? one character, {a,b} alternatives. Push rules apply with the git-write capability; branch and tag patterns are relative to refs/heads/ and refs/tags/. */
         GitRules: {
@@ -3874,7 +3946,10 @@ export interface operations {
     };
     listServers: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Also return deleted servers and git remotes (deleted_at set), for naming them in history. */
+                include_deleted?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3942,6 +4017,27 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    deleteServer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     updateServer: {
         parameters: {
             query?: never;
@@ -3956,6 +4052,52 @@ export interface operations {
                 "application/json": components["schemas"]["ServerInput"];
             };
         };
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Server"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    disableServer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Server"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    enableServer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description ok */
             200: {
@@ -4277,6 +4419,27 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    deleteRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     updateRole: {
         parameters: {
             query?: never;
@@ -4291,6 +4454,52 @@ export interface operations {
                 "application/json": components["schemas"]["RoleInput"];
             };
         };
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    disableRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    enableRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description ok */
             200: {

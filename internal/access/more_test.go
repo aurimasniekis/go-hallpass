@@ -66,6 +66,29 @@ func TestServerDisableCascadeAndAgentViews(t *testing.T) {
 	}
 }
 
+// Deleting a role or a server ends access like disabling does: grants are revoked and pending requests canceled.
+func TestDeleteRoleAndServerEndAccess(t *testing.T) {
+	f := newFx(t)
+	g := f.grant(time.Hour)
+	p := f.request("p", 15*time.Minute)
+	must(t, f.inv.DeleteRole(f.ctx, admin, f.role.ID))
+	gg, _ := f.svc.GetGrant(f.ctx, g.ID)
+	pr, _ := f.svc.GetRequest(f.ctx, p.Request.ID)
+	if gg.State != GrantRevoked || pr.State != ReqCanceled || pr.StateReason != ReasonTargetDisabled {
+		t.Fatalf("role delete: %+v %+v", gg, pr)
+	}
+
+	f = newFx(t)
+	g = f.grant(time.Hour)
+	must(t, f.inv.DeleteServer(f.ctx, admin, f.srv.ID))
+	if gg, _ := f.svc.GetGrant(f.ctx, g.ID); gg.State != GrantRevoked {
+		t.Fatalf("server delete: %+v", gg)
+	}
+	if r, err := f.inv.GetRole(f.ctx, f.role.ID); err != nil || !r.Deleted() {
+		t.Fatalf("roles of a deleted server are deleted: %+v %v", r, err)
+	}
+}
+
 func TestEnforcerLockdownCredentialAndShutdown(t *testing.T) {
 	f := newFx(t)
 	g := f.grant(time.Hour)

@@ -102,7 +102,7 @@ func (svc *Service) AddHostIdentity(ctx context.Context, actor audit.Actor, serv
 	}
 	var id string
 	err = svc.s.W().TxNamed(ctx, "inventory.add_host_identity", func(tx *store.Tx) error {
-		if _, err := tx.Q.GetServer(ctx, serverID); errors.Is(err, sql.ErrNoRows) {
+		if r, err := tx.Q.GetServer(ctx, serverID); errors.Is(err, sql.ErrNoRows) || (err == nil && r.DeletedAt.Valid) {
 			return apperr.New(apperr.CodeNotFound, "server not found")
 		} else if err != nil {
 			return err
@@ -522,7 +522,7 @@ var errScanDone = errors.New("host key captured")
 // ScanHostKeys connects to a server through the egress guard and records each offered host key as a pending identity.
 // Operators must confirm pending identities against an out-of-band source before they are trusted.
 func (svc *Service) ScanHostKeys(ctx context.Context, actor audit.Actor, serverID string) ([]*HostIdentity, error) {
-	srv, err := svc.GetServer(ctx, serverID)
+	srv, err := svc.liveServer(ctx, serverID)
 	if err != nil {
 		return nil, err
 	}

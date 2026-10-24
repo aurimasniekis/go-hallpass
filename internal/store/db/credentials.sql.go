@@ -407,6 +407,40 @@ func (q *Queries) RecordProbe(ctx context.Context, arg RecordProbeParams) error 
 	return err
 }
 
+const revokeRoleLoginCredentials = `-- name: RevokeRoleLoginCredentials :many
+UPDATE login_credentials SET state = 'revoked', revoked_at = ?1, updated_at = ?1
+WHERE role_id = ?2 AND state NOT IN ('revoked', 'retired')
+RETURNING id
+`
+
+type RevokeRoleLoginCredentialsParams struct {
+	Now    sql.NullInt64
+	RoleID string
+}
+
+func (q *Queries) RevokeRoleLoginCredentials(ctx context.Context, arg RevokeRoleLoginCredentialsParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, revokeRoleLoginCredentials, arg.Now, arg.RoleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setGatewayHostKeyState = `-- name: SetGatewayHostKeyState :execrows
 UPDATE gateway_host_keys SET state = ?1, updated_at = ?2 WHERE id = ?3 AND state = ?4
 `

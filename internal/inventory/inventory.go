@@ -76,7 +76,12 @@ type Server struct {
 	UpdatedAt    time.Time         `json:"updated_at"`
 	UpdatedBy    string            `json:"updated_by"`
 	ActiveHostID int               `json:"active_host_identities"`
+	// DeletedAt is set for a deleted server, which is kept only so history can name it (Alias is its former name).
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
+
+// Deleted reports whether the server was deleted.
+func (s *Server) Deleted() bool { return s.DeletedAt != nil }
 
 // Role is a way to log in to a server.
 type Role struct {
@@ -107,7 +112,12 @@ type Role struct {
 	// ApprovalsRequired is how many distinct approvers must approve a request (1..5). Above 1, policy auto-approval
 	// does not apply to the role.
 	ApprovalsRequired int `json:"approvals_required"`
+	// DeletedAt is set for a deleted role, which is kept only so history can name it (Alias is its former name).
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
+
+// Deleted reports whether the role was deleted.
+func (r *Role) Deleted() bool { return r.DeletedAt != nil }
 
 // Has reports whether the role grants capability c.
 func (r *Role) Has(c string) bool { return slices.Contains(r.Capabilities, c) }
@@ -315,7 +325,7 @@ func (svc *Service) setServerGroupsLabels(ctx context.Context, tx *store.Tx, id 
 
 // UpdateServer changes server attributes (optimistic concurrency on Version).
 func (svc *Service) UpdateServer(ctx context.Context, actor audit.Actor, id string, in ServerInput) (*Server, error) {
-	cur, err := svc.GetServer(ctx, id)
+	cur, err := svc.liveServer(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -386,7 +396,7 @@ func (svc *Service) UpdateServer(ctx context.Context, actor audit.Actor, id stri
 // SetServerEnabled enables or disables a server; disabling revokes dependent access via hooks (HP-SRV-008).
 func (svc *Service) SetServerEnabled(ctx context.Context, actor audit.Actor, id string, enabled bool) (*Server, error) {
 	err := svc.s.W().TxNamed(ctx, "inventory.server_enabled", func(tx *store.Tx) error {
-		if _, err := tx.Q.GetServer(ctx, id); errors.Is(err, sql.ErrNoRows) {
+		if r, err := tx.Q.GetServer(ctx, id); errors.Is(err, sql.ErrNoRows) || (err == nil && r.DeletedAt.Valid) {
 			return apperr.New(apperr.CodeNotFound, "server not found")
 		} else if err != nil {
 			return err
@@ -417,7 +427,56 @@ func (svc *Service) SetServerEnabled(ctx context.Context, actor audit.Actor, id 
 	return svc.GetServer(ctx, id)
 }
 
-// GetServer returns a server with groups, labels and host-CA principals.
+// liveServer returns a server that is not deleted: a deleted one cannot be changed.
+func (svc *Service) liveServer(ctx context.Context, id string) (*Server, error) {
+	srv, err := svc.GetServer(ctx, id)
+	if err == nil && srv.Deleted() {
+		return nil, apperr.New(apperr.CodeNotFound, "server not found")
+	}
+	return srv, err
+}
+
+// DeleteServer deletes a server or git remote and all its roles: they are disabled (revoking grants and canceling
+// pending requests), their login keys are revoked, and they disappear from lists and policy. The rows stay so history
+// can name them, and the aliases become free for reuse.
+func (svc *Service) DeleteServer(ctx context.Context, actor audit.Actor, id string) error {
+	return svc.s.W().TxNamed(ctx, "inventory.delete_server", func(tx *store.Tx) error {
+		r, err := tx.Q.GetServer(ctx, id)
+		if errors.Is(err, sql.ErrNoRows) || (err == nil && r.DeletedAt.Valid) {
+			return apperr.New(apperr.CodeNotFound, "server not found")
+		} else if err != nil {
+			return err
+		}
+		roles, err := tx.Q.ListRoles(ctx, id)
+		if err != nil {
+			return err
+		}
+		var aliases, revoked []string
+		for _, role := range roles {
+			keys, err := svc.deleteRoleTx(ctx, tx, actor, role.ID)
+			if err != nil {
+				return err
+			}
+			aliases, revoked = append(aliases, role.Alias), append(revoked, keys...)
+		}
+		if _, err := tx.Q.DeleteServer(ctx, db.DeleteServerParams{Now: nullNow(tx), Actor: nullActor(actor), ID: id}); err != nil {
+			return err
+		}
+		if err := svc.runDisableHooks(ctx, tx, "server", id); err != nil {
+			return err
+		}
+		if err := svc.bumpPolicy(ctx, tx); err != nil {
+			return err
+		}
+		_, err = svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "server.deleted", Target: audit.Target{Type: "server", ID: id},
+			Details: map[string]any{"alias": r.Alias, "kind": r.Kind, "roles": aliases, "revoked_credentials": revoked}})
+		svc.publish(tx, eventbus.TopicTargetDisabled, id)
+		return err
+	})
+}
+
+// GetServer returns a server with groups, labels and host-CA principals. A deleted server is returned too, with
+// DeletedAt set; changes to it are refused.
 func (svc *Service) GetServer(ctx context.Context, id string) (*Server, error) {
 	r, err := svc.s.R().GetServer(ctx, id)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -465,12 +524,25 @@ func (svc *Service) hydrateServer(ctx context.Context, r db.Server) (*Server, er
 	return srv, nil
 }
 
-// ListServers returns every server (groups and labels included).
+// ListServers returns every server that is not deleted (groups and labels included).
 func (svc *Service) ListServers(ctx context.Context) ([]*Server, error) {
 	rows, err := svc.s.R().ListServers(ctx)
 	if err != nil {
 		return nil, err
 	}
+	return svc.listServers(ctx, rows)
+}
+
+// ListServersWithDeleted also returns deleted servers, for naming them in history.
+func (svc *Service) ListServersWithDeleted(ctx context.Context) ([]*Server, error) {
+	rows, err := svc.s.R().ListServersWithDeleted(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return svc.listServers(ctx, rows)
+}
+
+func (svc *Service) listServers(ctx context.Context, rows []db.Server) ([]*Server, error) {
 	gs, err := svc.s.R().ListAllServerGroups(ctx)
 	if err != nil {
 		return nil, err
@@ -512,8 +584,16 @@ func serverFromRow(r db.Server) *Server {
 		Metadata: map[string]string{}, Groups: []string{}, Labels: map[string]string{}, Principals: []string{},
 	}
 	_ = json.Unmarshal([]byte(r.MetadataJson), &s.Metadata)
+	if r.DeletedAt.Valid {
+		t := time.UnixMicro(r.DeletedAt.Int64).UTC()
+		s.DeletedAt, s.Alias, s.Enabled = &t, r.DeletedAlias.String, false
+	}
 	return s
 }
+
+func nullNow(tx *store.Tx) sql.NullInt64 { return sql.NullInt64{Int64: tx.NowMicros(), Valid: true} }
+
+func nullActor(a audit.Actor) sql.NullString { return sql.NullString{String: actorRef(a), Valid: true} }
 
 func b2i(b bool) int64 {
 	if b {

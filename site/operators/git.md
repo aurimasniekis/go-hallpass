@@ -76,6 +76,13 @@ Expand a profile and **Generate key**, then install it on the host:
 The profile shows the **Public key** to copy (`ssh-ed25519 AAAA… hallpass:<remote>/<profile>`), without the
 `authorized_keys` options that git hosts reject. **Probe** checks that the host accepts the key; then **Activate** it.
 
+### Disabling and deleting
+
+Each profile row has **Disable** and **Delete**; the git remote's page has the same for the whole remote. Disabling
+ends active access and cancels pending requests until you enable it again. Deleting also revokes the profile's login
+keys (remove the deploy keys on the git host too) and cannot be undone. The name can be used again, and past sessions
+and the audit log still show the deleted profile or remote. Deleting a remote deletes all of its profiles.
+
 ## Push rules
 
 HallPass reads the list of ref updates at the start of every push and refuses the whole push if any update breaks a

@@ -567,6 +567,8 @@ paths:
       operationId: listServers
       tags: [inventory]
       x-permission: inventory.read
+      parameters:
+        - {name: include_deleted, in: query, schema: {type: boolean}, description: "Also return deleted servers and git remotes (deleted_at set), for naming them in history."}
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Server"}}}}}}}
     post:
@@ -597,6 +599,37 @@ paths:
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: "#/components/schemas/ServerInput"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Server"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: deleteServer
+      tags: [inventory]
+      x-permission: inventory.write
+      x-reauth: true
+      summary: >-
+        Delete a server or git remote and all its roles: access ends, pending requests are canceled and login keys are
+        revoked. The record stays for history (deleted_at set) and the alias can be reused.
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "204": {description: deleted}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/servers/{id}/disable:
+    post:
+      operationId: disableServer
+      tags: [inventory]
+      x-permission: inventory.write
+      summary: Disable a server or git remote; its active grants are revoked and pending requests canceled.
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Server"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/servers/{id}/enable:
+    post:
+      operationId: enableServer
+      tags: [inventory]
+      x-permission: inventory.write
+      parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Server"}}}}
         default: {$ref: "#/components/responses/Problem"}
@@ -736,6 +769,38 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
 
   # ---------------------------------------------------------------- credentials
+    delete:
+      operationId: deleteRole
+      tags: [inventory]
+      x-permission: inventory.write
+      x-reauth: true
+      summary: >-
+        Delete a role or access profile: access ends, pending requests are canceled and login keys are revoked. The
+        record stays for history (deleted_at set) and the alias can be reused.
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "204": {description: deleted}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/roles/{id}/disable:
+    post:
+      operationId: disableRole
+      tags: [inventory]
+      x-permission: inventory.write
+      summary: Disable a role or access profile; its active grants are revoked and pending requests canceled.
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Role"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/roles/{id}/enable:
+    post:
+      operationId: enableRole
+      tags: [inventory]
+      x-permission: inventory.write
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Role"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+
   /api/v1/roles/{id}/credentials:
     get:
       operationId: listCredentials
@@ -1916,6 +1981,7 @@ components:
         created_at: {$ref: "#/components/schemas/Timestamp"}
         updated_at: {$ref: "#/components/schemas/Timestamp"}
         active_host_identities: {type: integer}
+        deleted_at: {allOf: [{$ref: "#/components/schemas/Timestamp"}], description: "Set when the server was deleted; alias is then the name it had."}
     ServerInput:
       type: object
       properties:
@@ -1959,6 +2025,7 @@ components:
         updated_at: {$ref: "#/components/schemas/Timestamp"}
         git: {$ref: "#/components/schemas/GitRules"}
         approvals_required: {type: integer, description: "Distinct approvers needed (1-5). Above 1, policy auto-approval does not apply."}
+        deleted_at: {allOf: [{$ref: "#/components/schemas/Timestamp"}], description: "Set when the role was deleted; alias is then the name it had."}
     GitRules:
       type: object
       description: >-

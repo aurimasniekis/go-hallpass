@@ -32,7 +32,7 @@ Each operation in the document carries vendor extensions:
 | `auth`, `me` | Sign-in, MFA, re-authentication, bootstrap, invitations, password reset, own sessions and chat links |
 | `operators` | Operators, invitations, roles, sessions, identities |
 | `agents` | Agents, keys, effective access |
-| `inventory` | Servers and git remotes (`kind`), host identities and CAs, roles and access profiles, groups |
+| `inventory` | Servers and git remotes (`kind`), host identities and CAs, roles and access profiles, groups. Servers and roles can be disabled, enabled and deleted; deleted ones stay readable by ID for history. |
 | `credentials` | Login keys (generate, import, probe, activate, revoke), user CAs, certificate bindings |
 | `policy` | Access rules, approver rules, policy version |
 | `access` | Requests (approve, deny, cancel), grants (revoke). An approval that still needs more approvers answers `202` with the pending request. |

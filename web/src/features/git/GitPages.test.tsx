@@ -147,6 +147,36 @@ describe('Git pages', () => {
     expect((patch?.body as { capabilities: string[] }).capabilities).toEqual(['git-read', 'git-write']);
   });
 
+  it('disables and deletes an access profile after confirmation', async () => {
+    const user = userEvent.setup();
+    const { calls } = mockApi({
+      'GET /api/v1/me': makeMe({ permissions: ['inventory.read', 'inventory.write'] }),
+      'GET /api/v1/servers/srv_git/roles': { items: [profile] },
+      'POST /api/v1/roles/rol_1/disable': { ...profile, enabled: false },
+      'DELETE /api/v1/roles/rol_1': () => new Response(null, { status: 204 }),
+    });
+    renderWithProviders(<GitProfiles serverId="srv_git" canWrite keyHint="Add it as a deploy key." />);
+    await user.click(await screen.findByRole('button', { name: 'Disable' }));
+    const disable = await screen.findByRole('dialog', { name: 'Disable access profile acme-push' });
+    expect(within(disable).getByText(/pending requests are canceled/)).toBeInTheDocument();
+    await user.click(within(disable).getByRole('button', { name: 'Disable' }));
+    await waitFor(() => {
+      expect(calls.some((c) => c.method === 'POST' && c.path.endsWith('/roles/rol_1/disable'))).toBe(true);
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    // Dialogs share a generated title id in tests, so find this one by its text.
+    const del = (await screen.findByText(/login keys are revoked/)).closest<HTMLElement>('[role="dialog"]');
+    if (!del) {
+      throw new Error('no delete dialog');
+    }
+    expect(within(del).getByText(/cannot be undone/)).toBeInTheDocument();
+    await user.click(within(del).getByRole('button', { name: 'Delete access profile' }));
+    await waitFor(() => {
+      expect(calls.some((c) => c.method === 'DELETE' && c.path.endsWith('/roles/rol_1'))).toBe(true);
+    });
+  });
+
   it('shows the bare public key to add on the git host', async () => {
     const user = userEvent.setup();
     mockApi({

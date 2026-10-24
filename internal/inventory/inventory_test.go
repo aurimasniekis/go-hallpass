@@ -335,6 +335,58 @@ func TestReenrollRetiredHostKey(t *testing.T) {
 	}
 }
 
+// Deleted servers and roles disappear from lists, keep their former name for history, refuse changes and free
+// their alias.
+func TestSoftDelete(t *testing.T) {
+	svc, _ := newSvc(t)
+	ctx := context.Background()
+	srv := mkServer(t, svc, "web1", "10.0.0.5", 22)
+	role, err := svc.CreateRole(ctx, admin, srv.ID, RoleInput{Alias: ptr("deploy"), RemoteUser: ptr("deploy")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.DeleteRole(ctx, admin, role.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.DeleteRole(ctx, admin, role.ID); !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("second delete: %v", err)
+	}
+	got, err := svc.GetRole(ctx, role.ID)
+	if err != nil || !got.Deleted() || got.Alias != "deploy" || got.Enabled {
+		t.Fatalf("deleted role: %+v %v", got, err)
+	}
+	if list, _ := svc.ListRoles(ctx, srv.ID); len(list) != 0 {
+		t.Fatalf("deleted role listed: %+v", list)
+	}
+	if _, err := svc.UpdateRole(ctx, admin, role.ID, RoleInput{Version: got.Version, Description: ptr("x")}); !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("update of a deleted role: %v", err)
+	}
+	if _, err := svc.SetRoleEnabled(ctx, admin, role.ID, true); !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("enabling a deleted role: %v", err)
+	}
+	if _, err := svc.CreateRole(ctx, admin, srv.ID, RoleInput{Alias: ptr("deploy"), RemoteUser: ptr("deploy")}); err != nil {
+		t.Fatalf("alias of a deleted role is not reusable: %v", err)
+	}
+
+	if err := svc.DeleteServer(ctx, admin, srv.ID); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := svc.ListServers(ctx); len(list) != 0 {
+		t.Fatalf("deleted server listed: %+v", list)
+	}
+	all, err := svc.ListServersWithDeleted(ctx)
+	if err != nil || len(all) != 1 || !all[0].Deleted() || all[0].Alias != "web1" {
+		t.Fatalf("with deleted: %+v %v", all, err)
+	}
+	if _, err := svc.CreateRole(ctx, admin, srv.ID, RoleInput{Alias: ptr("x"), RemoteUser: ptr("x")}); !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("role on a deleted server: %v", err)
+	}
+	if _, err := svc.SetServerEnabled(ctx, admin, srv.ID, true); !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("enabling a deleted server: %v", err)
+	}
+	mkServer(t, svc, "web1", "10.0.0.6", 22) // the alias is free again
+}
+
 // A failed scan says why, so an operator can tell an egress denial from an unreachable server.
 func TestScanFailureReason(t *testing.T) {
 	svc, _ := newSvc(t)

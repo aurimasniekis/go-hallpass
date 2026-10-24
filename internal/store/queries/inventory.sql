@@ -10,7 +10,15 @@ SELECT * FROM servers WHERE id = ?;
 SELECT * FROM servers WHERE alias = ?;
 
 -- name: ListServers :many
-SELECT * FROM servers ORDER BY alias;
+SELECT * FROM servers WHERE deleted_at IS NULL ORDER BY alias;
+
+-- name: ListServersWithDeleted :many
+SELECT * FROM servers ORDER BY deleted_at IS NOT NULL, alias;
+
+-- name: DeleteServer :execrows
+UPDATE servers SET enabled = 0, deleted_alias = alias, alias = '~' || id, deleted_at = sqlc.arg(now),
+  deleted_by = sqlc.arg(actor), version = version + 1, updated_at = sqlc.arg(now), updated_by = sqlc.arg(actor)
+WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
 
 -- name: UpdateServer :execrows
 UPDATE servers SET alias = ?, display_name = ?, description = ?, environment = ?, address = ?, port = ?, metadata_json = ?,
@@ -107,10 +115,15 @@ SELECT * FROM server_roles WHERE id = ?;
 SELECT * FROM server_roles WHERE server_id = ? AND alias = ?;
 
 -- name: ListRoles :many
-SELECT * FROM server_roles WHERE server_id = ? ORDER BY alias;
+SELECT * FROM server_roles WHERE server_id = ? AND deleted_at IS NULL ORDER BY alias;
 
 -- name: ListAllRoles :many
-SELECT * FROM server_roles ORDER BY server_id, alias;
+SELECT * FROM server_roles WHERE deleted_at IS NULL ORDER BY server_id, alias;
+
+-- name: DeleteRole :execrows
+UPDATE server_roles SET enabled = 0, deleted_alias = alias, alias = '~' || id, deleted_at = sqlc.arg(now),
+  deleted_by = sqlc.arg(actor), version = version + 1, updated_at = sqlc.arg(now), updated_by = sqlc.arg(actor)
+WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
 
 -- name: UpdateRole :execrows
 UPDATE server_roles SET alias = ?, display_name = ?, description = ?, remote_user = ?, capabilities_json = ?,

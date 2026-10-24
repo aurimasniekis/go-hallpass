@@ -11,6 +11,7 @@ import { DataTable } from '../../ds/DataTable';
 import { EnabledBadge } from '../agents/AgentsPage';
 import { CredentialsPanel } from '../credentials/CredentialsPanel';
 import { FormModal } from '../servers/FormModal';
+import { LifecycleActions } from '../servers/LifecycleActions';
 import { DurationText } from '../servers/ServerRoles';
 import { GitProfileFields } from './GitProfileFields';
 import {
@@ -109,16 +110,19 @@ export function GitProfiles({
             title: <span className="hp-visually-hidden">Actions</span>,
             render: (_, r) =>
               canWrite ? (
-                <Button
-                  size="small"
-                  icon={<EditOutlined />}
-                  aria-label={`Edit ${r.alias}`}
-                  onClick={() => {
-                    setEditing(r);
-                  }}
-                >
-                  Edit
-                </Button>
+                <Space wrap size={8}>
+                  <Button
+                    size="small"
+                    icon={<EditOutlined />}
+                    aria-label={`Edit ${r.alias}`}
+                    onClick={() => {
+                      setEditing(r);
+                    }}
+                  >
+                    Edit
+                  </Button>
+                  <LifecycleActions kind="access profile" target={r} size="small" />
+                </Space>
               ) : null,
           },
         ]}

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { Alert, Button, Card, Space } from 'antd';
 import { useState } from 'react';
 
@@ -19,6 +19,7 @@ import { CertBindingPanel } from '../credentials/CertBindingPanel';
 import { CredentialsPanel } from '../credentials/CredentialsPanel';
 import { UserCAsPanel } from '../credentials/UserCAsPanel';
 import { FormModal } from '../servers/FormModal';
+import { LifecycleActions } from '../servers/LifecycleActions';
 import { orDash } from '../servers/formUtils';
 import { DurationText } from '../servers/ServerRoles';
 import { pushSummary } from '../git/gitForm';
@@ -32,6 +33,7 @@ export function RoleDetailPage({ id }: { id: string }) {
   // Detail pages read fresh data (the shared role query is long-lived for name lookups).
   const query = useQuery({ ...roleQueryOptions(id), staleTime: 0, enabled: can('inventory.read') });
   const [editing, setEditing] = useState(false);
+  const navigate = useNavigate();
 
   const back = <Link to="/servers">← Servers</Link>;
   if (!loading && !can('inventory.read')) {
@@ -83,18 +85,43 @@ export function RoleDetailPage({ id }: { id: string }) {
           </>
         }
         extra={
-          can('inventory.write') && !isGit ? (
-            <Button
-              onClick={() => {
-                setEditing(true);
-              }}
-            >
-              Edit
-            </Button>
+          can('inventory.write') && !role.deleted_at ? (
+            <Space wrap>
+              {!isGit ? (
+                <Button
+                  onClick={() => {
+                    setEditing(true);
+                  }}
+                >
+                  Edit
+                </Button>
+              ) : null}
+              <LifecycleActions
+                kind={isGit ? 'access profile' : 'role'}
+                target={role}
+                onDeleted={() => {
+                  void (isGit
+                    ? navigate({ to: '/git/$id', params: { id: role.server_id } })
+                    : navigate({
+                        to: '/servers/$id',
+                        params: { id: role.server_id },
+                        search: { tab: 'roles' },
+                      }));
+                }}
+              />
+            </Space>
           ) : null
         }
       />
       <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+        {role.deleted_at ? (
+          <Alert
+            type="warning"
+            showIcon
+            title={`Deleted ${formatDateTime(role.deleted_at)}`}
+            description="Kept only so past sessions and the audit log can name it. Agents cannot use it."
+          />
+        ) : null}
         <Card size="small" title="Settings">
           <KeyValueGrid
             items={[

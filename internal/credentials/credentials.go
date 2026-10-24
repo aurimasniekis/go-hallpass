@@ -174,7 +174,7 @@ func (svc *Service) insert(ctx context.Context, actor audit.Actor, roleID, kind 
 	}
 	fp := ssh.FingerprintSHA256(pub)
 	err = svc.s.W().TxNamed(ctx, "credentials.insert", func(tx *store.Tx) error {
-		if _, err := tx.Q.GetRole(ctx, roleID); errors.Is(err, sql.ErrNoRows) {
+		if r, err := tx.Q.GetRole(ctx, roleID); errors.Is(err, sql.ErrNoRows) || (err == nil && r.DeletedAt.Valid) {
 			return apperr.New(apperr.CodeNotFound, "role not found")
 		} else if err != nil {
 			return err
@@ -457,6 +457,9 @@ type Auth struct {
 // active managed key. grantID and connID are embedded in certificate key IDs for destination-side accounting.
 func (svc *Service) RoleAuth(ctx context.Context, roleID, grantID, connID string) (*Auth, error) {
 	role, err := svc.inv.GetRole(ctx, roleID)
+	if err == nil && role.Deleted() {
+		err = apperr.New(apperr.CodeNotFound, "role not found")
+	}
 	if err != nil {
 		return nil, err
 	}

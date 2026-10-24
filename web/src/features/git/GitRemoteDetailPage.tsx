@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
-import { Space } from 'antd';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { Alert, Space } from 'antd';
 
 import { serverQueryOptions } from '../../api/queries';
 import { KeyValueGrid } from '../../ds/KeyValueGrid';
@@ -11,6 +11,7 @@ import { usePermissions } from '../../lib/usePermissions';
 import { EnabledBadge } from '../agents/AgentsPage';
 import { EffectiveAccessCard } from '../servers/EffectiveAccessTable';
 import { orDash } from '../servers/formUtils';
+import { LifecycleActions } from '../servers/LifecycleActions';
 import { HostIdentities } from '../servers/HostIdentities';
 import { AddressCell } from '../servers/ServersPage';
 import { GitProfiles } from './GitProfiles';
@@ -20,6 +21,7 @@ import { CUSTOM_KEY_HINT, presetFor } from './presets';
 export function GitRemoteDetailPage({ id }: { id: string }) {
   const { can, loading } = usePermissions();
   const query = useQuery({ ...serverQueryOptions(id), enabled: can('inventory.read') });
+  const navigate = useNavigate();
   const back = <Link to="/git">← Git</Link>;
   if (!loading && !can('inventory.read')) {
     return (
@@ -47,15 +49,34 @@ export function GitRemoteDetailPage({ id }: { id: string }) {
   }
   const remote = query.data;
   const preset = presetFor(remote.address);
-  const canWrite = can('inventory.write');
+  const canWrite = can('inventory.write') && !remote.deleted_at;
   return (
     <>
       <PageHeader
         title={remote.alias}
         above={back}
         description={(remote.description ?? '').length > 0 ? remote.description : preset?.name}
+        extra={
+          canWrite ? (
+            <LifecycleActions
+              kind="git remote"
+              target={remote}
+              onDeleted={() => {
+                void navigate({ to: '/git' });
+              }}
+            />
+          ) : null
+        }
       />
       <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+        {remote.deleted_at ? (
+          <Alert
+            type="warning"
+            showIcon
+            title={`Deleted ${formatDateTime(remote.deleted_at)}`}
+            description="Kept only so past sessions and the audit log can name it. Agents cannot reach it."
+          />
+        ) : null}
         <KeyValueGrid
           items={[
             { key: 'host', label: 'Git host', value: preset?.name ?? 'Other host' },

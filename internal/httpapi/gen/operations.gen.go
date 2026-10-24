@@ -121,16 +121,22 @@ var Operations = []Operation{
 	{ID: "denyRequest", Method: "POST", Path: "/api/v1/requests/{id}/deny", Permission: "requests.decide", Reauth: false, MFA: false, Idempotent: true, Stream: false, Redirect: false, Tags: []string{"access"}},
 	{ID: "getRole", Method: "GET", Path: "/api/v1/roles/{id}", Permission: "inventory.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"inventory"}},
 	{ID: "updateRole", Method: "PATCH", Path: "/api/v1/roles/{id}", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"inventory"}},
+	{ID: "deleteRole", Method: "DELETE", Path: "/api/v1/roles/{id}", Permission: "inventory.write", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"inventory"}},
 	{ID: "bindRoleCert", Method: "PUT", Path: "/api/v1/roles/{id}/cert-binding", Permission: "credentials.manage", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"credentials"}},
 	{ID: "unbindRoleCert", Method: "DELETE", Path: "/api/v1/roles/{id}/cert-binding", Permission: "credentials.manage", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"credentials"}},
 	{ID: "listCredentials", Method: "GET", Path: "/api/v1/roles/{id}/credentials", Permission: "credentials.manage", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"credentials"}},
 	{ID: "generateCredential", Method: "POST", Path: "/api/v1/roles/{id}/credentials:generate", Permission: "credentials.manage", Reauth: true, MFA: true, Idempotent: true, Stream: false, Redirect: false, Tags: []string{"credentials"}},
 	{ID: "importCredential", Method: "POST", Path: "/api/v1/roles/{id}/credentials:import", Permission: "credentials.manage", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"credentials"}},
+	{ID: "disableRole", Method: "POST", Path: "/api/v1/roles/{id}/disable", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"inventory"}},
+	{ID: "enableRole", Method: "POST", Path: "/api/v1/roles/{id}/enable", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"inventory"}},
 	{ID: "listServers", Method: "GET", Path: "/api/v1/servers", Permission: "inventory.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"inventory"}},
 	{ID: "createServer", Method: "POST", Path: "/api/v1/servers", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: true, Stream: false, Redirect: false, Tags: []string{"inventory"}},
 	{ID: "getServer", Method: "GET", Path: "/api/v1/servers/{id}", Permission: "inventory.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"inventory"}},
 	{ID: "updateServer", Method: "PATCH", Path: "/api/v1/servers/{id}", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"inventory"}},
+	{ID: "deleteServer", Method: "DELETE", Path: "/api/v1/servers/{id}", Permission: "inventory.write", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"inventory"}},
+	{ID: "disableServer", Method: "POST", Path: "/api/v1/servers/{id}/disable", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"inventory"}},
 	{ID: "getServerEffectiveAccess", Method: "GET", Path: "/api/v1/servers/{id}/effective-access", Permission: "policy.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"inventory", "policy"}},
+	{ID: "enableServer", Method: "POST", Path: "/api/v1/servers/{id}/enable", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"inventory"}},
 	{ID: "bindHostCA", Method: "PUT", Path: "/api/v1/servers/{id}/host-ca-binding", Permission: "inventory.write", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"inventory"}},
 	{ID: "listHostIdentities", Method: "GET", Path: "/api/v1/servers/{id}/host-identities", Permission: "inventory.address.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"inventory"}},
 	{ID: "addHostIdentity", Method: "POST", Path: "/api/v1/servers/{id}/host-identities", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"inventory"}},
@@ -389,6 +395,8 @@ type Server interface {
 	GetRole(c *Call) (*Result, error)
 	// UpdateRole PATCH /api/v1/roles/{id} (permission inventory.write)
 	UpdateRole(c *Call) (*Result, error)
+	// DeleteRole DELETE /api/v1/roles/{id} (permission inventory.write)
+	DeleteRole(c *Call) (*Result, error)
 	// BindRoleCert PUT /api/v1/roles/{id}/cert-binding (permission credentials.manage)
 	BindRoleCert(c *Call) (*Result, error)
 	// UnbindRoleCert DELETE /api/v1/roles/{id}/cert-binding (permission credentials.manage)
@@ -399,6 +407,10 @@ type Server interface {
 	GenerateCredential(c *Call) (*Result, error)
 	// ImportCredential POST /api/v1/roles/{id}/credentials:import (permission credentials.manage)
 	ImportCredential(c *Call) (*Result, error)
+	// DisableRole POST /api/v1/roles/{id}/disable (permission inventory.write)
+	DisableRole(c *Call) (*Result, error)
+	// EnableRole POST /api/v1/roles/{id}/enable (permission inventory.write)
+	EnableRole(c *Call) (*Result, error)
 	// ListServers GET /api/v1/servers (permission inventory.read)
 	ListServers(c *Call) (*Result, error)
 	// CreateServer POST /api/v1/servers (permission inventory.write)
@@ -407,8 +419,14 @@ type Server interface {
 	GetServer(c *Call) (*Result, error)
 	// UpdateServer PATCH /api/v1/servers/{id} (permission inventory.write)
 	UpdateServer(c *Call) (*Result, error)
+	// DeleteServer DELETE /api/v1/servers/{id} (permission inventory.write)
+	DeleteServer(c *Call) (*Result, error)
+	// DisableServer POST /api/v1/servers/{id}/disable (permission inventory.write)
+	DisableServer(c *Call) (*Result, error)
 	// GetServerEffectiveAccess GET /api/v1/servers/{id}/effective-access (permission policy.read)
 	GetServerEffectiveAccess(c *Call) (*Result, error)
+	// EnableServer POST /api/v1/servers/{id}/enable (permission inventory.write)
+	EnableServer(c *Call) (*Result, error)
 	// BindHostCA PUT /api/v1/servers/{id}/host-ca-binding (permission inventory.write)
 	BindHostCA(c *Call) (*Result, error)
 	// ListHostIdentities GET /api/v1/servers/{id}/host-identities (permission inventory.address.read)
@@ -571,16 +589,22 @@ func Handlers(s Server) map[string]Handler {
 		"denyRequest":                   s.DenyRequest,
 		"getRole":                       s.GetRole,
 		"updateRole":                    s.UpdateRole,
+		"deleteRole":                    s.DeleteRole,
 		"bindRoleCert":                  s.BindRoleCert,
 		"unbindRoleCert":                s.UnbindRoleCert,
 		"listCredentials":               s.ListCredentials,
 		"generateCredential":            s.GenerateCredential,
 		"importCredential":              s.ImportCredential,
+		"disableRole":                   s.DisableRole,
+		"enableRole":                    s.EnableRole,
 		"listServers":                   s.ListServers,
 		"createServer":                  s.CreateServer,
 		"getServer":                     s.GetServer,
 		"updateServer":                  s.UpdateServer,
+		"deleteServer":                  s.DeleteServer,
+		"disableServer":                 s.DisableServer,
 		"getServerEffectiveAccess":      s.GetServerEffectiveAccess,
+		"enableServer":                  s.EnableServer,
 		"bindHostCA":                    s.BindHostCA,
 		"listHostIdentities":            s.ListHostIdentities,
 		"addHostIdentity":               s.AddHostIdentity,
