@@ -55,7 +55,8 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod download && go mod verify
 COPY cmd/ cmd/
 COPY internal/ internal/
 COPY api/ api/
-# The UI bundle is placed where a later go:embed step (HP-UI-016, not implemented yet) can pick it up.
+# The webui Go package (embed and SPA handler) plus the UI bundle it embeds with -tags embedui (HP-UI-016).
+COPY web/*.go web/
 COPY --from=web /src/web/dist/ web/dist/
 # -buildvcs=false: the build context deliberately excludes .git; version metadata comes from build args instead.
 RUN --mount=type=cache,target=/go/pkg/mod \
