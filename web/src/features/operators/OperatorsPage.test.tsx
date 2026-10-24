@@ -43,6 +43,44 @@ describe('Operators page', () => {
     expect(within(row as HTMLElement).getByText('Required, not enrolled')).toBeInTheDocument();
   });
 
+  it('lists pending invitations without tokens and revokes one (HP-AUTH-011)', async () => {
+    const user = userEvent.setup();
+    let revoked = false;
+    const calls = mockApi({
+      'GET /api/v1/me': () => json(200, makeMe({ permissions: ADMIN_PERMS })),
+      'GET /api/v1/operators': () => json(200, { items: [] }),
+      'GET /api/v1/invitations': () =>
+        json(200, {
+          items: revoked
+            ? []
+            : [
+                {
+                  id: 'ab12',
+                  email: 'new@example.test',
+                  roles: ['viewer'],
+                  expires_at: '2026-10-27T00:00:00Z',
+                  created_at: '2026-10-24T00:00:00Z',
+                  created_by: 'operator:opr_1',
+                },
+              ],
+        }),
+      'DELETE /api/v1/invitations/ab12': () => {
+        revoked = true;
+        return new Response(null, { status: 204 });
+      },
+    });
+    renderAppAt('/operators');
+    const card = await screen.findByRole('region', { name: 'Pending invitations' });
+    expect(await within(card).findByText('new@example.test')).toBeInTheDocument();
+    await user.click(within(card).getByRole('button', { name: 'Revoke invitation for new@example.test' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Revoke' }));
+    await waitFor(() => {
+      expect(calls.some((c) => c.method === 'DELETE' && c.url === '/api/v1/invitations/ab12')).toBe(true);
+    });
+    expect(await within(card).findByText('No pending invitations')).toBeInTheDocument();
+  });
+
   it('shows permission denied without operators.manage and never fetches the list', async () => {
     const calls = mockApi({
       'GET /api/v1/me': () => json(200, makeMe({ permissions: ['dashboard.view'] })),

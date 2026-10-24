@@ -1849,7 +1849,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-AUTH-008` Mandatory MFA for privileged accounts — WP13 — evidence: I, E — ✅ tested: local admins/approvers forced to enroll, sessions limited until MFA (unit + API); bootstrap forced enrollment in Chromium E2E
 - [ ] `HP-AUTH-009` Password change and reset — WP13 — evidence: I, E — ◐ WP13: admin-issued single-use 1 h hashed reset tokens; change requires current password (tested); SMTP delivery + UI pending WP16/WP20
 - [x] `HP-AUTH-010` Session invalidation — WP13 — evidence: I — ✅ tested (local) @ WP13: reset/change/disable/MFA change/role reduction revoke sessions
-- [ ] `HP-AUTH-011` Invitations — WP13 — evidence: I, E — ◐ WP13: single-use 72 h hashed invitations with preset roles (tested); UI pending WP20
+- [x] `HP-AUTH-011` Invitations — WP13 — evidence: I, E — ✅ tested: single-use 72 h hashed invitations with preset roles; pending list (no tokens) and audited revoke via GET/DELETE /api/v1/invitations (opauth TestInvitationRevocation, httpapi TestAdministrationFlow); Operators page lists and revokes (web tests)
 - [x] `HP-AUTH-012` Server-side sessions — WP13 — evidence: I, E — ✅ tested: server-side sessions, __Host- cookie (Secure) / hp_session in dev, idle+absolute expiry
 - [x] `HP-AUTH-013` CSRF protection — WP13 — evidence: I, E — ✅ tested: CSRF token + Origin/Sec-Fetch-Site on mutations (internal/httpapi/api_test.go)
 - [x] `HP-AUTH-014` Recent authentication — WP13 — evidence: I, E — ✅ tested: per-operation x-reauth/x-mfa gating (internal/httpapi tests incl. stale-session refusal)

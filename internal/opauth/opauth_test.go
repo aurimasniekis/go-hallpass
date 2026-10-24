@@ -577,3 +577,35 @@ func TestIPThrottle(t *testing.T) {
 		t.Fatalf("per-IP (/64) throttle not applied across accounts: %v", err)
 	}
 }
+
+// HP-AUTH-011: pending invitations are listed (never with the token) and can be revoked; a revoked invitation cannot
+// be accepted, and revocation is audited.
+func TestInvitationRevocation(t *testing.T) {
+	f := newFx(t)
+	f.bootstrap()
+	token, _, err := f.svc.Invite(f.ctx, audit.System, "new@example.com", []string{RoleViewer})
+	must(t, err)
+	invs, err := f.svc.ListInvitations(f.ctx)
+	must(t, err)
+	if len(invs) != 1 || invs[0].Email != "new@example.com" || invs[0].ID == "" || strings.Contains(invs[0].ID, token) {
+		t.Fatalf("invitations %+v", invs)
+	}
+	must(t, f.svc.RevokeInvitation(f.ctx, audit.System, invs[0].ID))
+	if _, err := f.svc.AcceptInvitation(f.ctx, token, "New", strongPW); err == nil {
+		t.Fatal("revoked invitation accepted")
+	}
+	if err := f.svc.RevokeInvitation(f.ctx, audit.System, invs[0].ID); err == nil {
+		t.Fatal("revoked twice")
+	}
+	if invs, _ := f.svc.ListInvitations(f.ctx); len(invs) != 0 {
+		t.Fatalf("revoked invitation still listed: %+v", invs)
+	}
+	var n int
+	must(t, f.s.ReadDB().QueryRowContext(f.ctx, `SELECT count(*) FROM audit_events WHERE action = 'operator.invitation.revoked'`).Scan(&n))
+	if n != 1 {
+		t.Fatalf("revocation audits %d", n)
+	}
+	if err := f.svc.RevokeInvitation(f.ctx, audit.System, "zz-not-hex"); err == nil {
+		t.Fatal("malformed id accepted")
+	}
+}

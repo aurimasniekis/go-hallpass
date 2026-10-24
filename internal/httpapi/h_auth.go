@@ -453,6 +453,23 @@ func (s *Server) IssueLinkInvite(c *gen.Call) (*gen.Result, error) {
 		"url": "/auth/oidc/" + url.PathEscape(p.Slug) + "/start?purpose=link&link_token=" + url.QueryEscape(tok)})
 }
 
+// ListInvitations returns pending invitations without their tokens (HP-AUTH-011).
+func (s *Server) ListInvitations(c *gen.Call) (*gen.Result, error) {
+	v, err := s.d.Auth.ListInvitations(c.R.Context())
+	if err != nil {
+		return nil, err
+	}
+	return ok(list(v))
+}
+
+// RevokeInvitation invalidates a pending invitation (audited, recent authentication).
+func (s *Server) RevokeInvitation(c *gen.Call) (*gen.Result, error) {
+	if err := s.d.Auth.RevokeInvitation(c.R.Context(), actor(c), c.R.PathValue("id")); err != nil {
+		return nil, err
+	}
+	return noContent()
+}
+
 func (s *Server) CreateInvitation(c *gen.Call) (*gen.Result, error) {
 	var in struct {
 		Email string   `json:"email"`

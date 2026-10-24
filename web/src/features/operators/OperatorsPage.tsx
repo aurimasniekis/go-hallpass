@@ -19,6 +19,7 @@ import { newIdempotencyKey } from '../../lib/idempotency';
 import { usePermissions } from '../../lib/usePermissions';
 import { useSseStatus } from '../../stores/sse';
 import { OPERATOR_ROLES, roleLabel, shareableLink } from './roles';
+import { PendingInvitations } from './PendingInvitations';
 import { useOneTimeSecret } from './useOneTimeSecret';
 
 const ROLE_SELECT_OPTIONS = OPERATOR_ROLES.map((r) => ({
@@ -335,6 +336,7 @@ export function OperatorsPage() {
         stale={sse === 'stale' || sse === 'disconnected'}
         emptyTitle="No operators"
       />
+      <PendingInvitations />
       <CreateOperatorDialog
         open={dialog === 'create'}
         onClose={() => {

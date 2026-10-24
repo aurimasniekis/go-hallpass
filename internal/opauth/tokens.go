@@ -3,6 +3,7 @@ package opauth
 import (
 	"context"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"time"
@@ -324,4 +325,63 @@ func (svc *Service) IssueRecoveryLogin(ctx context.Context, operatorID, newAdmin
 		return err
 	})
 	return token, exp, err
+}
+
+// Invitation is a pending (unused, unexpired) invitation. ID is the hex HMAC of the token, never the token itself.
+type Invitation struct {
+	ID        string    `json:"id"`
+	Email     string    `json:"email"`
+	Roles     []string  `json:"roles"`
+	ExpiresAt time.Time `json:"expires_at"`
+	CreatedAt time.Time `json:"created_at"`
+	CreatedBy string    `json:"created_by"`
+}
+
+// ListInvitations returns pending invitations, newest first (HP-AUTH-011).
+func (svc *Service) ListInvitations(ctx context.Context) ([]Invitation, error) {
+	rows, err := svc.s.R().ListPendingInvitations(ctx, svc.opts.Clock.Now().UnixMicro())
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Invitation, 0, len(rows))
+	for _, r := range rows {
+		var data struct {
+			Email string   `json:"email"`
+			Roles []string `json:"roles"`
+		}
+		_ = json.Unmarshal([]byte(r.DataJson), &data)
+		out = append(out, Invitation{ID: hex.EncodeToString(r.Hash), Email: data.Email, Roles: data.Roles,
+			ExpiresAt: time.UnixMicro(r.ExpiresAt).UTC(), CreatedAt: time.UnixMicro(r.CreatedAt).UTC(), CreatedBy: r.CreatedBy})
+	}
+	return out, nil
+}
+
+// RevokeInvitation invalidates a pending invitation so it can no longer be accepted (HP-AUTH-011, audited).
+func (svc *Service) RevokeInvitation(ctx context.Context, actor audit.Actor, id string) error {
+	hash, err := hex.DecodeString(id)
+	if err != nil || len(hash) == 0 {
+		return apperr.New(apperr.CodeNotFound, "invitation not found")
+	}
+	return svc.s.W().TxNamed(ctx, "opauth.revoke_invitation", func(tx *store.Tx) error {
+		row, err := tx.Q.GetInvitation(ctx, hash)
+		if errors.Is(err, sql.ErrNoRows) {
+			return apperr.New(apperr.CodeNotFound, "invitation not found")
+		}
+		if err != nil {
+			return err
+		}
+		n, err := tx.Q.RevokeInvitation(ctx, db.RevokeInvitationParams{Now: sql.NullInt64{Int64: tx.NowMicros(), Valid: true}, Hash: hash})
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return apperr.New(apperr.CodeNotFound, "invitation is no longer pending")
+		}
+		var data struct {
+			Email string `json:"email"`
+		}
+		_ = json.Unmarshal([]byte(row.DataJson), &data)
+		_, err = svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "operator.invitation.revoked", Details: map[string]any{"email": data.Email}})
+		return err
+	})
 }

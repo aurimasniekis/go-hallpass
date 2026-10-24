@@ -398,6 +398,14 @@ paths:
         "200": {description: single-use link invitation, content: {application/json: {schema: {$ref: "#/components/schemas/OneTimeToken"}}}}
         default: {$ref: "#/components/responses/Problem"}
   /api/v1/invitations:
+    get:
+      operationId: listInvitations
+      tags: [operators]
+      x-permission: operators.manage
+      summary: Pending (unused, unexpired) invitations. Tokens are never returned; the id is the token's HMAC (HP-AUTH-011).
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Invitation"}}}}}}}
+        default: {$ref: "#/components/responses/Problem"}
     post:
       operationId: createInvitation
       tags: [operators]
@@ -416,6 +424,17 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
 
   # ---------------------------------------------------------------- agents
+  /api/v1/invitations/{id}:
+    delete:
+      operationId: revokeInvitation
+      tags: [operators]
+      x-permission: operators.manage
+      x-reauth: true
+      summary: Revoke a pending invitation so it can no longer be accepted (audited).
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "204": {description: revoked}
+        default: {$ref: "#/components/responses/Problem"}
   /api/v1/agents:
     get:
       operationId: listAgents
@@ -1754,6 +1773,16 @@ components:
         roles: {type: array, items: {type: string}, description: manual roles (SSO-mapped roles are managed by the provider)}
         enabled: {type: boolean}
         groups: {type: array, items: {type: string}}
+    Invitation:
+      type: object
+      required: [id, email, roles, expires_at, created_at, created_by]
+      properties:
+        id: {type: string}
+        email: {type: string}
+        roles: {type: array, items: {type: string}}
+        expires_at: {$ref: "#/components/schemas/Timestamp"}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+        created_by: {type: string}
     InvitationCreate:
       type: object
       required: [email]

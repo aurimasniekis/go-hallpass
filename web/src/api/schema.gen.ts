@@ -466,7 +466,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Pending (unused, unexpired) invitations. Tokens are never returned; the id is the token's HMAC (HP-AUTH-011). */
+        get: operations["listInvitations"];
         put?: never;
         /**
          * @description The token is returned once and never stored in plaintext: a replay with the same `Idempotency-Key` is
@@ -474,6 +475,23 @@ export interface paths {
          */
         post: operations["createInvitation"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invitations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke a pending invitation so it can no longer be accepted (audited). */
+        delete: operations["revokeInvitation"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1934,6 +1952,14 @@ export interface components {
             enabled?: boolean;
             groups?: string[];
         };
+        Invitation: {
+            id: string;
+            email: string;
+            roles: string[];
+            expires_at: components["schemas"]["Timestamp"];
+            created_at: components["schemas"]["Timestamp"];
+            created_by: string;
+        };
         InvitationCreate: {
             email: string;
             roles?: string[];
@@ -3393,6 +3419,29 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    listInvitations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Invitation"][];
+                    };
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     createInvitation: {
         parameters: {
             query?: never;
@@ -3414,6 +3463,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["OneTimeToken"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    revokeInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };

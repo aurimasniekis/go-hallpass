@@ -154,3 +154,13 @@ ON CONFLICT (key) DO UPDATE SET failures = excluded.failures, next_allowed_at = 
 
 -- name: DeleteThrottle :exec
 DELETE FROM login_throttle WHERE key = ?;
+
+-- name: ListPendingInvitations :many
+SELECT * FROM one_time_tokens WHERE kind = 'invite' AND used_at IS NULL AND expires_at > sqlc.arg(now) ORDER BY created_at DESC;
+
+-- name: RevokeInvitation :execrows
+UPDATE one_time_tokens SET used_at = sqlc.arg(now)
+WHERE hash = sqlc.arg(hash) AND kind = 'invite' AND used_at IS NULL AND expires_at > sqlc.arg(now);
+
+-- name: GetInvitation :one
+SELECT * FROM one_time_tokens WHERE hash = ? AND kind = 'invite';

@@ -760,7 +760,23 @@ func TestAdministrationFlow(t *testing.T) {
 	c.ok("listOperators", 200, "GET", "/api/v1/operators", nil)
 	c.ok("listMySessions", 200, "GET", "/api/v1/me/sessions", nil)
 	c.ok("listGroups", 200, "GET", "/api/v1/groups", nil)
-	c.ok("createInvitation", 200, "POST", "/api/v1/invitations", map[string]any{"email": "new@example.com", "roles": []string{"viewer"}})
+	r = c.ok("createInvitation", 200, "POST", "/api/v1/invitations", map[string]any{"email": "new@example.com", "roles": []string{"viewer"}})
+	var inv struct{ Token string }
+	r.json(t, &inv)
+	// HP-AUTH-011: pending invitations are listed without tokens and can be revoked; a revoked one cannot be accepted.
+	r = c.ok("listInvitations", 200, "GET", "/api/v1/invitations", nil)
+	var invs struct{ Items []struct{ ID, Email string } }
+	r.json(t, &invs)
+	if len(invs.Items) != 1 || invs.Items[0].Email != "new@example.com" || strings.Contains(string(r.body), inv.Token) {
+		t.Fatalf("invitations %s", r.body)
+	}
+	if r := viewer.do("GET", "/api/v1/invitations", nil); r.status != 403 {
+		t.Fatalf("viewer listed invitations: %d", r.status)
+	}
+	c.ok("revokeInvitation", 204, "DELETE", "/api/v1/invitations/"+invs.Items[0].ID, nil)
+	if r := h.client().do("POST", "/api/v1/auth/invitations/"+inv.Token+"/accept", map[string]any{"display_name": "New", "password": "correct horse battery staple"}); r.status < 400 {
+		t.Fatalf("revoked invitation accepted: %d", r.status)
+	}
 	c.ok("getAuthSettings", 200, "GET", "/api/v1/settings/auth", nil)
 	c.ok("listOIDCProviders", 200, "GET", "/api/v1/oidc-providers", nil)
 	c.ok("enableLockdown", 200, "POST", "/api/v1/system/lockdown", nil)

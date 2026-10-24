@@ -128,6 +128,26 @@ func (q *Queries) DeleteThrottle(ctx context.Context, key string) error {
 	return err
 }
 
+const getInvitation = `-- name: GetInvitation :one
+SELECT hash, kind, operator_id, data_json, expires_at, used_at, created_at, created_by FROM one_time_tokens WHERE hash = ? AND kind = 'invite'
+`
+
+func (q *Queries) GetInvitation(ctx context.Context, hash []byte) (OneTimeToken, error) {
+	row := q.db.QueryRowContext(ctx, getInvitation, hash)
+	var i OneTimeToken
+	err := row.Scan(
+		&i.Hash,
+		&i.Kind,
+		&i.OperatorID,
+		&i.DataJson,
+		&i.ExpiresAt,
+		&i.UsedAt,
+		&i.CreatedAt,
+		&i.CreatedBy,
+	)
+	return i, err
+}
+
 const getLocalCredential = `-- name: GetLocalCredential :one
 SELECT operator_id, password_phc, params_version, changed_at, must_change FROM operator_local_credentials WHERE operator_id = ?
 `
@@ -629,6 +649,42 @@ func (q *Queries) ListOperators(ctx context.Context) ([]Operator, error) {
 	return items, nil
 }
 
+const listPendingInvitations = `-- name: ListPendingInvitations :many
+SELECT hash, kind, operator_id, data_json, expires_at, used_at, created_at, created_by FROM one_time_tokens WHERE kind = 'invite' AND used_at IS NULL AND expires_at > ?1 ORDER BY created_at DESC
+`
+
+func (q *Queries) ListPendingInvitations(ctx context.Context, now int64) ([]OneTimeToken, error) {
+	rows, err := q.db.QueryContext(ctx, listPendingInvitations, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []OneTimeToken{}
+	for rows.Next() {
+		var i OneTimeToken
+		if err := rows.Scan(
+			&i.Hash,
+			&i.Kind,
+			&i.OperatorID,
+			&i.DataJson,
+			&i.ExpiresAt,
+			&i.UsedAt,
+			&i.CreatedAt,
+			&i.CreatedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const purgeOneTimeTokens = `-- name: PurgeOneTimeTokens :execrows
 DELETE FROM one_time_tokens WHERE expires_at < ?
 `
@@ -659,6 +715,24 @@ DELETE FROM web_sessions WHERE absolute_expires_at < ?
 
 func (q *Queries) PurgeWebSessions(ctx context.Context, absoluteExpiresAt int64) (int64, error) {
 	result, err := q.db.ExecContext(ctx, purgeWebSessions, absoluteExpiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const revokeInvitation = `-- name: RevokeInvitation :execrows
+UPDATE one_time_tokens SET used_at = ?1
+WHERE hash = ?2 AND kind = 'invite' AND used_at IS NULL AND expires_at > ?1
+`
+
+type RevokeInvitationParams struct {
+	Now  sql.NullInt64
+	Hash []byte
+}
+
+func (q *Queries) RevokeInvitation(ctx context.Context, arg RevokeInvitationParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, revokeInvitation, arg.Now, arg.Hash)
 	if err != nil {
 		return 0, err
 	}

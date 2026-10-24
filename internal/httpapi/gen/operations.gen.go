@@ -58,7 +58,9 @@ var Operations = []Operation{
 	{ID: "getIntegration", Method: "GET", Path: "/api/v1/integrations/{id}", Permission: "integrations.manage", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"integrations"}},
 	{ID: "updateIntegration", Method: "PATCH", Path: "/api/v1/integrations/{id}", Permission: "integrations.manage", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"integrations"}},
 	{ID: "deleteIntegration", Method: "DELETE", Path: "/api/v1/integrations/{id}", Permission: "integrations.manage", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"integrations"}},
+	{ID: "listInvitations", Method: "GET", Path: "/api/v1/invitations", Permission: "operators.manage", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"operators"}},
 	{ID: "createInvitation", Method: "POST", Path: "/api/v1/invitations", Permission: "operators.manage", Reauth: true, MFA: true, Idempotent: true, Stream: false, Redirect: false, Tags: []string{"operators"}},
+	{ID: "revokeInvitation", Method: "DELETE", Path: "/api/v1/invitations/{id}", Permission: "operators.manage", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"operators"}},
 	{ID: "getMe", Method: "GET", Path: "/api/v1/me", Permission: "session.limited", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"me"}},
 	{ID: "listMyIdentities", Method: "GET", Path: "/api/v1/me/identities", Permission: "session", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"me"}},
 	{ID: "beginTOTP", Method: "POST", Path: "/api/v1/me/mfa/totp", Permission: "session.limited", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"me"}},
@@ -260,8 +262,12 @@ type Server interface {
 	UpdateIntegration(c *Call) (*Result, error)
 	// DeleteIntegration DELETE /api/v1/integrations/{id} (permission integrations.manage)
 	DeleteIntegration(c *Call) (*Result, error)
+	// ListInvitations GET /api/v1/invitations (permission operators.manage)
+	ListInvitations(c *Call) (*Result, error)
 	// CreateInvitation POST /api/v1/invitations (permission operators.manage)
 	CreateInvitation(c *Call) (*Result, error)
+	// RevokeInvitation DELETE /api/v1/invitations/{id} (permission operators.manage)
+	RevokeInvitation(c *Call) (*Result, error)
 	// GetMe GET /api/v1/me (permission session.limited)
 	GetMe(c *Call) (*Result, error)
 	// ListMyIdentities GET /api/v1/me/identities (permission session)
@@ -499,7 +505,9 @@ func Handlers(s Server) map[string]Handler {
 		"getIntegration":                s.GetIntegration,
 		"updateIntegration":             s.UpdateIntegration,
 		"deleteIntegration":             s.DeleteIntegration,
+		"listInvitations":               s.ListInvitations,
 		"createInvitation":              s.CreateInvitation,
+		"revokeInvitation":              s.RevokeInvitation,
 		"getMe":                         s.GetMe,
 		"listMyIdentities":              s.ListMyIdentities,
 		"beginTOTP":                     s.BeginTOTP,
