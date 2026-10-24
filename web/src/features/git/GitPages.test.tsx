@@ -156,7 +156,7 @@ describe('Git pages', () => {
       'DELETE /api/v1/roles/rol_1': () => new Response(null, { status: 204 }),
     });
     renderWithProviders(<GitProfiles serverId="srv_git" canWrite keyHint="Add it as a deploy key." />);
-    await user.click(await screen.findByRole('button', { name: 'Disable' }));
+    await user.click(await screen.findByRole('button', { name: 'Disable acme-push' }));
     const disable = await screen.findByRole('dialog', { name: 'Disable access profile acme-push' });
     expect(within(disable).getByText(/pending requests are canceled/)).toBeInTheDocument();
     await user.click(within(disable).getByRole('button', { name: 'Disable' }));
@@ -164,7 +164,7 @@ describe('Git pages', () => {
       expect(calls.some((c) => c.method === 'POST' && c.path.endsWith('/roles/rol_1/disable'))).toBe(true);
     });
 
-    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    await user.click(screen.getByRole('button', { name: 'Delete acme-push' }));
     // Dialogs share a generated title id in tests, so find this one by its text.
     const del = (await screen.findByText(/login keys are revoked/)).closest<HTMLElement>('[role="dialog"]');
     if (!del) {

@@ -85,7 +85,14 @@ export function GitProfiles({
             render: (_, r) => (
               <Space orientation="vertical" size={0}>
                 <strong>{r.alias}</strong>
-                {r.description ? <span className="hp-legend">{r.description}</span> : null}
+                {r.description ? (
+                  <span
+                    className="hp-legend"
+                    style={{ display: 'block', maxWidth: 320, whiteSpace: 'normal' }}
+                  >
+                    {r.description}
+                  </span>
+                ) : null}
               </Space>
             ),
           },
@@ -121,7 +128,7 @@ export function GitProfiles({
                   >
                     Edit
                   </Button>
-                  <LifecycleActions kind="access profile" target={r} size="small" />
+                  <LifecycleActions kind="access profile" target={r} size="small" compact />
                 </Space>
               ) : null,
           },

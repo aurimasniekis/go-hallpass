@@ -1,5 +1,7 @@
+import { CheckCircleOutlined, DeleteOutlined, StopOutlined } from '@ant-design/icons';
 import { useQueryClient } from '@tanstack/react-query';
-import { Space } from 'antd';
+import { Space, type ButtonProps } from 'antd';
+import type { ReactNode } from 'react';
 
 import { api } from '../../api/client';
 import { qk } from '../../api/queryKeys';
@@ -23,12 +25,15 @@ export function LifecycleActions({
   target,
   onDeleted,
   size,
+  compact = false,
 }: {
   kind: LifecycleKind;
   target: LifecycleTarget;
   /** Called after a delete, e.g. to leave the deleted object's page. */
   onDeleted?: () => void;
   size?: 'small' | 'middle';
+  /** Icon-only buttons (named for assistive technology and on hover), for table rows. */
+  compact?: boolean;
 }) {
   const queryClient = useQueryClient();
   const isServer = kind === 'server' || kind === 'git remote';
@@ -49,16 +54,28 @@ export function LifecycleActions({
     }
     await refresh();
   };
+  // Compact buttons keep their verb as the accessible name and hover title; the label is just the icon.
+  const trigger = (verb: string, icon: ReactNode): { label: ReactNode; buttonProps: ButtonProps } =>
+    compact
+      ? {
+          label: null,
+          buttonProps: {
+            size,
+            icon,
+            title: `${verb} ${target.alias}`,
+            'aria-label': `${verb} ${target.alias}`,
+          },
+        }
+      : { label: verb, buttonProps: { size } };
   const scope = isServer ? `, through all of its ${kind === 'git remote' ? 'access profiles' : 'roles'}` : '';
   const keyHome = kind === 'git remote' || kind === 'access profile' ? 'the git host' : 'the destination';
   return (
     <Space wrap size={8}>
       {target.enabled ? (
         <ConfirmAction
-          label="Disable"
+          {...trigger('Disable', <StopOutlined />)}
           title={`Disable ${kind} ${target.alias}`}
           confirmLabel="Disable"
-          buttonProps={{ size }}
           description={
             <p style={{ margin: 0 }}>
               Agents can no longer see or request it{scope}. Active access ends within seconds and pending
@@ -69,20 +86,18 @@ export function LifecycleActions({
         />
       ) : (
         <ConfirmAction
-          label="Enable"
+          {...trigger('Enable', <CheckCircleOutlined />)}
           danger={false}
           title={`Enable ${kind} ${target.alias}`}
           confirmLabel="Enable"
-          buttonProps={{ size }}
           description={<p style={{ margin: 0 }}>Policy decides again who can see and request it.</p>}
           onConfirm={() => setEnabled(true)}
         />
       )}
       <ConfirmAction
-        label="Delete"
+        {...trigger('Delete', <DeleteOutlined />)}
         title={`Delete ${kind} ${target.alias}`}
         confirmLabel={`Delete ${kind}`}
-        buttonProps={{ size }}
         {...(isServer ? { typedConfirmation: target.alias } : {})}
         description={
           <>
