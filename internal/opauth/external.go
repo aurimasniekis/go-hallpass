@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/aurimasniekis/go-hallpass/internal/apperr"
@@ -55,13 +54,21 @@ func (svc *Service) ReauthExternal(ctx context.Context, p *Principal, provider s
 	return token, err
 }
 
+// ErrTOTPStepUpNotAllowed refuses the TOTP step-up fallback outside SSO sessions: a password session
+// re-authenticates with its password (SR-03).
+var ErrTOTPStepUpNotAllowed = apperr.New(apperr.CodePrecondition, "TOTP step-up is only available for SSO sessions whose provider allows it")
+
 // ReauthTOTP is the step-up fallback for SSO sessions whose provider cannot prove a fresh login (no auth_time):
-// the operator's local TOTP is required (stepup.fallback = local_totp, HP-OIDC-013).
+// the operator's local TOTP is required (stepup.fallback = local_totp, HP-OIDC-013). Callers must check that the
+// session's provider allows the fallback (oidc.Service.ReauthTOTP does). Wrong codes share the MFA throttle.
 func (svc *Service) ReauthTOTP(ctx context.Context, p *Principal, code string, meta SessionMeta) (string, error) {
+	if p.Method != MethodOIDC || p.Limited {
+		return "", ErrTOTPStepUpNotAllowed
+	}
 	if !p.Operator.MFAEnrolled {
 		return "", apperr.New(apperr.CodePrecondition, "enroll TOTP in Hallpass to re-authenticate")
 	}
-	ok, _, err := svc.checkSecondFactor(ctx, p.Operator.ID, strings.TrimSpace(code))
+	ok, _, err := svc.verifySecondFactor(ctx, p.Operator.ID, code, meta.IP, "stepup")
 	if err != nil {
 		return "", err
 	}
@@ -71,6 +78,9 @@ func (svc *Service) ReauthTOTP(ctx context.Context, p *Principal, code string, m
 	now := svc.opts.Clock.Now()
 	var token string
 	err = svc.s.W().TxNamed(ctx, "opauth.reauth_totp", func(tx *store.Tx) error {
+		if err := tx.Q.DeleteThrottle(ctx, mfaKey(p.Operator.ID)); err != nil {
+			return err
+		}
 		var err error
 		if token, err = svc.rotateWithAuthTx(ctx, tx, p, &now, meta); err != nil {
 			return err

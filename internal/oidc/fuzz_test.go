@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/url"
+	gopath "path"
 	"slices"
 	"strings"
 	"testing"
@@ -22,6 +23,10 @@ func FuzzSanitizeReturnTo(f *testing.F) {
 	for _, s := range []string{"/", "/requests?id=1#x", "//evil.example", "/\\evil.example", "https://evil.example/", "/api/v1/me",
 		"/auth/logout", "/api", "/%2e/x", "/./x", "/a/../b", "/\t/evil.example", "/x\r\nSet-Cookie: a", "/%0d%0a", "javascript:alert(1)",
 		"/@evil.example", "/x?next=//evil.example", "/./api/v1/me", "/%2e/auth/logout", "/x/../api/v1/me", "/x/%2e%2e/api", "/" + strings.Repeat("a", 600), "/ ", "/\x7f"} {
+		f.Add(s)
+	}
+	// Fragment tricks that path cleaning by redirect writers would turn into /api or /auth (SR-24).
+	for _, s := range []string{"/#/../api/v1/me", "/x#/../../auth/oidc/corp/start?purpose=link", "/#/..", "/a//b", "/x#y/../../api"} {
 		f.Add(s)
 	}
 	base, _ := url.Parse("https://hallpass.example/")
@@ -54,8 +59,11 @@ func FuzzSanitizeReturnTo(f *testing.F) {
 		if r.Scheme != base.Scheme || r.Host != base.Host || r.User != nil {
 			t.Fatalf("%q resolves off-origin to %s", got, r)
 		}
+		// Redirect writers (net/http's Redirect) path-clean everything before "?", fragment included (SR-24).
+		pre, _, _ := strings.Cut(got, "?")
+		cleaned := gopath.Clean(pre)
 		// Check the browser-resolved path too: dot segments ("/./api", "/%2e/auth", "/x/../api") must not reach the deny list.
-		for _, path := range []string{u.Path, r.Path} {
+		for _, path := range []string{u.Path, r.Path, cleaned} {
 			if got != "/" && (path == "/api" || path == "/auth" || strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/auth/")) {
 				t.Fatalf("API/auth path allowed: %q (resolves to %q)", got, r.Path)
 			}

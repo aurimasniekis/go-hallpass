@@ -11,7 +11,7 @@
 //
 // [Webhook] checks, in this order: X-Telegram-Bot-Api-Secret-Token compared in constant time (hashes of equal length)
 // → body size (64 KiB) → JSON → update_id replay cache (fail closed) → for callback queries, the chat ID and the
-// user ID must both pass the [Allowlist] (the core implements UserAllowed with provider_links; [StaticAllowlist] is
+// user ID must both pass the [Allowlist] (the core allows route-destination chats and maps users through links; [StaticAllowlist] is
 // for configuration and tests) → callback_data must be "hp1:<a|d>:<action-token-id>". Updates from other chats or
 // users are ignored (HTTP 200, so Telegram does not retry) and reported to Sink.Rejected for audit.
 //

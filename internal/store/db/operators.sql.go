@@ -27,24 +27,6 @@ func (q *Queries) AdvanceTOTPStep(ctx context.Context, arg AdvanceTOTPStepParams
 	return result.RowsAffected()
 }
 
-const confirmTOTP = `-- name: ConfirmTOTP :execrows
-UPDATE mfa_totp SET confirmed_at = ?, last_step = ? WHERE operator_id = ? AND confirmed_at IS NULL
-`
-
-type ConfirmTOTPParams struct {
-	ConfirmedAt sql.NullInt64
-	LastStep    int64
-	OperatorID  string
-}
-
-func (q *Queries) ConfirmTOTP(ctx context.Context, arg ConfirmTOTPParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, confirmTOTP, arg.ConfirmedAt, arg.LastStep, arg.OperatorID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const countEnabledAdmins = `-- name: CountEnabledAdmins :one
 SELECT count(DISTINCT o.id) FROM operators o JOIN operator_roles r ON r.operator_id = o.id
 WHERE o.enabled = 1 AND r.role = 'administrator'
@@ -126,6 +108,15 @@ func (q *Queries) DeleteTOTP(ctx context.Context, operatorID string) (int64, err
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const deleteTOTPPending = `-- name: DeleteTOTPPending :exec
+DELETE FROM mfa_totp_pending WHERE operator_id = ?
+`
+
+func (q *Queries) DeleteTOTPPending(ctx context.Context, operatorID string) error {
+	_, err := q.db.ExecContext(ctx, deleteTOTPPending, operatorID)
+	return err
 }
 
 const deleteThrottle = `-- name: DeleteThrottle :exec
@@ -235,6 +226,22 @@ func (q *Queries) GetTOTP(ctx context.Context, operatorID string) (MfaTotp, erro
 		&i.ConfirmedAt,
 		&i.LastStep,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getTOTPPending = `-- name: GetTOTPPending :one
+SELECT operator_id, secret_enc, created_at, expires_at FROM mfa_totp_pending WHERE operator_id = ?
+`
+
+func (q *Queries) GetTOTPPending(ctx context.Context, operatorID string) (MfaTotpPending, error) {
+	row := q.db.QueryRowContext(ctx, getTOTPPending, operatorID)
+	var i MfaTotpPending
+	err := row.Scan(
+		&i.OperatorID,
+		&i.SecretEnc,
+		&i.CreatedAt,
+		&i.ExpiresAt,
 	)
 	return i, err
 }
@@ -634,6 +641,18 @@ func (q *Queries) PurgeOneTimeTokens(ctx context.Context, expiresAt int64) (int6
 	return result.RowsAffected()
 }
 
+const purgeTOTPPending = `-- name: PurgeTOTPPending :execrows
+DELETE FROM mfa_totp_pending WHERE expires_at < ?
+`
+
+func (q *Queries) PurgeTOTPPending(ctx context.Context, expiresAt int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, purgeTOTPPending, expiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const purgeWebSessions = `-- name: PurgeWebSessions :execrows
 DELETE FROM web_sessions WHERE absolute_expires_at < ?
 `
@@ -731,6 +750,29 @@ func (q *Queries) RevokeWebSessionByDisplayID(ctx context.Context, arg RevokeWeb
 	return result.RowsAffected()
 }
 
+const setConfirmedTOTP = `-- name: SetConfirmedTOTP :exec
+INSERT INTO mfa_totp (operator_id, secret_enc, confirmed_at, last_step, created_at) VALUES (?1, ?2, ?3, ?4, ?3)
+ON CONFLICT (operator_id) DO UPDATE SET secret_enc = excluded.secret_enc, confirmed_at = excluded.confirmed_at, last_step = excluded.last_step,
+  created_at = excluded.created_at
+`
+
+type SetConfirmedTOTPParams struct {
+	OperatorID string
+	SecretEnc  []byte
+	Now        sql.NullInt64
+	LastStep   int64
+}
+
+func (q *Queries) SetConfirmedTOTP(ctx context.Context, arg SetConfirmedTOTPParams) error {
+	_, err := q.db.ExecContext(ctx, setConfirmedTOTP,
+		arg.OperatorID,
+		arg.SecretEnc,
+		arg.Now,
+		arg.LastStep,
+	)
+	return err
+}
+
 const setOperatorEnabled = `-- name: SetOperatorEnabled :execrows
 UPDATE operators SET enabled = ?1, disabled_at = CASE WHEN ?1 = 1 THEN NULL ELSE ?2 END,
   version = version + 1, updated_at = ?2
@@ -745,6 +787,24 @@ type SetOperatorEnabledParams struct {
 
 func (q *Queries) SetOperatorEnabled(ctx context.Context, arg SetOperatorEnabledParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, setOperatorEnabled, arg.Enabled, arg.Now, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const takeTOTPPending = `-- name: TakeTOTPPending :execrows
+DELETE FROM mfa_totp_pending WHERE operator_id = ?1 AND secret_enc = ?2 AND expires_at > ?3
+`
+
+type TakeTOTPPendingParams struct {
+	OperatorID string
+	SecretEnc  []byte
+	Now        int64
+}
+
+func (q *Queries) TakeTOTPPending(ctx context.Context, arg TakeTOTPPendingParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, takeTOTPPending, arg.OperatorID, arg.SecretEnc, arg.Now)
 	if err != nil {
 		return 0, err
 	}
@@ -847,19 +907,25 @@ func (q *Queries) UpsertLocalCredential(ctx context.Context, arg UpsertLocalCred
 	return err
 }
 
-const upsertTOTP = `-- name: UpsertTOTP :exec
-INSERT INTO mfa_totp (operator_id, secret_enc, confirmed_at, last_step, created_at) VALUES (?, ?, NULL, 0, ?)
-ON CONFLICT (operator_id) DO UPDATE SET secret_enc = excluded.secret_enc, confirmed_at = NULL, last_step = 0, created_at = excluded.created_at
+const upsertTOTPPending = `-- name: UpsertTOTPPending :exec
+INSERT INTO mfa_totp_pending (operator_id, secret_enc, created_at, expires_at) VALUES (?, ?, ?, ?)
+ON CONFLICT (operator_id) DO UPDATE SET secret_enc = excluded.secret_enc, created_at = excluded.created_at, expires_at = excluded.expires_at
 `
 
-type UpsertTOTPParams struct {
+type UpsertTOTPPendingParams struct {
 	OperatorID string
 	SecretEnc  []byte
 	CreatedAt  int64
+	ExpiresAt  int64
 }
 
-func (q *Queries) UpsertTOTP(ctx context.Context, arg UpsertTOTPParams) error {
-	_, err := q.db.ExecContext(ctx, upsertTOTP, arg.OperatorID, arg.SecretEnc, arg.CreatedAt)
+func (q *Queries) UpsertTOTPPending(ctx context.Context, arg UpsertTOTPPendingParams) error {
+	_, err := q.db.ExecContext(ctx, upsertTOTPPending,
+		arg.OperatorID,
+		arg.SecretEnc,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
 	return err
 }
 

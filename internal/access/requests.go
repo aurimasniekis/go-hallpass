@@ -54,6 +54,11 @@ func (svc *Service) CreateRequest(ctx context.Context, in CreateRequestInput) (*
 	var res *CreateResult
 	err = svc.withPolicy(ctx, "access.create_request", func(tx *store.Tx, snap *policy.Snapshot) error {
 		res = nil
+		// The authenticating key must still be active and belong to the agent, and the agent enabled: a connection
+		// authenticated before a revocation must not file requests or receive auto-approved grants (HP-AGT-005, SR-15).
+		if err := activeKey(ctx, tx, in.AgentID, in.KeyID); err != nil {
+			return err
+		}
 		if in.IdempotencyKey != "" {
 			r, err := tx.Q.GetRequestByIdempotencyKey(ctx, db.GetRequestByIdempotencyKeyParams{
 				AgentID: in.AgentID, IdempotencyKey: sql.NullString{String: in.IdempotencyKey, Valid: true}})
@@ -158,6 +163,21 @@ func (svc *Service) CreateRequest(ctx context.Context, in CreateRequestInput) (*
 	return res, nil
 }
 
+// activeKey returns ErrAccessEnded unless keyID is an active key of an enabled agent agentID.
+func activeKey(ctx context.Context, tx *store.Tx, agentID, keyID string) error {
+	key, err := tx.Q.GetAgentKey(ctx, keyID)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && (key.State != "active" || key.AgentID != agentID)) {
+		return ErrAccessEnded
+	} else if err != nil {
+		return err
+	}
+	a, err := tx.Q.GetAgent(ctx, agentID)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && a.Enabled != 1) {
+		return ErrAccessEnded
+	}
+	return err
+}
+
 func fmtDurations(ds []time.Duration) string {
 	out := ""
 	for i, d := range ds {
@@ -245,9 +265,15 @@ func (svc *Service) cancel(ctx context.Context, actor audit.Actor, id, reason st
 		} else if err != nil {
 			return err
 		}
-		if op != nil && !slices.Contains(op.Roles, "administrator") {
-			if c := snap.CanApprove(*op, r.AgentID, r.ServerID, r.RoleID, 0); !c.Allowed {
-				return apperr.New(apperr.CodeForbidden, "not permitted to cancel this request: %s", c.Reason)
+		if op != nil {
+			cur, err := withdrawingOperator(ctx, tx.Q, *op) // re-read in the transaction (SR-23)
+			if err != nil {
+				return err
+			}
+			if !slices.Contains(cur.Roles, "administrator") {
+				if c := snap.CanAct(cur, r.AgentID, r.ServerID, r.RoleID, 0); !c.Allowed {
+					return apperr.New(apperr.CodeForbidden, "not permitted to cancel this request: %s", c.Reason)
+				}
 			}
 		}
 		if r.State != ReqPending {

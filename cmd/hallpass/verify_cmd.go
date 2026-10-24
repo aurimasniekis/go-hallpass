@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/aurimasniekis/go-hallpass/internal/audit"
 	"github.com/aurimasniekis/go-hallpass/internal/recording"
 )
 
@@ -20,6 +21,9 @@ func runVerify(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	path := configFlag(fs)
 	session := fs.String("session", "", "verify only this access session")
 	asJSON := fs.Bool("json", false, "print JSON")
+	adopt := fs.Bool("adopt-chain-head", false, "after checking every chain link and MAC, record the current last entry as the "+
+		"authenticated chain head (for chains recorded before schema 19, or after investigating a reported head mismatch "+
+		"against exported anchors); audited")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -28,6 +32,13 @@ func runVerify(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		return &exitError{code: 1, err: err}
 	}
 	defer a.Close()
+	if *adopt {
+		seq, hash, err := a.Recording.AdoptChainHead(ctx, audit.Actor{Type: audit.ActorCLI, ID: "hallpass verify --adopt-chain-head"})
+		if err != nil {
+			return &exitError{code: 3, err: err}
+		}
+		fmt.Fprintf(stderr, "adopted integrity chain head %d %x; compare it with your latest exported anchor\n", seq, hash)
+	}
 	res, err := a.Recording.Verify(ctx, *session)
 	if err != nil {
 		return err

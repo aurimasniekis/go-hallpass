@@ -185,7 +185,7 @@ func (svc *Service) CreateRole(ctx context.Context, actor audit.Actor, serverID 
 		if err := groups.SetLabels(ctx, tx, groups.EntityRole, id, r.Labels); err != nil {
 			return err
 		}
-		if _, err := tx.Q.BumpPolicyVersion(ctx, tx.NowMicros()); err != nil {
+		if err := svc.bumpPolicy(ctx, tx); err != nil {
 			return err
 		}
 		_, err := svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "role.created", Target: audit.Target{Type: "role", ID: id},
@@ -239,7 +239,7 @@ func (svc *Service) UpdateRole(ctx context.Context, actor audit.Actor, id string
 				return err
 			}
 		}
-		if _, err := tx.Q.BumpPolicyVersion(ctx, tx.NowMicros()); err != nil {
+		if err := svc.bumpPolicy(ctx, tx); err != nil {
 			return err
 		}
 		_, err = svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "role.updated", Target: audit.Target{Type: "role", ID: id},
@@ -272,7 +272,7 @@ func (svc *Service) SetRoleEnabled(ctx context.Context, actor audit.Actor, id st
 				return err
 			}
 		}
-		if _, err := tx.Q.BumpPolicyVersion(ctx, tx.NowMicros()); err != nil {
+		if err := svc.bumpPolicy(ctx, tx); err != nil {
 			return err
 		}
 		action, topic := "role.enabled", eventbus.TopicInventoryChanged

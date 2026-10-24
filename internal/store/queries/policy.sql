@@ -45,3 +45,6 @@ DELETE FROM agent_owners WHERE agent_id = ?;
 
 -- name: InsertAgentOwner :exec
 INSERT INTO agent_owners (agent_id, operator_id) VALUES (?, ?);
+
+-- name: ListOwnersForAgent :many
+SELECT operator_id FROM agent_owners WHERE agent_id = ? ORDER BY operator_id;

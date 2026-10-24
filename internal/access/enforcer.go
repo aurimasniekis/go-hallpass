@@ -10,6 +10,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
 	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
+	"github.com/aurimasniekis/go-hallpass/internal/store/db"
 )
 
 // EnforcementBound is the documented maximum delay between access ending and termination of affected channels
@@ -230,6 +231,17 @@ func (e *Enforcer) expire(now time.Time) {
 // overlap re-reads a window before each cursor to tolerate commit/clock ordering skew; handling is idempotent.
 const overlap = 5 * time.Second
 
+// grantPage is the page size of the grant safety-net query.
+const grantPage = 1000
+
+// isEnded reports whether a grant's end was already handled (tombstones live 10 minutes, far beyond overlap).
+func (e *Enforcer) isEnded(grantID string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	_, ok := e.ended[grantID]
+	return ok
+}
+
 // reconcile reads grants, keys and credentials changed since the last pass.
 func (e *Enforcer) reconcile(ctx context.Context) error {
 	q := e.svc.s.R()
@@ -238,26 +250,39 @@ func (e *Enforcer) reconcile(ctx context.Context) error {
 	// Rows committed since the step are within the overlap window of now.
 	now := e.svc.Clock().Now().UnixMicro()
 	e.grantCursor, e.keyCursor, e.credCursor = min(e.grantCursor, now), min(e.keyCursor, now), min(e.credCursor, now)
-	grants, err := q.GrantsChangedSince(ctx, e.grantCursor-overlap.Microseconds())
-	if err != nil {
-		return err
-	}
-	for _, g := range grants {
-		if g.State != GrantActive {
-			reason, at := ReasonExpired, time.Time{}
-			if full, err := q.GetGrant(ctx, g.ID); err == nil {
-				if full.EndReason.Valid {
-					reason = full.EndReason.String
-				}
-				if full.EndedAt.Valid {
-					at = time.UnixMicro(full.EndedAt.Int64)
-				}
-			}
-			e.grantEnded(g.ID, reason, at)
-		} else {
-			e.grantExpiry(g.ID, ts(g.ExpiresAt))
+	// Page with a compound (updated_at, id) keyset until a short page: one mass revocation stamps every row with the
+	// same timestamp, and a single LIMITed page keyed by updated_at alone would re-read those rows forever (SR-13).
+	afterAt, afterID := e.grantCursor-overlap.Microseconds(), ""
+	for {
+		grants, err := q.GrantsChangedAfter(ctx, db.GrantsChangedAfterParams{AfterAt: afterAt, AfterID: afterID, Lim: grantPage})
+		if err != nil {
+			return err
 		}
-		e.grantCursor = max(e.grantCursor, g.UpdatedAt)
+		for _, g := range grants {
+			if g.State != GrantActive {
+				if e.isEnded(g.ID) {
+					continue // already handled; Register refuses ended grants, so nothing can be live under it
+				}
+				reason, at := ReasonExpired, time.Time{}
+				if full, err := q.GetGrant(ctx, g.ID); err == nil {
+					if full.EndReason.Valid {
+						reason = full.EndReason.String
+					}
+					if full.EndedAt.Valid {
+						at = time.UnixMicro(full.EndedAt.Int64)
+					}
+				}
+				e.grantEnded(g.ID, reason, at)
+			} else {
+				e.grantExpiry(g.ID, ts(g.ExpiresAt))
+			}
+			e.grantCursor = max(e.grantCursor, g.UpdatedAt)
+		}
+		if len(grants) < grantPage {
+			break
+		}
+		last := grants[len(grants)-1]
+		afterAt, afterID = last.UpdatedAt, last.ID
 	}
 	keys, err := q.RevokedKeysSince(ctx, nullMicros(e.keyCursor-overlap.Microseconds()))
 	if err != nil {

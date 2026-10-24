@@ -47,6 +47,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Complete the second factor of a limited password session (TOTP or recovery code); rotates the session. */
         post: operations["verifyMFA"];
         delete?: never;
         options?: never;
@@ -79,7 +80,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Re-authenticate a password session (password plus TOTP when enrolled). */
+        /**
+         * Re-authenticate a password or break-glass session (password plus TOTP when enrolled).
+         * @description Wrong passwords and codes are throttled per account and audited like logins.
+         */
         post: operations["reauth"];
         delete?: never;
         options?: never;
@@ -96,7 +100,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Step-up fallback for SSO sessions whose provider cannot prove a fresh login. */
+        /**
+         * Step-up fallback for SSO sessions whose provider cannot prove a fresh login.
+         * @description Only for SSO sessions whose provider is configured with `stepup_fallback = local_totp`.
+         */
         post: operations["reauthTOTP"];
         delete?: never;
         options?: never;
@@ -153,6 +160,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/recover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redeem a break-glass recovery token printed by `hallpass admin recover` (HP-AUTH-016).
+         * @description Single use, valid for 30 minutes, throttled per source and audited (`breakglass.login`, `breakglass.login.failed`).
+         *     Redeeming revokes the operator's other sessions and removes their TOTP factor and recovery codes. The returned
+         *     break-glass session is limited until a new factor is enrolled (`must_enroll`) when policy requires MFA. For
+         *     accounts with a local password a single-use password reset link (`password_reset`, 1 hour) is returned; using it
+         *     ends every session of the operator, including this one. Works while password login is disabled.
+         */
+        post: operations["recoverLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/oidc/{provider}/start": {
         parameters: {
             query?: never;
@@ -160,7 +191,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Redirect to the identity provider (purpose login, stepup, test or link). */
+        /**
+         * Redirect to the identity provider (purpose login, stepup, test or link).
+         * @description `test` needs a full session with `auth.settings`. Self-service `link` (without `link_token`) needs recent
+         *     authentication with MFA (HP-AUTH-014); failures redirect to `/login?sso_error=<code>`.
+         */
         get: operations["oidcStart"];
         put?: never;
         post?: never;
@@ -259,7 +294,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start TOTP enrollment (allowed while enrollment is required). */
+        /**
+         * Start TOTP enrollment (allowed while enrollment is required).
+         * @description The new secret is pending (15 minutes) and does not replace a confirmed factor until `confirmTOTP` succeeds.
+         *     A limited session may call this only while enrollment is required (`needs_enroll`); a session that still has to
+         *     verify its existing factor is refused. On a full session, adding a first factor requires recent authentication
+         *     (`reauth_required`) and replacing a factor requires recent authentication with MFA.
+         */
         post: operations["beginTOTP"];
         delete: operations["disableTOTP"];
         options?: never;
@@ -276,6 +317,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Confirm the pending TOTP enrollment with a code from the new secret.
+         * @description Same session rules as `beginTOTP`; wrong codes share the MFA throttle and are audited. Enrollment never
+         *     refreshes the authentication time: a limited session that had to enroll stays limited and finishes sign-in with
+         *     `verifyMFA` and a later code. A full session is rotated (new cookie and CSRF token, MFA time set). Other
+         *     sessions of the operator are revoked.
+         */
         post: operations["confirmTOTP"];
         delete?: never;
         options?: never;
@@ -420,6 +468,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * @description The token is returned once and never stored in plaintext: a replay with the same `Idempotency-Key` is
+         *     answered `409 conflict` instead of repeating the token (AS-7). Create a new invitation if the response was lost.
+         */
         post: operations["createInvitation"];
         delete?: never;
         options?: never;
@@ -517,6 +569,23 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["revokeAgentKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/{id}/owners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Operators who own the agent; owners may not approve its requests while self-approval is prohibited (HP-POL-012). */
+        get: operations["getAgentOwners"];
+        put: operations["setAgentOwners"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -937,6 +1006,22 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["updateApproverRule"];
+        trace?: never;
+    };
+    "/api/v1/policy/self-approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSelfApprovalSetting"];
+        put: operations["setSelfApprovalSetting"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/policy/version": {
@@ -1780,6 +1865,15 @@ export interface components {
         ReasonRequest: {
             reason?: string;
         };
+        RecoverRequest: {
+            token: string;
+        };
+        RecoverResult: {
+            /** @description the session is limited until a TOTP factor is enrolled */
+            must_enroll: boolean;
+            password_reset: null | components["schemas"]["OneTimeToken"];
+            me: components["schemas"]["Me"];
+        };
         OneTimeToken: {
             token: string;
             expires_at: components["schemas"]["Timestamp"];
@@ -2118,6 +2212,16 @@ export interface components {
         Selector: {
             [key: string]: unknown;
         };
+        AgentOwners: {
+            agent_id: string;
+            owners: string[];
+        };
+        AgentOwnersInput: {
+            owners: string[];
+        };
+        SelfApprovalSetting: {
+            prohibit_self_approval: boolean;
+        };
         PolicyRule: {
             readonly id?: string;
             name: string;
@@ -2133,7 +2237,11 @@ export interface components {
             max_duration?: number;
             /** @description seconds */
             auto_max_duration?: number;
-            require_reason?: boolean;
+            /**
+             * @description Omitted means true (SR-33).
+             * @default true
+             */
+            require_reason: boolean;
             enabled: boolean;
             version?: number;
         };
@@ -2745,6 +2853,31 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    recoverLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecoverRequest"];
+            };
+        };
+        responses: {
+            /** @description break-glass session cookie set */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoverResult"];
+                };
             };
             default: components["responses"]["Problem"];
         };
@@ -3481,6 +3614,56 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentKey"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAgentOwners: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentOwners"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    setAgentOwners: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentOwnersInput"];
+            };
+        };
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentOwners"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -4424,6 +4607,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApproverRule"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getSelfApprovalSetting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SelfApprovalSetting"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    setSelfApprovalSetting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SelfApprovalSetting"];
+            };
+        };
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SelfApprovalSetting"];
                 };
             };
             default: components["responses"]["Problem"];

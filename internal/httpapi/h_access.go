@@ -482,7 +482,7 @@ func (s *Server) TerminateActivity(c *gen.Call) (*gen.Result, error) {
 		if err != nil {
 			return nil, err
 		}
-		if chk := snap.CanApprove(operatorInfo(c), g.AgentID, g.ServerID, g.RoleID, 0); !chk.Allowed {
+		if chk := snap.CanAct(operatorInfo(c), g.AgentID, g.ServerID, g.RoleID, 0); !chk.Allowed {
 			return nil, apperr.New(apperr.CodeForbidden, "not permitted to terminate this activity")
 		}
 	}
@@ -519,12 +519,13 @@ func (s *Server) ListAuditEvents(c *gen.Call) (*gen.Result, error) {
 		return nil, err
 	}
 	out := page[auditDTO]{Items: []auditDTO{}}
+	seeAddr := s.canSeeAddress(c)
 	for i, e := range rows {
 		if int64(i) == lim {
 			out.NextCursor = encodeCursor(cursor{Seq: rows[i-1].Seq})
 			break
 		}
-		out.Items = append(out.Items, auditEvent(e))
+		out.Items = append(out.Items, auditEvent(e, seeAddr))
 	}
 	return ok(out)
 }

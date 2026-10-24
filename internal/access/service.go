@@ -243,6 +243,10 @@ func appendTimeline(ctx context.Context, tx *store.Tx, ev TimelineEvent) error {
 
 // Sequencer assigns per-access-session sequence numbers (HP-REC-002). Numbers come from blocks reserved in the
 // database before use, so they are never reused after a crash; unused numbers leave gaps, which are allowed.
+//
+// The global mutex guards only the session map and is never held across I/O: a reservation waits for the database
+// under that session's own lock, so a storage stall cannot delay other sessions served from cached blocks, and
+// every waiter honours its context (HP-REC-011, SR-21).
 type Sequencer struct {
 	s     *store.Store
 	block int64
@@ -250,11 +254,29 @@ type Sequencer struct {
 	state map[string]*seqBlock
 }
 
-type seqBlock struct{ next, limit int64 }
+type seqBlock struct {
+	lock        chan struct{} // one slot: serializes this session's allocations and reservations
+	next, limit int64         // limit 0: no block reserved yet
+}
+
+// seqReserveTimeout bounds a block reservation for callers whose context has no deadline (connection and channel
+// close paths run with context.WithoutCancel). It covers the writer's busy-retry budget.
+const seqReserveTimeout = 30 * time.Second
 
 // NewSequencer returns a sequencer reserving 4096 numbers at a time.
 func NewSequencer(s *store.Store) *Sequencer {
 	return &Sequencer{s: s, block: 4096, state: map[string]*seqBlock{}}
+}
+
+func (q *Sequencer) entry(sessionID string) *seqBlock {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	b := q.state[sessionID]
+	if b == nil {
+		b = &seqBlock{lock: make(chan struct{}, 1)}
+		q.state[sessionID] = b
+	}
+	return b
 }
 
 // Next returns the first of n consecutive sequence numbers for a session. It must not be called inside a writer
@@ -263,29 +285,38 @@ func (q *Sequencer) Next(ctx context.Context, sessionID string, n int64) (int64,
 	if n <= 0 {
 		n = 1
 	}
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	b := q.state[sessionID]
-	if b == nil || b.next+n-1 > b.limit {
+	b := q.entry(sessionID)
+	select {
+	case b.lock <- struct{}{}:
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+	defer func() { <-b.lock }()
+	if b.limit == 0 || b.next+n-1 > b.limit {
 		size := max(q.block, n)
+		rctx := ctx
+		if _, ok := ctx.Deadline(); !ok {
+			var cancel context.CancelFunc
+			rctx, cancel = context.WithTimeout(ctx, seqReserveTimeout)
+			defer cancel()
+		}
 		var limit int64
-		err := q.s.W().TxNamed(ctx, "access.reserve_seq", func(tx *store.Tx) error {
+		err := q.s.W().TxNamed(rctx, "access.reserve_seq", func(tx *store.Tx) error {
 			var err error
-			limit, err = tx.Q.ReserveSeq(ctx, db.ReserveSeqParams{N: size, ID: sessionID})
+			limit, err = tx.Q.ReserveSeq(rctx, db.ReserveSeqParams{N: size, ID: sessionID})
 			return err
 		})
 		if err != nil {
 			return 0, err
 		}
-		b = &seqBlock{next: limit - size + 1, limit: limit}
-		q.state[sessionID] = b
+		b.next, b.limit = limit-size+1, limit
 	}
 	first := b.next
 	b.next += n
 	return first, nil
 }
 
-// Forget drops cached state for a closed session.
+// Forget drops cached state for a closed session. A later Next reserves a fresh block (numbers stay unique).
 func (q *Sequencer) Forget(sessionID string) {
 	q.mu.Lock()
 	delete(q.state, sessionID)

@@ -324,7 +324,7 @@ func TestOperatorRevokeAndCancel(t *testing.T) {
 	if _, err := f.svc.CancelByOperator(f.ctx, other, r.Request.ID); !errors.Is(err, apperr.ErrForbidden) {
 		t.Fatal(err)
 	}
-	adminOp := policy.OperatorInfo{ID: "opr_a", Roles: []string{"administrator"}, Enabled: true}
+	adminOp := policy.OperatorInfo{ID: insertOperator(t, f.s, "administrator"), Roles: []string{"administrator"}, Enabled: true}
 	if c, err := f.svc.CancelByOperator(f.ctx, adminOp, r.Request.ID); err != nil || c.State != ReqCanceled {
 		t.Fatal(err)
 	}

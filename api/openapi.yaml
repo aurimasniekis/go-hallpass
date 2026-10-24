@@ -62,6 +62,7 @@ paths:
       operationId: verifyMFA
       tags: [auth]
       x-permission: session.limited
+      summary: Complete the second factor of a limited password session (TOTP or recovery code); rotates the session.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: "#/components/schemas/CodeRequest"}}}
@@ -80,7 +81,8 @@ paths:
       operationId: reauth
       tags: [auth]
       x-permission: session
-      summary: Re-authenticate a password session (password plus TOTP when enrolled).
+      summary: Re-authenticate a password or break-glass session (password plus TOTP when enrolled).
+      description: Wrong passwords and codes are throttled per account and audited like logins.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: "#/components/schemas/ReauthRequest"}}}
@@ -93,6 +95,7 @@ paths:
       tags: [auth]
       x-permission: session
       summary: Step-up fallback for SSO sessions whose provider cannot prove a fresh login.
+      description: Only for SSO sessions whose provider is configured with `stepup_fallback = local_totp`.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: "#/components/schemas/CodeRequest"}}}
@@ -135,6 +138,24 @@ paths:
       responses:
         "204": {description: password changed}
         default: {$ref: "#/components/responses/Problem"}
+  /api/v1/auth/recover:
+    post:
+      operationId: recoverLogin
+      tags: [auth]
+      x-permission: public
+      summary: Redeem a break-glass recovery token printed by `hallpass admin recover` (HP-AUTH-016).
+      description: |
+        Single use, valid for 30 minutes, throttled per source and audited (`breakglass.login`, `breakglass.login.failed`).
+        Redeeming revokes the operator's other sessions and removes their TOTP factor and recovery codes. The returned
+        break-glass session is limited until a new factor is enrolled (`must_enroll`) when policy requires MFA. For
+        accounts with a local password a single-use password reset link (`password_reset`, 1 hour) is returned; using it
+        ends every session of the operator, including this one. Works while password login is disabled.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/RecoverRequest"}}}
+      responses:
+        "200": {description: break-glass session cookie set, content: {application/json: {schema: {$ref: "#/components/schemas/RecoverResult"}}}}
+        default: {$ref: "#/components/responses/Problem"}
   /auth/oidc/{provider}/start:
     get:
       operationId: oidcStart
@@ -142,6 +163,9 @@ paths:
       x-permission: public
       x-redirect: true
       summary: Redirect to the identity provider (purpose login, stepup, test or link).
+      description: |
+        `test` needs a full session with `auth.settings`. Self-service `link` (without `link_token`) needs recent
+        authentication with MFA (HP-AUTH-014); failures redirect to `/login?sso_error=<code>`.
       parameters:
         - {name: provider, in: path, required: true, schema: {type: string}}
         - {name: purpose, in: query, schema: {type: string, enum: [login, stepup, test, link], default: login}}
@@ -203,6 +227,11 @@ paths:
       tags: [me]
       x-permission: session.limited
       summary: Start TOTP enrollment (allowed while enrollment is required).
+      description: |
+        The new secret is pending (15 minutes) and does not replace a confirmed factor until `confirmTOTP` succeeds.
+        A limited session may call this only while enrollment is required (`needs_enroll`); a session that still has to
+        verify its existing factor is refused. On a full session, adding a first factor requires recent authentication
+        (`reauth_required`) and replacing a factor requires recent authentication with MFA.
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/TOTPEnrollment"}}}}
         default: {$ref: "#/components/responses/Problem"}
@@ -220,6 +249,12 @@ paths:
       operationId: confirmTOTP
       tags: [me]
       x-permission: session.limited
+      summary: Confirm the pending TOTP enrollment with a code from the new secret.
+      description: |
+        Same session rules as `beginTOTP`; wrong codes share the MFA throttle and are audited. Enrollment never
+        refreshes the authentication time: a limited session that had to enroll stays limited and finishes sign-in with
+        `verifyMFA` and a later code. A full session is rotated (new cookie and CSRF token, MFA time set). Other
+        sessions of the operator are revoked.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: "#/components/schemas/CodeRequest"}}}
@@ -370,6 +405,9 @@ paths:
       x-reauth: true
       x-mfa: true
       x-idempotency-key: true
+      description: |
+        The token is returned once and never stored in plaintext: a replay with the same `Idempotency-Key` is
+        answered `409 conflict` instead of repeating the token (AS-7). Create a new invitation if the response was lost.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: "#/components/schemas/InvitationCreate"}}}
@@ -463,6 +501,27 @@ paths:
         content: {application/json: {schema: {$ref: "#/components/schemas/ReasonRequest"}}}
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AgentKey"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/agents/{id}/owners:
+    get:
+      operationId: getAgentOwners
+      tags: [agents, policy]
+      x-permission: policy.read
+      summary: Operators who own the agent; owners may not approve its requests while self-approval is prohibited (HP-POL-012).
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AgentOwners"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    put:
+      operationId: setAgentOwners
+      tags: [agents, policy]
+      x-permission: policy.write
+      x-reauth: true
+      x-mfa: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/AgentOwnersInput"}}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/AgentOwners"}}}}
         default: {$ref: "#/components/responses/Problem"}
   /api/v1/agents/{id}/effective-access:
     get:
@@ -859,6 +918,24 @@ paths:
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "204": {description: deleted}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/policy/self-approval:
+    get:
+      operationId: getSelfApprovalSetting
+      tags: [policy]
+      x-permission: policy.read
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/SelfApprovalSetting"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    put:
+      operationId: setSelfApprovalSetting
+      tags: [policy]
+      x-permission: policy.write
+      x-reauth: true
+      x-mfa: true
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/SelfApprovalSetting"}}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/SelfApprovalSetting"}}}}
         default: {$ref: "#/components/responses/Problem"}
   /api/v1/policy/version:
     get:
@@ -1370,6 +1447,8 @@ paths:
       operationId: createProviderLinkCode
       tags: [me]
       x-permission: session
+      x-reauth: true
+      x-mfa: true
       summary: A single-use code (10 minutes) to send to the Slack/Telegram bot to link your chat identity (HP-NTF-011).
       requestBody:
         required: true
@@ -1597,6 +1676,20 @@ components:
     ReasonRequest:
       type: object
       properties: {reason: {type: string, maxLength: 1000}}
+    RecoverRequest:
+      type: object
+      required: [token]
+      properties: {token: {type: string, writeOnly: true}}
+    RecoverResult:
+      type: object
+      required: [must_enroll, password_reset, me]
+      properties:
+        must_enroll: {type: boolean, description: the session is limited until a TOTP factor is enrolled}
+        password_reset:
+          oneOf:
+            - {type: "null"}
+            - {$ref: "#/components/schemas/OneTimeToken"}
+        me: {$ref: "#/components/schemas/Me"}
     OneTimeToken:
       type: object
       required: [token, expires_at]
@@ -1956,6 +2049,20 @@ components:
       type: object
       description: Subject, target, role or operator selector (PLAN §9). An empty selector matches nothing.
       additionalProperties: true
+    AgentOwners:
+      type: object
+      required: [agent_id, owners]
+      properties: {agent_id: {type: string}, owners: {type: array, items: {type: string}}}
+    AgentOwnersInput:
+      type: object
+      required: [owners]
+      additionalProperties: false
+      properties: {owners: {type: array, maxItems: 64, items: {type: string}}}
+    SelfApprovalSetting:
+      type: object
+      required: [prohibit_self_approval]
+      additionalProperties: false
+      properties: {prohibit_self_approval: {type: boolean}}
     PolicyRule:
       type: object
       required: [name, effect, subjects, targets, roles, enabled]
@@ -1970,7 +2077,7 @@ components:
         roles: {$ref: "#/components/schemas/Selector"}
         max_duration: {type: integer, description: seconds}
         auto_max_duration: {type: integer, description: seconds}
-        require_reason: {type: boolean}
+        require_reason: {type: boolean, default: true, description: Omitted means true (SR-33).}
         enabled: {type: boolean}
         version: {type: integer}
     ApproverRule:

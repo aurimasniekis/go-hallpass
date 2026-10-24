@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/aurimasniekis/go-hallpass/internal/access"
-	"github.com/aurimasniekis/go-hallpass/internal/policy"
 	"github.com/aurimasniekis/go-hallpass/internal/recording/hprec"
 	"github.com/aurimasniekis/go-hallpass/internal/sshproxy"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
@@ -372,7 +371,7 @@ func TestRetention(t *testing.T) {
 	if n != 0 {
 		t.Fatal("deleted an active session's recording")
 	}
-	_, err = f.access.RevokeGrant(f.ctx, policy.OperatorInfo{ID: "opr_admin", Roles: []string{"administrator"}, Enabled: true}, f.grant.ID, "done")
+	_, err = f.access.RevokeGrant(f.ctx, f.adminOp, f.grant.ID, "done")
 	must(t, err)
 	must(t, f.access.CloseConnection(f.ctx, f.conn, "client_closed"))
 	_, err = f.access.CloseFinishedSessions(f.ctx)

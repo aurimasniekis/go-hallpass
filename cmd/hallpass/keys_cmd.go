@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/aurimasniekis/go-hallpass/internal/app"
 
@@ -188,7 +190,8 @@ func runKeysRetire(ctx context.Context, args []string, stdout, stderr io.Writer)
 }
 
 // retireGuard refuses to retire a version that still protects data (HP-CRY-002): sealed columns, audit details (whose
-// ciphertext the audit chain covers), live recording segments, and the integrity-chain MAC key.
+// ciphertext the audit chain covers), live recording segments, token MACs that may still be presented, and the
+// integrity-chain MAC key.
 func retireGuard(ctx context.Context, s *store.Store, p keyring.Purpose, v uint32) error {
 	switch p {
 	case keyring.PurposeManifest:
@@ -200,17 +203,55 @@ func retireGuard(ctx context.Context, s *store.Store, p keyring.Purpose, v uint3
 			return err
 		}
 		if n > 0 {
-			return fmt.Errorf("%d recording segments still use recording v%d (they become retirable after retention deletes them)", n, v)
+			return fmt.Errorf("%d recording segments still use recording v%d (the server's recording.rewrap job moves them to the active key; "+
+				"missing segments keep it until retention deletes them)", n, v)
 		}
 		return nil
+	case keyring.PurposeToken:
+		if err := tokenRetireGuard(ctx, s, v, time.Now()); err != nil {
+			return err
+		}
 	}
-	cols := append(app.SealedColumns(), keyring.FieldColumn("audit_events", "id", "details_enc", keyring.PurposeField))
+	cols := append(app.SealedColumns(), keyring.FieldColumn("audit_events", "id", "details_enc", keyring.PurposeField),
+		// Short-lived OIDC PKCE verifiers are not re-sealed (they expire), but they must not lose their key early.
+		keyring.Column{Table: "oidc_auth_states", IDColumn: "state_hash", BlobColumn: "verifier_enc", Purpose: keyring.PurposeToken})
 	inUse, err := keyring.VersionInUse(ctx, s, cols, p, v)
 	if err != nil {
 		return err
 	}
 	if inUse {
 		return fmt.Errorf("%s v%d still protects stored data; wait for background re-encryption (audit details keep their version)", p, v)
+	}
+	return nil
+}
+
+// tokenRetireGuard refuses to retire token key version v while a value MAC'd with it may still be presented (SR-36):
+// an unused recovery code, or an unused and unexpired one-time token, chat link code or approval action token created
+// before v+1 became active. A MAC does not record its key version, so creation time is the only evidence; after
+// retirement such values would silently stop working.
+func tokenRetireGuard(ctx context.Context, s *store.Store, v uint32, now time.Time) error {
+	var supersededAt int64
+	err := s.ReadDB().QueryRowContext(ctx, `SELECT created_at FROM keyring_keys WHERE purpose = 'token' AND version = ?`, int64(v)+1).Scan(&supersededAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("token v%d is the newest version", v)
+	}
+	if err != nil {
+		return err
+	}
+	nowUs := now.UnixMicro()
+	for _, c := range []struct{ what, q string }{
+		{"unused recovery codes", `SELECT count(*) FROM recovery_codes WHERE used_at IS NULL AND created_at < ?1`},
+		{"pending invitation, reset or setup tokens", `SELECT count(*) FROM one_time_tokens WHERE used_at IS NULL AND created_at < ?1 AND expires_at > ?2`},
+		{"pending chat link codes", `SELECT count(*) FROM provider_link_codes WHERE used_at IS NULL AND created_at < ?1 AND expires_at > ?2`},
+		{"pending approval action tokens", `SELECT count(*) FROM action_tokens WHERE used_at IS NULL AND created_at < ?1 AND expires_at > ?2`},
+	} {
+		var n int
+		if err := s.ReadDB().QueryRowContext(ctx, c.q, supersededAt, nowUs).Scan(&n); err != nil {
+			return err
+		}
+		if n > 0 {
+			return fmt.Errorf("token v%d may still verify %d %s; wait until they are used or expire, or regenerate recovery codes", v, n, c.what)
+		}
 	}
 	return nil
 }

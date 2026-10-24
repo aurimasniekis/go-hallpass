@@ -76,3 +76,6 @@ JOIN operator_roles r ON r.operator_id = o.id AND r.role = 'administrator'
 JOIN operator_identities i ON i.operator_id = o.id
 JOIN oidc_providers p ON p.id = i.provider_id AND p.enabled = 1
 WHERE o.enabled = 1;
+
+-- name: ListOperatorIDsForProvider :many
+SELECT DISTINCT operator_id FROM operator_identities WHERE provider_id = ? ORDER BY operator_id;

@@ -3,6 +3,7 @@ package inventory
 import (
 	"bytes"
 	"context"
+	"crypto/rsa"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -62,12 +63,32 @@ func ParseHostKey(line string) (ssh.PublicKey, error) {
 	return nil, apperr.New(apperr.CodeInvalid, "not a valid SSH host public key or known_hosts line")
 }
 
+// MinHostRSABits is the smallest RSA modulus accepted for newly enrolled destination host keys and host CAs, the
+// same floor as agent keys (HP-SSH-004 applied to the destination leg, SR-45). Identities enrolled earlier keep
+// verifying by fingerprint.
+const MinHostRSABits = 3072
+
 func checkHostKeyType(pk ssh.PublicKey) (ssh.PublicKey, error) {
 	switch pk.Type() {
-	case ssh.KeyAlgoED25519, ssh.KeyAlgoECDSA256, ssh.KeyAlgoECDSA384, ssh.KeyAlgoECDSA521, ssh.KeyAlgoRSA:
+	case ssh.KeyAlgoED25519, ssh.KeyAlgoECDSA256, ssh.KeyAlgoECDSA384, ssh.KeyAlgoECDSA521:
+		return pk, nil
+	case ssh.KeyAlgoRSA:
+		if bits := rsaBits(pk); bits < MinHostRSABits {
+			return nil, apperr.New(apperr.CodeInvalid, "RSA host keys must be at least %d bits (got %d); enroll the server's Ed25519 or ECDSA key instead",
+				MinHostRSABits, bits)
+		}
 		return pk, nil
 	}
 	return nil, apperr.New(apperr.CodeInvalid, "host key type %q is not supported", pk.Type())
+}
+
+func rsaBits(pk ssh.PublicKey) int {
+	if cpk, ok := pk.(ssh.CryptoPublicKey); ok {
+		if rk, ok := cpk.CryptoPublicKey().(*rsa.PublicKey); ok {
+			return rk.N.BitLen()
+		}
+	}
+	return 0
 }
 
 // AddHostIdentity enrolls a host key supplied by an operator (paste). It becomes active immediately, subject to
@@ -366,11 +387,18 @@ type HostKeyError struct {
 	Presented   string // fingerprint presented by the destination
 	Algorithm   string
 	Certificate bool
-	Reason      string
+	// Reason is a fixed, address-free sentence (audited and shown to operators without inventory.address.read).
+	Reason string
+	// detail is the underlying error text, which may name host principals; it appears only in Error (logs).
+	detail string
 }
 
 func (e *HostKeyError) Error() string {
-	return fmt.Sprintf("destination host key %s (%s) is not trusted for server %s: %s", e.Presented, e.Algorithm, e.ServerID, e.Reason)
+	msg := fmt.Sprintf("destination host key %s (%s) is not trusted for server %s: %s", e.Presented, e.Algorithm, e.ServerID, e.Reason)
+	if e.detail != "" {
+		msg += ": " + e.detail
+	}
+	return msg
 }
 
 // Verifier is a strict host key check for one server.
@@ -452,6 +480,10 @@ func checkHostCert(serverID string, cert *ssh.Certificate, ca *HostCA, principal
 	if cert.ValidBefore == ssh.CertTimeInfinity {
 		return fail("certificates without expiry are not accepted")
 	}
+	if cert.Signature == nil || cert.Signature.Format == ssh.KeyAlgoRSA {
+		// "ssh-rsa" is an RSA/SHA-1 CA signature (HP-SSH-004, SR-45): the CA must sign with rsa-sha2-256/512.
+		return fail("certificate signed with SHA-1 (ssh-rsa); re-sign it with rsa-sha2-256 or rsa-sha2-512")
+	}
 	checker := &ssh.CertChecker{Clock: func() time.Time { return now }}
 	var lastErr error
 	for _, p := range principals {
@@ -462,7 +494,9 @@ func checkHostCert(serverID string, cert *ssh.Certificate, ca *HostCA, principal
 	if lastErr == nil {
 		lastErr = errors.New("no principals configured")
 	}
-	return fail("certificate rejected: " + lastErr.Error())
+	// CheckCert's message quotes the certificate's principals (destination host names): keep it out of Reason.
+	return &HostKeyError{ServerID: serverID, Presented: ssh.FingerprintSHA256(cert.Key), Algorithm: cert.Type(), Certificate: true,
+		Reason: "certificate rejected (principal or validity window)", detail: lastErr.Error()}
 }
 
 // errScanDone aborts a handshake after the host key has been captured.
@@ -483,6 +517,9 @@ func (svc *Service) ScanHostKeys(ctx context.Context, actor audit.Actor, serverI
 		pk, err := svc.scanOne(ctx, srv, algo)
 		if err != nil {
 			continue // the server may not offer this algorithm
+		}
+		if _, err := checkHostKeyType(pk); err != nil {
+			continue // below the algorithm floor (e.g. RSA < 3072): never offered for confirmation
 		}
 		if !slices.ContainsFunc(found, func(k ssh.PublicKey) bool { return bytes.Equal(k.Marshal(), pk.Marshal()) }) {
 			found = append(found, pk)

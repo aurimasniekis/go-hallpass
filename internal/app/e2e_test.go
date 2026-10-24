@@ -423,6 +423,10 @@ func TestGatewayRequestLifecycle(t *testing.T) {
 	_, err = g.a.Policy.UpdateRule(ctx, admin, r.ID, r)
 	must(t, err)
 	opID := "opr_01aaaaaaaaaaaaaaaaaaaaaaaa"
+	// Decisions re-read the operator in the decision transaction (SR-23): the approver must be a real operator.
+	must(t, g.a.Store.W().Exec(ctx, `INSERT INTO operators (id, email, display_name, enabled, provisioned_via, created_at, created_by, updated_at)
+		VALUES (?, 'approver@example.com', 'Approver', 1, 'admin', 1, 'test', 1)`, opID))
+	must(t, g.a.Store.W().Exec(ctx, `INSERT INTO operator_roles (operator_id, role, source) VALUES (?, 'approver', 'manual')`, opID))
 	_, err = g.a.Policy.CreateApproverRule(ctx, admin, policy.ApproverRule{Name: "oncall", Enabled: true,
 		Operators: policy.OperatorSelector{Operators: []string{opID}}, Targets: policy.TargetSelector{All: true}, Roles: policy.RoleSelector{All: true}})
 	must(t, err)
@@ -953,5 +957,39 @@ func TestGatewaySSHBan(t *testing.T) {
 	must(t, g.a.Bans.Lift(context.Background(), admin, bans[0].ID))
 	if _, _, code := g.run("list"); code != 0 {
 		t.Fatalf("after lift: exit %d", code)
+	}
+}
+
+type limitRecorder struct {
+	code int
+	h    http.Header
+}
+
+func (l *limitRecorder) Header() http.Header {
+	if l.h == nil {
+		l.h = http.Header{}
+	}
+	return l.h
+}
+func (l *limitRecorder) Write(b []byte) (int, error) { return len(b), nil }
+func (l *limitRecorder) WriteHeader(c int)           { l.code = c }
+
+// SR-19 (HP-REC-012): a flood of random collector IDs does not push an active collector into a saturated overflow
+// window; its batches still reach the handler.
+func TestCollectorLimitIgnoresUnknownIDs(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) })
+	h := destauditLimit(time.Now, func(context.Context) ([]string, error) { return []string{"dac_real"}, nil }, next)
+	post := func(id string) int {
+		r, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/destaudit/"+id, strings.NewReader("{}"))
+		r.SetPathValue("collector_id", id)
+		w := &limitRecorder{code: http.StatusOK}
+		h.ServeHTTP(w, r)
+		return w.code
+	}
+	for i := range 5000 {
+		post("dac_bogus" + strings.Repeat("x", i%7) + string(rune('a'+i%26)) + string(rune('a'+i/26%26)) + string(rune('a'+i/676%26)))
+	}
+	if code := post("dac_real"); code != http.StatusAccepted {
+		t.Fatalf("active collector refused after a random-ID flood: %d", code)
 	}
 }

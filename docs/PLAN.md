@@ -1811,10 +1811,10 @@ check · R recovery drill · SR security review · D documentation review.
 #### HP-CRY — Cryptography and key management
 
 - [x] `HP-CRY-001` Master KEK provisioning — WP04 — evidence: U, I — ✅ tested (local) @ WP04: LoadKEK file/env/dev, production refusal, perms/owner checks, canary detects wrong KEK; `hallpass keys init-kek`
-- [ ] `HP-CRY-002` Purpose keys and rotation — WP04 — evidence: U, I — ◐ downgraded by internal review SR-39/SR-37/SR-36: field re-encryption job + guarded retire tested; recording-key rotation does not rewrap segment keys, destaudit details are not resealed, token-key rotation invalidates codes
+- [x] `HP-CRY-002` Purpose keys and rotation — WP04 — evidence: U, I — ✅ tested (internal): purpose-key rotation, field re-encryption, recording-key rewrap job + startup slot repair, KEK rotation incl. retired keys, guarded retire for field/credential/token/destaudit, lookups across non-retired token versions (ADR-0043)
 - [x] `HP-CRY-003` Field encryption — WP04 — evidence: U, P — ✅ tested (local) @ WP04: Keyring.Seal/Open with FieldAAD(table|column|row) + key version; bit-flip, row-swap and purpose-confusion tests
 - [ ] `HP-CRY-004` Recording file format — WP12 — evidence: U, Z, SR — ◐ partial: HPREC1 implemented, unit + fuzz tested (94.8%); external crypto review pending (R-02)
-- [ ] `HP-CRY-005` Integrity verification — WP12 — evidence: I, R — ◐ downgraded by internal review SR-02/SR-17: verify checks segment hashes and chain MACs but never compares chain entries with segment rows, so hidden or deleted finalized segments pass
+- [x] `HP-CRY-005` Integrity verification — WP12 — evidence: I, R — ✅ tested (internal): verify binds every chain entry to its segment row, MACed chain head and retention tombstones detect keyless hiding, relabeling, truncation and deletion (recording TestVerifyDetectsKeylessHiding, backup integrity tests, fault suite); not externally verified (R-02); ADR-0043
 - [ ] `HP-CRY-006` Vetted cryptography only — WP01 — evidence: C, SR — ◐ WP01: depguard bans math/rand; nohostkeyignore analyzer; ongoing constraint, SR at WP26
 - [ ] `HP-CRY-007` Key loss and recovery — WP23 — evidence: D, R — ◐ partial: documented, KEK exclusion enforced/tested; recovery drill evidence pending
 - [x] `HP-CRY-008` External integrity anchoring — WP23 — evidence: I, D — ✅ tested: anchors export/verify incl. rewritten history (internal/backup tests anchors_test)
@@ -1854,7 +1854,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-AUTH-013` CSRF protection — WP13 — evidence: I, E — ✅ tested: CSRF token + Origin/Sec-Fetch-Site on mutations (internal/httpapi/api_test.go)
 - [x] `HP-AUTH-014` Recent authentication — WP13 — evidence: I, E — ✅ tested: per-operation x-reauth/x-mfa gating (internal/httpapi tests incl. stale-session refusal)
 - [x] `HP-AUTH-015` Lockout prevention — WP13 — evidence: I, E — ✅ tested: last admin guard (opauth) + SSO-only preconditions and protection (internal/oidc/oidc_test.go (mock IdP) TestTestLoginAndSSOOnly)
-- [ ] `HP-AUTH-016` Break-glass recovery — WP23 — evidence: I, R — ◐ downgraded by internal review SR-07: offline admin recover CLI issues a recovery token, but no endpoint or UI route redeems it
+- [x] `HP-AUTH-016` Break-glass recovery — WP23 — evidence: I, R — ✅ tested (unit + API): offline admin recover issues a single-use 30 min token redeemed at POST /auth/recover and /recover (revokes sessions, resets factors, password reset link, audited, throttled); recovery drill not run; ADR-0042
 - [x] `HP-AUTH-017` Dev auth isolation — WP13 — evidence: C, I — ✅ tested: no dev-auth code exists; production config rejects dev.* (config tests, fuzz)
 - [x] `HP-AUTH-018` Credential secrecy — WP13 — evidence: U, I — ✅ tested (local) @ WP13: no passwords/TOTP/codes in audit or plaintext storage; redaction layer from WP02
 

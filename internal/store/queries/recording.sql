@@ -24,7 +24,7 @@ SELECT * FROM recording_segments WHERE access_session_id = ? ORDER BY channel_id
 SELECT * FROM recording_segments WHERE channel_id = ? ORDER BY ordinal;
 
 -- name: AllSegmentPaths :many
-SELECT id, path, state FROM recording_segments;
+SELECT id, access_session_id, path, state FROM recording_segments;
 
 -- name: SegmentsByState :many
 SELECT * FROM recording_segments WHERE state = ? ORDER BY opened_at LIMIT ?;
@@ -58,3 +58,37 @@ UPDATE recording_segments SET state = 'deleted' WHERE id = ? AND state != 'delet
 
 -- name: DeleteSessionTimelinePayloads :exec
 UPDATE timeline_events SET data_json = '{}' WHERE access_session_id = ?;
+
+-- name: AllSegments :many
+SELECT * FROM recording_segments ORDER BY opened_at, id;
+
+-- name: ChainEntryForSegment :one
+SELECT * FROM integrity_chain WHERE segment_id = ?;
+
+-- name: GetChainHeadRecord :one
+SELECT seq, hash, mac FROM recording_chain_head WHERE id = 1;
+
+-- name: UpsertChainHeadRecord :exec
+INSERT INTO recording_chain_head (id, seq, hash, mac, at) VALUES (1, sqlc.arg(seq), sqlc.arg(hash), sqlc.arg(mac), sqlc.arg(at))
+ON CONFLICT (id) DO UPDATE SET seq = excluded.seq, hash = excluded.hash, mac = excluded.mac, at = excluded.at;
+
+-- name: InsertTombstone :exec
+INSERT INTO recording_tombstones (segment_id, access_session_id, prior_state, chain_seq, delete_after, deleted_at, audit_event_id, mac)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: GetTombstone :one
+SELECT * FROM recording_tombstones WHERE segment_id = ?;
+
+-- name: GetSessionRetention :one
+SELECT state, delete_after FROM access_sessions WHERE id = ?;
+
+-- name: SegmentsNeedingRewrap :many
+SELECT * FROM recording_segments WHERE key_id != sqlc.arg(active_key_id) AND state NOT IN ('open', 'deleted') AND id > sqlc.arg(after)
+ORDER BY id LIMIT sqlc.arg(lim);
+
+-- name: UpdateSegmentKey :execrows
+UPDATE recording_segments SET key_id = sqlc.arg(key_id), wrapped_dek = sqlc.arg(wrapped_dek)
+WHERE id = sqlc.arg(id) AND key_id = sqlc.arg(old_key_id) AND wrapped_dek = sqlc.arg(old_wrapped_dek) AND state != 'deleted';
+
+-- name: SegmentsWithFilesAfter :many
+SELECT * FROM recording_segments WHERE state IN ('finalized', 'interrupted') AND id > sqlc.arg(after) ORDER BY id LIMIT sqlc.arg(lim);

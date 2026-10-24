@@ -72,6 +72,15 @@ func (f *fx) totpCode(opID string) string {
 	return TOTPCode(secret, TOTPStep(f.clk.Now()))
 }
 
+// pendingCode is the current code of the operator's pending (unconfirmed) enrollment.
+func (f *fx) pendingCode(opID string) string {
+	t, err := f.s.R().GetTOTPPending(f.ctx, opID)
+	must(f.t, err)
+	secret, err := f.kr.Open(keyring.PurposeField, totpAAD(opID), t.SecretEnc)
+	must(f.t, err)
+	return TOTPCode(secret, TOTPStep(f.clk.Now()))
+}
+
 // login + enroll TOTP; returns a full (non-limited) session token.
 func (f *fx) loginEnrolled(email string) (string, *Principal) {
 	f.t.Helper()
@@ -80,14 +89,23 @@ func (f *fx) loginEnrolled(email string) (string, *Principal) {
 	if res.MustEnroll {
 		_, err := f.svc.BeginTOTP(f.ctx, res.Principal)
 		must(f.t, err)
-		codes, err := f.svc.ConfirmTOTP(f.ctx, res.Principal, f.totpCode(res.Principal.Operator.ID))
+		codes, rotated, err := f.svc.ConfirmTOTP(f.ctx, res.Principal, f.pendingCode(res.Principal.Operator.ID), SessionMeta{})
 		must(f.t, err)
-		if len(codes) != RecoveryCodeCount {
-			f.t.Fatal("recovery codes not issued")
+		if len(codes) != RecoveryCodeCount || rotated != "" {
+			f.t.Fatalf("recovery codes not issued or limited session rotated: %d %q", len(codes), rotated)
 		}
+		// Enrollment does not complete sign-in: the still-limited session verifies a later code.
 		p, err := f.svc.Authenticate(f.ctx, res.Token)
 		must(f.t, err)
-		return res.Token, p
+		if !p.Limited || p.NeedsEnroll {
+			f.t.Fatalf("after enrollment: limited=%v needsEnroll=%v", p.Limited, p.NeedsEnroll)
+		}
+		f.clk.Advance(30 * time.Second)
+		tok, err := f.svc.VerifyMFA(f.ctx, p, f.totpCode(res.Principal.Operator.ID), SessionMeta{})
+		must(f.t, err)
+		p, err = f.svc.Authenticate(f.ctx, tok)
+		must(f.t, err)
+		return tok, p
 	}
 	if res.MFAPending {
 		f.clk.Advance(30 * time.Second)
@@ -409,7 +427,7 @@ func TestRecoveryCodes(t *testing.T) {
 	must(t, err)
 	_, err = f.svc.BeginTOTP(f.ctx, res.Principal)
 	must(t, err)
-	codes, err := f.svc.ConfirmTOTP(f.ctx, res.Principal, f.totpCode(res.Principal.Operator.ID))
+	codes, _, err := f.svc.ConfirmTOTP(f.ctx, res.Principal, f.pendingCode(res.Principal.Operator.ID), SessionMeta{})
 	must(t, err)
 	res2, err := f.svc.Login(f.ctx, LoginInput{Email: "admin@example.com", Password: strongPW})
 	must(t, err)
@@ -420,8 +438,16 @@ func TestRecoveryCodes(t *testing.T) {
 	if _, err := f.svc.VerifyMFA(f.ctx, res3.Principal, codes[0], SessionMeta{}); err == nil {
 		t.Fatal("recovery code reused")
 	}
+	// SR-36: codes issued before a token-key rotation keep working (lookup under every non-retired version).
+	if _, err := f.kr.Rotate(f.ctx, f.s, keyring.PurposeToken); err != nil {
+		t.Fatal(err)
+	}
+	res4, _ := f.svc.Login(f.ctx, LoginInput{Email: "admin@example.com", Password: strongPW})
+	if _, err := f.svc.VerifyMFA(f.ctx, res4.Principal, codes[1], SessionMeta{}); err != nil {
+		t.Fatalf("pre-rotation recovery code rejected: %v", err)
+	}
 	rows, _ := f.s.R().CountUnusedRecoveryCodes(f.ctx, res.Principal.Operator.ID)
-	if rows != RecoveryCodeCount-1 {
+	if rows != RecoveryCodeCount-2 {
 		t.Fatalf("unused %d", rows)
 	}
 	if err := f.svc.DisableTOTP(f.ctx, res.Principal); err == nil {
@@ -435,12 +461,21 @@ func TestBreakGlass(t *testing.T) {
 	admin := f.bootstrap()
 	tok, _, err := f.svc.IssueRecoveryLogin(f.ctx, "", "rescue@example.com")
 	must(t, err)
-	sess, err := f.svc.RecoveryLogin(f.ctx, tok, SessionMeta{IP: "127.0.0.1"})
+	rec, err := f.svc.RecoveryLogin(f.ctx, tok, SessionMeta{IP: "127.0.0.1"})
 	must(t, err)
-	p, err := f.svc.Authenticate(f.ctx, sess)
+	p, err := f.svc.Authenticate(f.ctx, rec.Token)
 	must(t, err)
-	if p.Method != MethodBreakGlass || !p.HasRole(RoleAdministrator) || p.Limited {
-		t.Fatalf("%+v", p)
+	// The new administrator must enroll a factor before the recovery session is usable, and gets a reset token for
+	// the random password the CLI never shows.
+	if p.Method != MethodBreakGlass || !p.HasRole(RoleAdministrator) || !p.Limited || !p.NeedsEnroll || rec.ResetToken == "" {
+		t.Fatalf("%+v reset=%q", p, rec.ResetToken)
+	}
+	_, err = f.svc.BeginTOTP(f.ctx, p)
+	must(t, err)
+	_, _, err = f.svc.ConfirmTOTP(f.ctx, p, f.pendingCode(p.Operator.ID), SessionMeta{})
+	must(t, err)
+	if p, err = f.svc.Authenticate(f.ctx, rec.Token); err != nil || p.Limited {
+		t.Fatalf("after enrollment: %v %+v", err, p)
 	}
 	if _, err := f.svc.RecoveryLogin(f.ctx, tok, SessionMeta{}); !errors.Is(err, ErrTokenInvalid) {
 		t.Fatal("recovery token reused")

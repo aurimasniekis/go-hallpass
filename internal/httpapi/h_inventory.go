@@ -132,6 +132,69 @@ func (s *Server) GetAgentEffectiveAccess(c *gen.Call) (*gen.Result, error) {
 	return ok(effective(snap.Version, policy.PreviewAgent(snap, id)))
 }
 
+// ---- agent owners and the self-approval prohibition (HP-POL-012, SR-14)
+//
+// These handlers are ready for operations getAgentOwners (GET /api/v1/agents/{id}/owners, policy.read),
+// setAgentOwners (PUT /api/v1/agents/{id}/owners, policy.write, x-reauth, x-mfa), getSelfApprovalSetting
+// (GET /api/v1/policy/self-approval, policy.read) and setSelfApprovalSetting (PUT /api/v1/policy/self-approval,
+// policy.write, x-reauth, x-mfa). They are reachable once api/openapi.yaml declares them and gen is regenerated.
+
+// GetAgentOwners returns the operators owning an agent.
+func (s *Server) GetAgentOwners(c *gen.Call) (*gen.Result, error) {
+	id := c.R.PathValue("id")
+	owners, err := s.d.Policy.AgentOwners(c.R.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+	return ok(agentOwnersDTO{AgentID: id, Owners: nonNil(owners)})
+}
+
+// SetAgentOwners replaces the owners of an agent (audited; bumps the policy version).
+func (s *Server) SetAgentOwners(c *gen.Call) (*gen.Result, error) {
+	var in agentOwnersInput
+	if err := decode(c, &in, false); err != nil {
+		return nil, err
+	}
+	ctx, id := c.R.Context(), c.R.PathValue("id")
+	if err := s.d.Policy.SetAgentOwners(ctx, actor(c), id, in.Owners); err != nil {
+		return nil, err
+	}
+	owners, err := s.d.Policy.AgentOwners(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return ok(agentOwnersDTO{AgentID: id, Owners: nonNil(owners)})
+}
+
+// GetSelfApprovalSetting reports whether agent owners are barred from approving their agents' requests.
+func (s *Server) GetSelfApprovalSetting(c *gen.Call) (*gen.Result, error) {
+	on, err := s.d.Policy.ProhibitSelfApproval(c.R.Context())
+	if err != nil {
+		return nil, err
+	}
+	return ok(selfApprovalDTO{ProhibitSelfApproval: on})
+}
+
+// SetSelfApprovalSetting turns the self-approval prohibition on or off (audited; turning it off is a security
+// relaxation, so the operation requires recent authentication and MFA).
+func (s *Server) SetSelfApprovalSetting(c *gen.Call) (*gen.Result, error) {
+	var in selfApprovalDTO
+	if err := decode(c, &in, false); err != nil {
+		return nil, err
+	}
+	if err := s.d.Policy.SetProhibitSelfApproval(c.R.Context(), actor(c), in.ProhibitSelfApproval); err != nil {
+		return nil, err
+	}
+	return ok(in)
+}
+
+func nonNil(v []string) []string {
+	if v == nil {
+		return []string{}
+	}
+	return v
+}
+
 // ---- groups
 
 func (s *Server) ListGroups(c *gen.Call) (*gen.Result, error) {

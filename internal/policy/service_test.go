@@ -172,7 +172,7 @@ func TestApproverRulesOwnersAndSelfApproval(t *testing.T) {
 	if _, err := f.svc.CreateApproverRule(ctx, admin, ApproverRule{Name: "bad", Operators: OperatorSelector{Operators: []string{"x"}}, Targets: TargetSelector{All: true}, Roles: RoleSelector{All: true}}); !errors.Is(err, apperr.ErrInvalid) {
 		t.Fatal(err)
 	}
-	owner := ids.New(ids.Operator)
+	owner := insertOperator(t, f.s)
 	ar.Operators = OperatorSelector{Operators: []string{owner}}
 	if _, err := f.svc.UpdateApproverRule(ctx, admin, ar.ID, *ar); err != nil {
 		t.Fatal(err)

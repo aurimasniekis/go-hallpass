@@ -86,8 +86,11 @@ func (svc *Service) RevokeGrant(ctx context.Context, op policy.OperatorInfo, gra
 	if err != nil {
 		return nil, err
 	}
+	if op, err = withdrawingOperator(ctx, svc.s.R(), op); err != nil { // current roles and enabled state (SR-23)
+		return nil, err
+	}
 	if !slices.Contains(op.Roles, "administrator") {
-		if c := snap.CanApprove(op, g.AgentID, g.ServerID, g.RoleID, 0); !c.Allowed {
+		if c := snap.CanAct(op, g.AgentID, g.ServerID, g.RoleID, 0); !c.Allowed {
 			return nil, apperr.New(apperr.CodeForbidden, "not permitted to revoke this grant: %s", c.Reason)
 		}
 	}

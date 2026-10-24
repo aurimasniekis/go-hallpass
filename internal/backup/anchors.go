@@ -164,6 +164,11 @@ func VerifyAnchors(ctx context.Context, d *sql.DB, r io.Reader) (*AnchorReport, 
 		return nil, err
 	}
 	rep.LocalHeadSeq = head.Seq
+	if p, err := headRecordProblem(ctx, d, head); err != nil {
+		return nil, err
+	} else if p != "" {
+		rep.Problems = append(rep.Problems, p)
+	}
 	local := map[int64]string{}
 	_, _, err = walkChain(ctx, d, rep.LastAnchorSeq, func(e chainEntry) error {
 		if _, ok := want[e.seq]; ok {
@@ -260,8 +265,17 @@ func checkEntryManifest(ctx context.Context, d *sql.DB, e chainEntry) string {
 	doc.Frames, doc.Bytes, doc.Records = uint64(frames.Int64), size.Int64, uint64(records.Int64) //nolint:gosec // stored from uint64 counters
 	doc.FirstSeq, doc.LastSeq = uint64(first.Int64), uint64(last.Int64)                          //nolint:gosec // stored from uint64 sequence numbers
 	states := []string{doc.State}
-	if doc.State == "deleted" { // retention keeps the row but changes its state after chaining
-		states = []string{"finalized", "interrupted"}
+	if doc.State == "deleted" { // retention keeps the row but changes its state after chaining, leaving a tombstone
+		prior, seq, ok, err := tombstoneOf(ctx, d, e.segmentID)
+		switch {
+		case err != nil:
+			return fmt.Sprintf("seq %d: read tombstone of segment %s: %v", e.seq, e.segmentID, err)
+		case !ok:
+			return fmt.Sprintf("seq %d: segment %s is deleted without a retention tombstone", e.seq, e.segmentID)
+		case seq != e.seq:
+			return fmt.Sprintf("seq %d: retention tombstone of segment %s names chain seq %d", e.seq, e.segmentID, seq)
+		}
+		states = []string{prior}
 	}
 	for _, st := range states {
 		doc.State = st
@@ -274,4 +288,49 @@ func checkEntryManifest(ctx context.Context, d *sql.DB, e chainEntry) string {
 		}
 	}
 	return fmt.Sprintf("seq %d: segment %s metadata no longer matches its chain entry", e.seq, e.segmentID)
+}
+
+// hasTable reports whether the database (possibly an older backup copy) has the named table.
+func hasTable(ctx context.Context, d *sql.DB, name string) (bool, error) {
+	var n int
+	err := d.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?", name).Scan(&n)
+	return n == 1, err
+}
+
+// tombstoneOf returns the retention tombstone of a deleted segment (schema 19 and later). Its MAC is checked by
+// `hallpass verify`, which holds the keys; this keyless check only confirms that one exists and matches the chain.
+func tombstoneOf(ctx context.Context, d *sql.DB, segID string) (prior string, chainSeq int64, ok bool, err error) {
+	if has, err := hasTable(ctx, d, "recording_tombstones"); err != nil || !has {
+		return "", 0, false, err
+	}
+	err = d.QueryRowContext(ctx, "SELECT prior_state, chain_seq FROM recording_tombstones WHERE segment_id = ?", segID).Scan(&prior, &chainSeq)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", 0, false, nil
+	}
+	return prior, chainSeq, err == nil, err
+}
+
+// headRecordProblem compares the chain-head record (schema 19 and later) with the last chain entry, without the
+// keys. A record that names an entry the chain no longer ends with means the newest entries were removed or
+// rewritten. `hallpass verify` also checks the record's MAC.
+func headRecordProblem(ctx context.Context, d *sql.DB, tip Anchor) (string, error) {
+	if has, err := hasTable(ctx, d, "recording_chain_head"); err != nil || !has {
+		return "", err
+	}
+	var seq int64
+	var hash []byte
+	err := d.QueryRowContext(ctx, "SELECT seq, hash FROM recording_chain_head WHERE id = 1").Scan(&seq, &hash)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		if tip.Seq == 0 {
+			return "", nil
+		}
+		return "integrity chain head record is missing (removed, or the chain predates schema version 19)", nil
+	case err != nil:
+		return "", fmt.Errorf("read chain head record: %w", err)
+	}
+	if seq != tip.Seq || hex.EncodeToString(hash) != tip.Hash {
+		return fmt.Sprintf("integrity chain head record names seq %d but the chain ends at seq %d (newest entries removed or rewritten)", seq, tip.Seq), nil
+	}
+	return "", nil
 }

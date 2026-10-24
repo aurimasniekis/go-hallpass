@@ -391,6 +391,13 @@ type MfaTotp struct {
 	CreatedAt   int64
 }
 
+type MfaTotpPending struct {
+	OperatorID string
+	SecretEnc  []byte
+	CreatedAt  int64
+	ExpiresAt  int64
+}
+
 type NotificationRoute struct {
 	ID            string
 	IntegrationID string
@@ -579,6 +586,14 @@ type QuarantineFile struct {
 	At             int64
 }
 
+type RecordingChainHead struct {
+	ID   int64
+	Seq  int64
+	Hash []byte
+	Mac  []byte
+	At   int64
+}
+
 type RecordingSegment struct {
 	ID               string
 	AccessSessionID  string
@@ -601,6 +616,17 @@ type RecordingSegment struct {
 	FinalizedAt      sql.NullInt64
 	VerifiedAt       sql.NullInt64
 	VerifyResult     sql.NullString
+}
+
+type RecordingTombstone struct {
+	SegmentID       string
+	AccessSessionID string
+	PriorState      string
+	ChainSeq        int64
+	DeleteAfter     int64
+	DeletedAt       int64
+	AuditEventID    string
+	Mac             []byte
 }
 
 type RecoveryCode struct {

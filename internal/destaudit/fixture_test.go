@@ -34,6 +34,25 @@ var admin = audit.Actor{Type: audit.ActorOperator, ID: "opr_admin"}
 
 func ptr[T any](v T) *T { return &v }
 
+// insertOperator creates an enabled operator with roles.
+func insertOperator(t *testing.T, s *store.Store, roles ...string) string {
+	t.Helper()
+	id := ids.New(ids.Operator)
+	must(t, s.W().Tx(context.Background(), func(tx *store.Tx) error {
+		if _, err := tx.SQL.ExecContext(context.Background(), `INSERT INTO operators (id, email, display_name, enabled, provisioned_via,
+			created_at, created_by, updated_at) VALUES (?, ?, 'op', 1, 'admin', ?, 'test', ?)`, id, id+"@example.com", tx.NowMicros(), tx.NowMicros()); err != nil {
+			return err
+		}
+		for _, r := range roles {
+			if _, err := tx.SQL.ExecContext(context.Background(), `INSERT INTO operator_roles (operator_id, role, source) VALUES (?, ?, 'manual')`, id, r); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
+	return id
+}
+
 func must(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
@@ -92,7 +111,7 @@ func newFx(t *testing.T) *fx {
 	_, err = pol.CreateRule(f.ctx, admin, policy.Rule{Name: "sre", Effect: policy.EffectAllow, Level: policy.LevelRequestable, Enabled: true,
 		Subjects: policy.SubjectSelector{AgentGroups: []string{"sre"}}, Targets: policy.TargetSelector{All: true}, Roles: policy.RoleSelector{All: true}})
 	must(t, err)
-	opID := ids.New(ids.Operator)
+	opID := insertOperator(t, s, "approver") // decisions and revocations re-read the operator (SR-23)
 	_, err = pol.CreateApproverRule(f.ctx, admin, policy.ApproverRule{Name: "oncall", Enabled: true,
 		Operators: policy.OperatorSelector{Operators: []string{opID}}, Targets: policy.TargetSelector{All: true}, Roles: policy.RoleSelector{All: true}})
 	must(t, err)

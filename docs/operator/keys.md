@@ -40,7 +40,7 @@ manifest records the KEK ID so restore can check that the right key is supplied.
 | What | How | Effect |
 |---|---|---|
 | Purpose key | `hallpass keys rotate --purpose field` (offline) or the storage page (online, WP20) | New version becomes active. Old versions stay decrypt-only until the background job has re-encrypted everything, then they are retired. |
-| KEK | Back up, stop the server, `hallpass keys init-kek --out NEW`, `hallpass keys rotate-kek --new NEW`, set `kek.file` to NEW, start, back up | Every purpose key is rewrapped in one transaction and the old KEK stops working. Keep the old KEK until backups made with it have expired. |
+| KEK | Back up, stop the server, `hallpass keys init-kek --out NEW`, `hallpass keys rotate-kek --new NEW`, set `kek.file` to NEW, start, back up | Every purpose key, including retired versions, is rewrapped in one transaction and the old KEK stops working. Keep the old KEK until backups made with it have expired. |
 
 A wrong or rotated-away KEK is detected at startup ("master key (KEK) does not match this data directory") and the server refuses to start.
 
@@ -51,19 +51,48 @@ can decrypt everything (see `docs/THREAT_MODEL.md` §1). KMS/HSM-backed wrapping
 
 ## Background re-encryption after purpose-key rotation
 
-After `hallpass keys rotate --purpose <purpose>`, a background job (`keyring.reseal`, every 6 hours, 500 rows per column per
+After `hallpass keys rotate <purpose>`, a background job (`keyring.reseal`, every 6 hours, 500 rows per column per
 run) re-seals encrypted fields under the new active version:
-- request reasons, decision comments, key revocation reasons, TOTP secrets and outbox bodies (`field`);
+- request reasons, decision comments, key revocation reasons, TOTP secrets, outbox bodies and destination-audit exec
+  details (`field`);
 - integration secrets and private keys (`credential`);
 - OIDC client secrets.
 
 Each row is compare-and-set, so concurrent updates are never overwritten.
 
-Two exceptions:
+Exceptions:
 - **Audit details** are never re-sealed, because the audit hash chain covers their ciphertext. `field` key versions used
   by audit rows stay `decrypt_only`.
-- **Recording segment keys** live in the HPREC1 key slots and are rewrapped separately. A `recording` key version stays
-  needed until retention deletes the segments that use it.
+- **Recording segment keys** live in the HPREC1 key slots. A separate job (`recording.rewrap`, every 6 hours) rewraps them:
+  for each finalized, interrupted or failed segment still on an old `recording` version, it writes the inactive key slot of
+  the file under the active key, fsyncs it, then updates the database copy of the wrapped key (compare-and-set). A segment
+  without a file (`missing`) has only its database copy rewrapped. Segments still being written are rewrapped after they
+  are finalized. The file's other slot keeps the old wrapping until a later rewrap or startup slot repair overwrites it;
+  readers use the newest slot that unwraps.
+- **Token MACs** (recovery codes, invitation/reset/setup tokens, chat link codes, approval action tokens) cannot be
+  re-computed, because only their MAC is stored. Rotating the `token` key keeps old versions `decrypt_only`, so
+  invitation, reset and setup tokens and in-flight OIDC logins keep working. **Known gap (security review SR-36):** recovery codes, chat link codes and approval
+  action tokens are currently looked up with the active version only, so a `token` rotation invalidates the existing ones.
+  Regenerate recovery codes after rotating the token key.
+- **Integrity-chain MACs** (`manifest`) are never re-computed and `manifest` versions are never retired.
 
-Retire an old version (`hallpass keys retire`) only after the job has stopped finding rows for it, and only for purposes
-not covered by the exceptions above.
+### Startup key-slot repair
+
+At every start, before accepting connections, Hallpass checks the key slots of every finalized or interrupted segment. If a
+slot no longer unwraps but the database copy of the wrapped segment key does (it is bound to that segment's ID and header
+hash, so it cannot be substituted), the copy is written into the unusable slot (PLAN §13.4). This recovers a file whose
+slots were damaged, a file restored from an older copy after its key was rotated and retired, and refreshes slots that
+only hold a retired key. Repairs are logged.
+
+### Retiring an old version
+
+`hallpass keys retire --purpose P --version N` (offline) refuses while the version still protects data:
+
+| Purpose | Retirable when |
+|---|---|
+| `field`, `credential` | No sealed column (including audit details for `field`) still uses it. |
+| `recording` | No segment other than `deleted` ones still uses it: wait for `recording.rewrap`. `missing` segments are rewrapped in the database only. |
+| `token` | No OIDC login state is sealed with it, and no unused recovery code, and no unused and unexpired one-time token, chat link code or approval action token was created before version N+1 became active. |
+| `manifest` | Never. |
+
+Retired versions are not loaded. Their wrapped key stays in the database.

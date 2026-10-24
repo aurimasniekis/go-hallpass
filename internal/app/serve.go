@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"net"
@@ -12,7 +13,6 @@ import (
 	"time"
 
 	"github.com/aurimasniekis/go-hallpass/internal/buildinfo"
-	"github.com/aurimasniekis/go-hallpass/internal/clock"
 	"github.com/aurimasniekis/go-hallpass/internal/httpapi"
 	"github.com/aurimasniekis/go-hallpass/internal/jobs"
 	"github.com/aurimasniekis/go-hallpass/internal/obs/health"
@@ -48,7 +48,7 @@ func (a *App) Serve(ctx context.Context, sshLn net.Listener) error {
 	h := &sshfront.Handler{Access: a.Access, Engine: a.Engine, Proxy: a.Proxy, Bus: a.Bus, Log: a.Log,
 		WaitDefault: a.Cfg.Access.WaitTimeoutDefault.D(), WaitMax: a.Cfg.Access.WaitTimeoutMax.D(), Metrics: a.Metrics}
 	srv := sshfront.New(sshfront.Options{Config: a.Cfg.SSH, Agents: a.Agents, Access: a.Access, Audit: a.Audit, Store: a.Store,
-		Hosts: a.Credentials, Handler: h, Bans: a.Bans, Logger: a.Log, Metrics: a.Metrics})
+		Hosts: a.Credentials, Handler: h, Bans: a.Bans, Logger: a.Log, Metrics: a.Metrics, Bus: a.Bus})
 	var sshUp atomic.Bool
 	_ = a.Health.Register(health.Flag("ssh.listener", "listener_down", sshUp.Load))
 	h.Deny = srv.AuditDenied
@@ -162,7 +162,7 @@ func (a *App) rootHandler(api http.Handler) http.Handler {
 	}
 	mux.Handle("/hooks/", a.Notify.WebhookHandler())
 	// Signature-authenticated collector batches: no operator session or CSRF token (HP-REC-012, ADR-0037).
-	mux.Handle("POST /hooks/destaudit/{collector_id}", destauditLimit(a.Clock, a.Destaudit.Handler()))
+	mux.Handle("POST /hooks/destaudit/{collector_id}", destauditLimit(a.Clock.Now, a.activeCollectorIDs, a.Destaudit.Handler()))
 	mux.Handle("/", api)
 	return tracing.HTTPMiddleware(a.Metrics.HTTPMiddleware(mux))
 }
@@ -189,15 +189,41 @@ func (a *App) serveMetrics(ctx context.Context) *http.Server {
 // RootHandlerForTest exposes the infrastructure endpoints without the API (tests).
 func (a *App) RootHandlerForTest() http.Handler { return a.rootHandler(http.NotFoundHandler()) }
 
-// destauditLimit rate-limits collector batches per collector ID (bounded memory; unauthenticated IDs included).
-func destauditLimit(clk clock.Clock, next http.Handler) http.Handler {
-	limiter := &ratelimit.Window{Limit: 10, Period: time.Second}
+// destauditLimit rate-limits collector batches per collector ID. Only active collectors' IDs get their own window:
+// unknown IDs share one bounded budget and then reach the handler's uniform 401, so a flood of random IDs cannot
+// push a real collector into a saturated overflow window and drop its batches (HP-REC-012, SR-19).
+func destauditLimit(now func() time.Time, load func(context.Context) ([]string, error), next http.Handler) http.Handler {
+	known := &ratelimit.KnownSet{Load: load}
+	perID := &ratelimit.Window{Limit: 10, Period: time.Second}
+	unknown := &ratelimit.Window{Limit: 20, Period: time.Second}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !limiter.Allow(r.PathValue("collector_id"), clk.Now()) {
+		id, now := r.PathValue("collector_id"), now()
+		allowed := false
+		if known.Contains(r.Context(), id, now) {
+			allowed = perID.Allow(id, now)
+		} else {
+			allowed = unknown.Allow("unknown", now)
+		}
+		if !allowed {
 			w.Header().Set("Retry-After", "1")
 			http.Error(w, "rate limited", http.StatusTooManyRequests)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// activeCollectorIDs lists active destination-audit collectors (KnownSet loader).
+func (a *App) activeCollectorIDs(ctx context.Context) ([]string, error) {
+	rows, err := a.Store.R().ListDestauditCollectors(ctx, sql.NullString{})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(rows))
+	for _, r := range rows {
+		if r.State == "active" {
+			out = append(out, r.ID)
+		}
+	}
+	return out, nil
 }

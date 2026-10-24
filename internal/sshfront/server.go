@@ -5,6 +5,7 @@ package sshfront
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -21,9 +22,11 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/agents"
 	"github.com/aurimasniekis/go-hallpass/internal/audit"
 	"github.com/aurimasniekis/go-hallpass/internal/config"
+	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
 	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/obs/tracing"
+	"github.com/aurimasniekis/go-hallpass/internal/ratelimit"
 	"github.com/aurimasniekis/go-hallpass/internal/sshalg"
 	"github.com/aurimasniekis/go-hallpass/internal/sshban"
 	"github.com/aurimasniekis/go-hallpass/internal/sshkeepalive"
@@ -55,6 +58,8 @@ type Conn struct {
 	mu          sync.Mutex
 	channels    int
 	closeReason string
+	refusals    int // refused requests and channels on this connection (SR-20)
+	suppressed  int // refusals not audited individually since the last audited one
 }
 
 // SetCloseReason records why the connection is closing (first reason wins).
@@ -99,16 +104,39 @@ type Server struct {
 	log     *slog.Logger
 	m       *metrics.Metrics
 
+	bus        *eventbus.Bus
+	revalidate time.Duration
+
 	unauth    chan struct{} // global pre-auth slots
 	mu        sync.Mutex
-	perIP     map[netip.Addr]int
+	perSource map[string]int // pre-auth connections per source: IPv4 address or IPv6 /64 (sshban.Source)
+	perWide   map[string]int // pre-auth connections per IPv6 /48 (SR-22)
 	perAgent  map[string]int
 	conns     map[*Conn]struct{}
-	authFails *rateLimiter
-	wg        sync.WaitGroup
-	closing   bool
-	stopConns context.CancelFunc
+	// authFails and authFailsAll rate-limit auth-failure audit rows per source (/64 for IPv6) and globally; memory is
+	// bounded by ratelimit.Window (HP-SSH-003, SR-44).
+	authFails, authFailsAll *ratelimit.Window
+	// connDenials and agentDenials rate-limit audit rows for refused requests per connection and per agent (SR-20).
+	connDenials, agentDenials *ratelimit.Window
+	wg                        sync.WaitGroup
+	closing                   bool
+	stopConns                 context.CancelFunc
 }
+
+// Refusal and audit limits for authenticated agents (SR-20, T-01, T-22).
+const (
+	// MaxRefusalsPerConn closes a connection after this many refused channels or requests.
+	MaxRefusalsPerConn = 64
+	// deniedAuditsPerConn and deniedAuditsPerAgent bound individually audited refusals per minute; the rest are
+	// counted and reported as "suppressed" on the next audited refusal or when the connection closes.
+	deniedAuditsPerConn  = 10
+	deniedAuditsPerAgent = 30
+	// wideTierFactor caps one IPv6 /48 at this many times the per-source pre-auth limit (SR-22).
+	wideTierFactor = 4
+	// DefaultRevalidate is how often established connections re-check their key and agent (SR-15); it is well
+	// inside the enforcement bound (access.EnforcementBound).
+	DefaultRevalidate = 2 * time.Second
+)
 
 // Options configure the server.
 type Options struct {
@@ -125,6 +153,11 @@ type Options struct {
 	// Metrics records connection results, authentication failures, active connections and refused requests
 	// (HP-OBS-004). Nil disables.
 	Metrics *metrics.Metrics
+	// Bus delivers key revocations and agent disables so established connections close at once (HP-AGT-005, SR-15).
+	// Nil leaves only the periodic re-check.
+	Bus *eventbus.Bus
+	// Revalidate is the period of the database re-check of established connections (default DefaultRevalidate).
+	Revalidate time.Duration
 }
 
 // New returns a server.
@@ -132,11 +165,18 @@ func New(o Options) *Server {
 	if o.Logger == nil {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
+	if o.Revalidate <= 0 {
+		o.Revalidate = DefaultRevalidate
+	}
 	return &Server{
 		cfg: o.Config, agents: o.Agents, access: o.Access, audit: o.Audit, store: o.Store, hosts: o.Hosts, handler: o.Handler, bans: o.Bans, m: o.Metrics,
 		log: obs.Component(o.Logger, "sshfront"), unauth: make(chan struct{}, max(o.Config.MaxUnauthenticated, 1)),
-		perIP: map[netip.Addr]int{}, perAgent: map[string]int{}, conns: map[*Conn]struct{}{},
-		authFails: newRateLimiter(20, time.Minute),
+		bus: o.Bus, revalidate: o.Revalidate,
+		perSource: map[string]int{}, perWide: map[string]int{}, perAgent: map[string]int{}, conns: map[*Conn]struct{}{},
+		authFails:    &ratelimit.Window{Limit: 20, Period: time.Minute, MaxKeys: 4096},
+		authFailsAll: &ratelimit.Window{Limit: 600, Period: time.Minute},
+		connDenials:  &ratelimit.Window{Limit: deniedAuditsPerConn, Period: time.Minute, MaxKeys: 8192},
+		agentDenials: &ratelimit.Window{Limit: deniedAuditsPerAgent, Period: time.Minute, MaxKeys: 8192},
 	}
 }
 
@@ -151,6 +191,11 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	s.mu.Lock()
 	s.stopConns = stop
 	s.mu.Unlock()
+	var sub *eventbus.Subscription
+	if s.bus != nil {
+		sub = s.bus.Subscribe(256, eventbus.TopicAgentKeyRevoked, eventbus.TopicAgentDisabled)
+	}
+	go s.watchCredentials(connCtx, sub)
 	go func() {
 		<-ctx.Done()
 		_ = ln.Close()
@@ -213,27 +258,50 @@ func addrOf(nc net.Conn) netip.Addr {
 	return netip.Addr{}
 }
 
-// acquirePreAuth enforces global and per-IP pre-authentication limits (HP-SSH-013).
+// wideSource returns the IPv6 /48 containing ip, or "" for IPv4.
+func wideSource(ip netip.Addr) string {
+	ip = ip.Unmap()
+	if !ip.Is6() {
+		return ""
+	}
+	p, _ := ip.Prefix(48)
+	return p.String()
+}
+
+// acquirePreAuth enforces global and per-source pre-authentication limits (HP-SSH-013). A source is an IPv4
+// address or an IPv6 /64 (the unit a single host controls, as for bans), and one IPv6 /48 may hold at most
+// wideTierFactor times the per-source limit, so one allocation cannot take every global slot (SR-22).
 func (s *Server) acquirePreAuth(ip netip.Addr) bool {
 	select {
 	case s.unauth <- struct{}{}:
 	default:
 		return false
 	}
+	src, wide := sshban.Source(ip), wideSource(ip)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.closing || s.perIP[ip] >= s.cfg.MaxUnauthenticatedPerIP {
+	if s.closing || s.perSource[src] >= s.cfg.MaxUnauthenticatedPerIP ||
+		(wide != "" && s.perWide[wide] >= wideTierFactor*s.cfg.MaxUnauthenticatedPerIP) {
 		<-s.unauth
 		return false
 	}
-	s.perIP[ip]++
+	s.perSource[src]++
+	if wide != "" {
+		s.perWide[wide]++
+	}
 	return true
 }
 
 func (s *Server) releasePreAuth(ip netip.Addr) {
+	src, wide := sshban.Source(ip), wideSource(ip)
 	s.mu.Lock()
-	if s.perIP[ip]--; s.perIP[ip] <= 0 {
-		delete(s.perIP, ip)
+	if s.perSource[src]--; s.perSource[src] <= 0 {
+		delete(s.perSource, src)
+	}
+	if wide != "" {
+		if s.perWide[wide]--; s.perWide[wide] <= 0 {
+			delete(s.perWide, wide)
+		}
 	}
 	s.mu.Unlock()
 	<-s.unauth
@@ -276,9 +344,11 @@ func (s *Server) serverConfig(ctx context.Context, ip netip.Addr, signers []ssh.
 	return cfg
 }
 
-// recordAuthFailure audits failed authentications, rate limited per source IP (HP-SSH-003).
+// recordAuthFailure audits failed authentications, rate limited per source (IPv4 address or IPv6 /64) and globally
+// (HP-SSH-003, SR-44).
 func (s *Server) recordAuthFailure(ctx context.Context, ip netip.Addr, meta ssh.ConnMetadata, ae *agents.AuthError) {
-	if !s.authFails.allow(ip.String()) {
+	now := time.Now()
+	if !s.authFails.Allow(sshban.Source(ip), now) || !s.authFailsAll.Allow("all", now) {
 		return
 	}
 	_ = s.store.W().TxNamed(ctx, "sshfront.auth_failed", func(tx *store.Tx) error {
@@ -351,6 +421,7 @@ func (s *Server) serveConn(ctx context.Context, nc net.Conn, signers []ssh.Signe
 		return
 	}
 	defer func() { _ = s.access.CloseConnection(context.WithoutCancel(ctx), c.ID, c.CloseReason()) }()
+	defer s.flushSuppressed(ctx, c)
 	s.m.SSHConnection(metrics.ConnAccepted)
 	s.m.SSHConnectionOpened()
 	defer s.m.SSHConnectionClosed()
@@ -451,8 +522,51 @@ func (s *Server) globalRequests(ctx context.Context, c *Conn, reqs <-chan *ssh.R
 }
 
 // AuditDenied records a refused agent action (channel types, forwarding, subsystems). It is usable as Handler.Deny.
+// Audit rows are rate limited per connection and per agent; refusals over the limit are counted and reported as
+// "suppressed" on the next audited one (or at connection close), and a connection exceeding MaxRefusalsPerConn
+// refusals is closed (SR-20).
 func (s *Server) AuditDenied(ctx context.Context, c *Conn, action string, details map[string]any) {
 	ctx = context.WithoutCancel(ctx)
+	now := time.Now()
+	c.mu.Lock()
+	c.refusals++
+	tooMany := c.refusals > MaxRefusalsPerConn
+	allowed := s.connDenials.Allow(c.ID, now) && s.agentDenials.Allow(c.AgentID, now)
+	suppressed := 0
+	if allowed {
+		suppressed, c.suppressed = c.suppressed, 0
+	} else {
+		c.suppressed++
+	}
+	c.mu.Unlock()
+	if tooMany {
+		c.SetCloseReason("too_many_refusals")
+		if c.SSH != nil {
+			_ = c.SSH.Close()
+		}
+	}
+	if !allowed {
+		return
+	}
+	if suppressed > 0 {
+		details["suppressed"] = suppressed
+	}
+	s.auditDenied(ctx, c, action, details)
+}
+
+// flushSuppressed records refusals that were counted but not audited individually.
+func (s *Server) flushSuppressed(ctx context.Context, c *Conn) {
+	c.mu.Lock()
+	n := c.suppressed
+	c.suppressed = 0
+	refusals := c.refusals
+	c.mu.Unlock()
+	if n > 0 {
+		s.auditDenied(context.WithoutCancel(ctx), c, "ssh.denied.suppressed", map[string]any{"suppressed": n, "refusals": refusals})
+	}
+}
+
+func (s *Server) auditDenied(ctx context.Context, c *Conn, action string, details map[string]any) {
 	details["connection_id"] = c.ID
 	_ = s.store.W().TxNamed(ctx, "sshfront.denied", func(tx *store.Tx) error {
 		_, err := s.audit.Append(ctx, tx, audit.Event{Actor: audit.Actor{Type: audit.ActorAgent, ID: c.AgentID}, Action: action,
@@ -492,39 +606,75 @@ func truncate(s string, n int) string {
 	return s[:n]
 }
 
-// rateLimiter allows n events per window per key.
-type rateLimiter struct {
-	mu     sync.Mutex
-	n      int
-	window time.Duration
-	seen   map[string][]time.Time
-}
-
-func newRateLimiter(n int, window time.Duration) *rateLimiter {
-	return &rateLimiter{n: n, window: window, seen: map[string][]time.Time{}}
-}
-
-func (r *rateLimiter) allow(key string) bool {
-	now := time.Now()
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	ts := r.seen[key]
-	i := 0
-	for i < len(ts) && now.Sub(ts[i]) > r.window {
-		i++
+// watchCredentials closes established connections whose key was revoked or whose agent was disabled (HP-AGT-005,
+// SR-15): at once on the bus events, and by a periodic database re-check that also covers lost events. Destination
+// channels are ended separately by the enforcer; closing the connection also ends its control-plane use (listing
+// targets, filing requests).
+func (s *Server) watchCredentials(ctx context.Context, sub *eventbus.Subscription) {
+	var events <-chan eventbus.Event
+	if sub != nil {
+		defer sub.Close()
+		events = sub.C
 	}
-	ts = ts[i:]
-	if len(ts) >= r.n {
-		r.seen[key] = ts
-		return false
-	}
-	r.seen[key] = append(ts, now)
-	if len(r.seen) > 10000 {
-		for k, v := range r.seen {
-			if len(v) == 0 || now.Sub(v[len(v)-1]) > r.window {
-				delete(r.seen, k)
+	t := time.NewTicker(s.revalidate)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case ev, ok := <-events:
+			if !ok {
+				events = nil
+				continue
 			}
+			switch ev.Topic {
+			case eventbus.TopicAgentKeyRevoked:
+				s.closeWhere(access.ReasonKeyRevoked, func(c *Conn) bool { return c.KeyID == ev.Key })
+			case eventbus.TopicAgentDisabled:
+				s.closeWhere(access.ReasonAgentDisabled, func(c *Conn) bool { return c.AgentID == ev.Key })
+			}
+		case <-t.C:
+			s.revalidateConns(ctx)
 		}
 	}
-	return true
+}
+
+// revalidateConns re-reads each connection's key and agent state (read pool only).
+func (s *Server) revalidateConns(ctx context.Context) {
+	s.mu.Lock()
+	conns := make([]*Conn, 0, len(s.conns))
+	for c := range s.conns {
+		conns = append(conns, c)
+	}
+	s.mu.Unlock()
+	for _, c := range conns {
+		r, err := s.store.R().AuthLookup(ctx, c.Fingerprint)
+		switch {
+		case errors.Is(err, sql.ErrNoRows), err == nil && (r.KeyID != c.KeyID || r.AgentID != c.AgentID || r.KeyState != "active"):
+			s.closeConn(c, access.ReasonKeyRevoked)
+		case err == nil && r.Enabled != 1:
+			s.closeConn(c, access.ReasonAgentDisabled)
+		}
+	}
+}
+
+func (s *Server) closeWhere(reason string, match func(*Conn) bool) {
+	s.mu.Lock()
+	var hit []*Conn
+	for c := range s.conns {
+		if match(c) {
+			hit = append(hit, c)
+		}
+	}
+	s.mu.Unlock()
+	for _, c := range hit {
+		s.closeConn(c, reason)
+	}
+}
+
+func (s *Server) closeConn(c *Conn, reason string) {
+	c.SetCloseReason(reason)
+	s.log.Info("closing agent connection", slog.String(obs.FieldAgentID, c.AgentID), slog.String(obs.FieldKeyID, c.KeyID),
+		slog.String("reason", reason))
+	_ = c.SSH.Close()
 }

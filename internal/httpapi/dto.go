@@ -3,6 +3,9 @@ package httpapi
 import (
 	"encoding/base64"
 	"encoding/json"
+	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aurimasniekis/go-hallpass/internal/access"
@@ -45,12 +48,15 @@ func (s *Server) me(p *opauth.Principal) meDTO {
 		Session: meSession{ID: p.SessionID, Method: p.Method, AuthAt: p.AuthAt, MFAAt: p.MFAAt, ExpiresAt: p.ExpiresAt, Limited: p.Limited, NeedsEnroll: p.NeedsEnroll}}
 }
 
-// serverDTO redacts the destination address and port without inventory.address.read (HP-SRV-010, HP-RBAC-002).
+// serverDTO redacts the destination address, port and host-CA binding (principals are destination host names)
+// without inventory.address.read (HP-SRV-010, HP-RBAC-002, SR-28).
 type serverDTO struct {
 	*inventory.Server
-	Address         string `json:"address"`
-	Port            int    `json:"port"`
-	AddressRedacted bool   `json:"address_redacted"`
+	Address         string   `json:"address"`
+	Port            int      `json:"port"`
+	HostCAID        string   `json:"host_ca_id,omitempty"`
+	Principals      []string `json:"host_ca_principals"`
+	AddressRedacted bool     `json:"address_redacted"`
 }
 
 func (s *Server) canSeeAddress(c *gen.Call) bool {
@@ -59,9 +65,29 @@ func (s *Server) canSeeAddress(c *gen.Call) bool {
 
 func (s *Server) server(c *gen.Call, v *inventory.Server) serverDTO {
 	if s.canSeeAddress(c) {
-		return serverDTO{Server: v, Address: v.Address, Port: v.Port}
+		principals := v.Principals
+		if principals == nil {
+			principals = []string{}
+		}
+		return serverDTO{Server: v, Address: v.Address, Port: v.Port, HostCAID: v.HostCAID, Principals: principals}
 	}
-	return serverDTO{Server: v, AddressRedacted: true}
+	return serverDTO{Server: v, Principals: []string{}, AddressRedacted: true}
+}
+
+// agentOwnersDTO is the response of getAgentOwners/setAgentOwners (schema AgentOwners).
+type agentOwnersDTO struct {
+	AgentID string   `json:"agent_id"`
+	Owners  []string `json:"owners"`
+}
+
+// agentOwnersInput is the body of setAgentOwners (schema AgentOwnersInput): the complete owner list.
+type agentOwnersInput struct {
+	Owners []string `json:"owners"`
+}
+
+// selfApprovalDTO is the body and response of the self-approval setting operations (schema SelfApprovalSetting).
+type selfApprovalDTO struct {
+	ProhibitSelfApproval bool `json:"prohibit_self_approval"`
 }
 
 type roleDTO struct {
@@ -103,17 +129,20 @@ func rule(r policy.Rule) ruleDTO {
 	return ruleDTO{Rule: r, MaxDuration: secs(r.MaxDuration), AutoMaxDuration: secs(r.AutoMaxDuration)}
 }
 
-// ruleInputDTO accepts a rule with durations in seconds.
+// ruleInputDTO accepts a rule with durations in seconds. An omitted require_reason means true: reasons are
+// required unless a rule explicitly says otherwise (HP-REQ-008, SR-33).
 type ruleInputDTO struct {
 	policy.Rule
 	MaxDuration     int64 `json:"max_duration,omitempty"`
 	AutoMaxDuration int64 `json:"auto_max_duration,omitempty"`
+	RequireReason   *bool `json:"require_reason,omitempty"`
 }
 
 func (r ruleInputDTO) rule() policy.Rule {
 	out := r.Rule
 	out.MaxDuration = time.Duration(r.MaxDuration) * time.Second
 	out.AutoMaxDuration = time.Duration(r.AutoMaxDuration) * time.Second
+	out.RequireReason = r.RequireReason == nil || *r.RequireReason
 	return out
 }
 
@@ -181,12 +210,30 @@ type requestDTO struct {
 
 func (s *Server) request(c *gen.Call, r *access.Request) requestDTO {
 	out := requestDTO{Request: r, RequestedDuration: secs(r.RequestedDuration)}
-	if r.HasReason && s.d.Matrix.Has(c.Principal.Operator.Roles, rbac.RequestsReasonRead) {
+	if r.HasReason && s.canReadReason(c, r) {
 		if reason, err := s.d.Access.Reason(c.R.Context(), r.ID); err == nil {
 			out.Reason = &reason
 		}
 	}
 	return out
+}
+
+// canReadReason applies requests.reason.read with the PLAN §12.5 scope: administrators and auditors read every
+// reason; a caller holding the permission only as an approver reads reasons only for requests within its approver
+// scope (HP-RBAC-001, SR-29).
+func (s *Server) canReadReason(c *gen.Call, r *access.Request) bool {
+	p := c.Principal
+	if p == nil || !s.d.Matrix.Has(p.Operator.Roles, rbac.RequestsReasonRead) {
+		return false
+	}
+	if p.HasRole(opauth.RoleAdministrator) || p.HasRole(opauth.RoleAuditor) {
+		return true
+	}
+	snap, err := s.d.Engine.Current(c.R.Context())
+	if err != nil {
+		return false
+	}
+	return snap.CanAct(operatorInfo(c), r.AgentID, r.ServerID, r.RoleID, 0).Allowed
 }
 
 func requestFromRow(r db.AccessRequest) *access.Request {
@@ -340,10 +387,68 @@ type auditDTO struct {
 	Details       json.RawMessage `json:"details"`
 }
 
-func auditEvent(e db.AuditEvent) auditDTO {
+// auditAddressFields lists, per audit action, the detail keys that reveal destination addresses, ports, host names
+// (host-CA principals) or raw dial and host-key errors (which embed host:port). They are redacted for callers
+// without inventory.address.read (HP-RBAC-002, HP-SRV-010, SR-08), including rows written before the sources stopped
+// recording raw errors.
+var auditAddressFields = map[string][]string{
+	"server.created":           {"address", "port"},
+	"server.updated":           {"address", "port", "previous_address"},
+	"server.host_ca.bound":     {"principals"},
+	"credential.probed":        {"error"},
+	"server.host_key_mismatch": {"error"},
+}
+
+// serverAddressKeys are redacted from any event that targets a server, as a backstop for future actions.
+var serverAddressKeys = []string{"address", "port", "previous_address", "principals", "host_ca_principals"}
+
+// redactedValue replaces a redacted detail value.
+const redactedValue = "[redacted: requires inventory.address.read]"
+
+// redactAuditDetails returns details with address-bearing values replaced, and whether anything was redacted.
+func redactAuditDetails(e db.AuditEvent, details json.RawMessage) (json.RawMessage, bool) {
+	keys := auditAddressFields[e.Action]
+	if e.TargetType.String == "server" {
+		keys = append(slices.Clone(keys), serverAddressKeys...)
+	}
+	if len(keys) == 0 {
+		return details, false
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(details, &m); err != nil {
+		// Not an object: fail closed rather than return unparsed content to a caller who may not see addresses.
+		return json.RawMessage(`{"redacted":true}`), true
+	}
+	changed := false
+	// Rows written before SR-08 may carry the certificate checker's message, which quotes host principals.
+	if v, found := m["reason"]; found && e.Action == "server.host_key_mismatch" && strings.Contains(string(v), "certificate rejected:") {
+		m["reason"] = json.RawMessage(strconv.Quote(redactedValue))
+		changed = true
+	}
+	for _, k := range keys {
+		if v, found := m[k]; found && string(v) != "null" && string(v) != `""` {
+			m[k] = json.RawMessage(strconv.Quote(redactedValue))
+			changed = true
+		}
+	}
+	if !changed {
+		return details, false
+	}
+	out, err := json.Marshal(m)
+	if err != nil {
+		return json.RawMessage(`{"redacted":true}`), true
+	}
+	return out, true
+}
+
+// auditEvent converts an audit row; canSeeAddress is false for callers without inventory.address.read.
+func auditEvent(e db.AuditEvent, canSeeAddress bool) auditDTO {
 	d := json.RawMessage(e.DetailsJson)
 	if len(d) == 0 {
 		d = json.RawMessage("{}")
+	}
+	if !canSeeAddress {
+		d, _ = redactAuditDetails(e, d)
 	}
 	return auditDTO{ID: e.ID, Seq: e.Seq, At: micros(e.At), ActorType: e.ActorType, ActorID: e.ActorID.String, Action: e.Action,
 		TargetType: e.TargetType.String, TargetID: e.TargetID.String, Outcome: e.Outcome, SourceIP: e.SourceIp.String,

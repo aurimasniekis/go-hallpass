@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"path"
 	"slices"
 	"strings"
 	"time"
@@ -102,6 +103,12 @@ func SanitizeReturnTo(p string) string {
 	if strings.HasPrefix(u.Path, "/api/") || strings.HasPrefix(u.Path, "/auth/") || u.Path == "/api" || u.Path == "/auth" {
 		return "/"
 	}
+	// Redirect writers (net/http's Redirect among them) clean everything before "?" as a path, fragment included:
+	// "/#/../api/…" would become "/api/…" (SR-24). Accept only input that such cleaning leaves unchanged.
+	pre, _, _ := strings.Cut(p, "?")
+	if cleaned := path.Clean(pre); cleaned != pre && cleaned+"/" != pre {
+		return "/"
+	}
 	return p
 }
 
@@ -128,7 +135,8 @@ func (svc *Service) Start(ctx context.Context, in StartInput) (*StartResult, err
 		}
 		operatorID, sessionDisplay = in.Principal.Operator.ID, in.Principal.SessionID
 	case PurposeTest:
-		if in.Principal == nil || !in.Principal.HasRole(opauth.RoleAdministrator) {
+		// Callers also authorize auth.settings through the RBAC matrix (SR-48).
+		if !canTest(in.Principal) {
 			return nil, apperr.New(apperr.CodeForbidden, "only administrators can run an SSO test login")
 		}
 		operatorID, sessionDisplay = in.Principal.Operator.ID, in.Principal.SessionID
@@ -139,6 +147,11 @@ func (svc *Service) Start(ctx context.Context, in StartInput) (*StartResult, err
 				return nil, err
 			}
 		case in.Principal != nil && in.Principal.MFASatisfied():
+			// Account linking needs recent authentication, with MFA where policy requires it or a factor is enrolled
+			// (HP-AUTH-014, SR-10).
+			if err := svc.auth.RequireRecentAuth(in.Principal, in.Principal.Operator.MFARequired); err != nil {
+				return nil, err
+			}
 			operatorID, sessionDisplay = in.Principal.Operator.ID, in.Principal.SessionID
 		default:
 			return nil, apperr.New(apperr.CodeUnauthorized, "linking needs a signed-in session or a link invitation")
@@ -190,6 +203,12 @@ func (svc *Service) Start(ctx context.Context, in StartInput) (*StartResult, err
 	}
 	conf := svc.oauthConfig(p, r, "")
 	return &StartResult{RedirectURL: conf.AuthCodeURL(state, opts...), Binding: binding, ExpiresAt: exp}, nil
+}
+
+// canTest reports whether a session may run (and complete) an SSO test login: a full, MFA-complete administrator
+// session, never a Limited one (SR-48).
+func canTest(p *opauth.Principal) bool {
+	return p != nil && !p.Limited && p.HasRole(opauth.RoleAdministrator)
 }
 
 func (svc *Service) oauthConfig(p *Provider, r *remote, secret string) *oauth2.Config {
@@ -585,8 +604,8 @@ func (svc *Service) provisionTx(ctx context.Context, tx *store.Tx, p *Provider, 
 }
 
 // syncTx replaces the operator's SSO-sourced roles and groups with the mapped set; manual assignments are untouched
-// (HP-OIDC-011). Removing the last enabled administrator is refused (HP-AUTH-015): the SSO administrator role is
-// kept and the conflict audited.
+// (HP-OIDC-011). Removing the last enabled administrator, or under SSO-only enforcement the last SSO-capable one, is
+// refused (HP-AUTH-015): the SSO administrator role is kept and the conflict audited.
 func (svc *Service) syncTx(ctx context.Context, tx *store.Tx, operatorID string, roles, groupIDs []string, refs map[string]string) error {
 	before, err := tx.Q.ListOperatorRoles(ctx, operatorID)
 	if err != nil {
@@ -606,13 +625,19 @@ func (svc *Service) syncTx(ctx context.Context, tx *store.Tx, operatorID string,
 		if err != nil {
 			return err
 		}
-		if n == 0 {
+		// Under SSO-only enforcement local administrators cannot sign in, so the last SSO-capable administrator is
+		// kept as well (HP-AUTH-015, SR-06).
+		ssoLockout, err := opauth.SSOAdminsAtRisk(ctx, tx.Q)
+		if err != nil {
+			return err
+		}
+		if n == 0 || ssoLockout {
 			if err := tx.Q.InsertSSORole(ctx, db.InsertSSORoleParams{OperatorID: operatorID, Role: opauth.RoleAdministrator, SourceRef: "last-admin-guard"}); err != nil {
 				return err
 			}
 			if _, err := svc.audit.Append(ctx, tx, audit.Event{Actor: audit.Actor{Type: audit.ActorSystem, ID: "oidc"}, Action: "operator.role_sync.blocked",
 				Outcome: audit.OutcomeDenied, Target: audit.Target{Type: "operator", ID: operatorID},
-				Details: map[string]any{"reason": "would remove the last enabled administrator"}}); err != nil {
+				Details: map[string]any{"reason": lastAdminReason(n == 0)}}); err != nil {
 				return err
 			}
 		}
@@ -634,6 +659,13 @@ func (svc *Service) syncTx(ctx context.Context, tx *store.Tx, operatorID string,
 			Target: audit.Target{Type: "operator", ID: operatorID}, Details: map[string]any{"sso_roles": roles, "sso_groups": groupIDs}})
 	}
 	return err
+}
+
+func lastAdminReason(noAdmin bool) string {
+	if noAdmin {
+		return "would remove the last enabled administrator"
+	}
+	return "would remove the last administrator who can sign in with SSO while password login is disabled"
 }
 
 func sameRoles(a, b []db.ListOperatorRolesRow) bool {
@@ -678,7 +710,7 @@ func (svc *Service) stepUp(ctx context.Context, p *Provider, st db.OidcAuthState
 // testLogin records a successful end-to-end test login and returns the mapping preview without creating a session
 // (HP-OIDC-014).
 func (svc *Service) testLogin(ctx context.Context, p *Provider, st db.OidcAuthState, c *Claims, pr *opauth.Principal) (*TestResult, error) {
-	if pr == nil || pr.Operator.ID != st.OperatorID.String || !pr.HasRole(opauth.RoleAdministrator) {
+	if !canTest(pr) || pr.Operator.ID != st.OperatorID.String {
 		return nil, ErrInvalidState
 	}
 	roles, groupIDs, _, err := svc.mapped(ctx, p, c.Groups)
@@ -752,4 +784,20 @@ func (svc *Service) link(ctx context.Context, p *Provider, st db.OidcAuthState, 
 		return err
 	})
 	return opID, err
+}
+
+// ReauthTOTP is the local-TOTP step-up fallback (HP-OIDC-013): only for SSO sessions whose provider is enabled and
+// configured with stepup_fallback = local_totp (SR-03). Other sessions re-authenticate upstream or with a password.
+func (svc *Service) ReauthTOTP(ctx context.Context, pr *opauth.Principal, code string, meta opauth.SessionMeta) (string, error) {
+	if pr == nil || pr.Method != opauth.MethodOIDC || pr.Provider == "" {
+		return "", opauth.ErrTOTPStepUpNotAllowed
+	}
+	p, err := svc.providerBySlug(ctx, pr.Provider)
+	if err != nil && !errors.Is(err, apperr.ErrNotFound) {
+		return "", err
+	}
+	if err != nil || !p.Enabled || p.StepUpFallback != StepUpLocalTOTP {
+		return "", opauth.ErrTOTPStepUpNotAllowed
+	}
+	return svc.auth.ReauthTOTP(ctx, pr, code, meta)
 }

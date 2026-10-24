@@ -72,7 +72,14 @@ func (s *Server) exportBundle(c *gen.Call, sessionID string) (*gen.Result, error
 		if len(seg.HeaderSha256) > 0 {
 			bs.HeaderSHA256 = hex.EncodeToString(seg.HeaderSha256)
 		}
-		for _, p := range []string{seg.Path, seg.Path + hprec.PartialSuffix} {
+		// The file location is derived from the validated IDs, never taken from the stored path (SR-16): a tampered
+		// row or restored backup cannot point the export at a file outside the recordings directory.
+		loc, err := s.d.Recording.SegmentFile(seg)
+		if err != nil {
+			m.Segments = append(m.Segments, bs)
+			continue
+		}
+		for _, p := range []string{loc, loc + hprec.PartialSuffix} {
 			fi, err := os.Stat(p)
 			if err != nil || !fi.Mode().IsRegular() {
 				continue
@@ -81,7 +88,7 @@ func (s *Server) exportBundle(c *gen.Call, sessionID string) (*gen.Result, error
 			if err != nil {
 				continue
 			}
-			bs.File, bs.Bytes, bs.Partial, bs.FileSHA256 = "segments/"+seg.ID+".hprec", fi.Size(), p != seg.Path, sum
+			bs.File, bs.Bytes, bs.Partial, bs.FileSHA256 = "segments/"+seg.ID+".hprec", fi.Size(), p != loc, sum
 			files = append(files, fileRef{name: bs.File, path: p, size: fi.Size()})
 			break
 		}

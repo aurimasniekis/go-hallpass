@@ -272,9 +272,16 @@ func (svc *Service) ListApproverRules(ctx context.Context) ([]ApproverRule, erro
 	return loadApprovers(ctx, svc.s.R())
 }
 
-// SetAgentOwners replaces the owners of an agent (used by the self-approval prohibition).
+// MaxAgentOwners bounds the owner list of one agent.
+const MaxAgentOwners = 64
+
+// SetAgentOwners replaces the owners of an agent (used by the self-approval prohibition, HP-POL-012). Every owner
+// must be an existing operator; the change bumps the policy version and is audited.
 func (svc *Service) SetAgentOwners(ctx context.Context, actor audit.Actor, agentID string, operatorIDs []string) error {
 	operatorIDs = slices.Compact(slices.Sorted(slices.Values(operatorIDs)))
+	if len(operatorIDs) > MaxAgentOwners {
+		return apperr.New(apperr.CodeInvalid, "at most %d owners", MaxAgentOwners)
+	}
 	for _, id := range operatorIDs {
 		if !ids.Valid(ids.Operator, id) {
 			return apperr.New(apperr.CodeInvalid, "invalid operator id %q", id)
@@ -284,6 +291,17 @@ func (svc *Service) SetAgentOwners(ctx context.Context, actor audit.Actor, agent
 		if _, err := tx.Q.GetAgent(ctx, agentID); errors.Is(err, sql.ErrNoRows) {
 			return apperr.New(apperr.CodeNotFound, "agent not found")
 		} else if err != nil {
+			return err
+		}
+		for _, op := range operatorIDs {
+			if _, err := tx.Q.GetOperator(ctx, op); errors.Is(err, sql.ErrNoRows) {
+				return apperr.New(apperr.CodeInvalid, "operator %q not found", op)
+			} else if err != nil {
+				return err
+			}
+		}
+		previous, err := tx.Q.ListOwnersForAgent(ctx, agentID)
+		if err != nil {
 			return err
 		}
 		if err := tx.Q.DeleteAgentOwners(ctx, agentID); err != nil {
@@ -297,10 +315,33 @@ func (svc *Service) SetAgentOwners(ctx context.Context, actor audit.Actor, agent
 		if _, err := svc.changed(ctx, tx); err != nil {
 			return err
 		}
-		_, err := svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "agent.owners.set", Target: audit.Target{Type: "agent", ID: agentID},
-			Details: map[string]any{"owners": operatorIDs}})
+		_, err = svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "agent.owners.set", Target: audit.Target{Type: "agent", ID: agentID},
+			Details: map[string]any{"owners": operatorIDs, "previous": previous}})
 		return err
 	})
+}
+
+// AgentOwners returns the operator IDs owning an agent (sorted).
+func (svc *Service) AgentOwners(ctx context.Context, agentID string) ([]string, error) {
+	if _, err := svc.s.R().GetAgent(ctx, agentID); errors.Is(err, sql.ErrNoRows) {
+		return nil, apperr.New(apperr.CodeNotFound, "agent not found")
+	} else if err != nil {
+		return nil, err
+	}
+	return svc.s.R().ListOwnersForAgent(ctx, agentID)
+}
+
+// ProhibitSelfApproval reports whether agent owners are barred from approving their agents' requests (default true,
+// R-09).
+func (svc *Service) ProhibitSelfApproval(ctx context.Context) (bool, error) {
+	st, err := svc.s.R().GetSetting(ctx, SettingProhibitSelfApproval)
+	if errors.Is(err, sql.ErrNoRows) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return st.Value != "false", nil
 }
 
 // SetProhibitSelfApproval toggles the self-approval prohibition (HP-POL-012).

@@ -101,7 +101,14 @@ func (svc *Service) Decide(ctx context.Context, in DecideInput) (*DecideResult, 
 		if dur == 0 {
 			dur = time.Duration(r.RequestedDurationS) * time.Second
 		}
-		check := snap.CanApprove(in.Operator, r.AgentID, r.ServerID, r.RoleID, dur)
+		op, err := currentOperator(ctx, tx.Q, in.Operator)
+		if err != nil {
+			return err
+		}
+		check := snap.CanAct(op, r.AgentID, r.ServerID, r.RoleID, dur)
+		if in.Approve {
+			check = snap.CanApprove(op, r.AgentID, r.ServerID, r.RoleID, dur) // self-approval rule (HP-POL-012)
+		}
 		if !check.Allowed {
 			return apperr.New(apperr.CodeForbidden, "not permitted to decide this request: %s", check.Reason)
 		}
@@ -306,4 +313,58 @@ func (svc *Service) createGrantTx(ctx context.Context, tx *store.Tx, snap *polic
 	g := grantFromRow(row)
 	g.SessionID = sid
 	return g, nil
+}
+
+// ErrOperatorUnavailable refuses decisions by operators that no longer exist or are disabled.
+var ErrOperatorUnavailable = apperr.New(apperr.CodeForbidden, "operator not found or disabled")
+
+// currentOperator re-reads the deciding operator from q (inside the decision transaction where one exists): a
+// deleted or disabled operator is refused, and roles and groups are limited to those still assigned. Caller-supplied
+// roles and groups can only narrow the result (a password session drops SSO-sourced roles), never widen it
+// (G-5, HP-NTF-008, SR-23).
+func currentOperator(ctx context.Context, q *db.Queries, in policy.OperatorInfo) (policy.OperatorInfo, error) {
+	return rereadOperator(ctx, q, in, false)
+}
+
+// withdrawingOperator is currentOperator for withdrawing access (cancel, revoke): a disabled operator is refused and
+// roles are narrowed to those still assigned, but a caller that is not an operator row (gateway-internal actors such
+// as the soak and fault harnesses' system administrator) keeps its stated authority, because withdrawing access can
+// never widen it.
+func withdrawingOperator(ctx context.Context, q *db.Queries, in policy.OperatorInfo) (policy.OperatorInfo, error) {
+	return rereadOperator(ctx, q, in, true)
+}
+
+func rereadOperator(ctx context.Context, q *db.Queries, in policy.OperatorInfo, allowInternal bool) (policy.OperatorInfo, error) {
+	row, err := q.GetOperator(ctx, in.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		if allowInternal && in.Enabled {
+			return in, nil
+		}
+		return policy.OperatorInfo{}, ErrOperatorUnavailable
+	} else if err != nil {
+		return policy.OperatorInfo{}, err
+	}
+	if row.Enabled != 1 {
+		return policy.OperatorInfo{}, ErrOperatorUnavailable
+	}
+	assigned, err := q.ListOperatorRoles(ctx, in.ID)
+	if err != nil {
+		return policy.OperatorInfo{}, err
+	}
+	groups, err := q.ListOperatorGroupNames(ctx, in.ID)
+	if err != nil {
+		return policy.OperatorInfo{}, err
+	}
+	out := policy.OperatorInfo{ID: in.ID, Enabled: true, MFAPassed: in.MFAPassed, Roles: []string{}, Groups: []string{}}
+	for _, r := range in.Roles {
+		if slices.ContainsFunc(assigned, func(a db.ListOperatorRolesRow) bool { return a.Role == r }) && !slices.Contains(out.Roles, r) {
+			out.Roles = append(out.Roles, r)
+		}
+	}
+	for _, g := range in.Groups {
+		if slices.Contains(groups, g) && !slices.Contains(out.Groups, g) {
+			out.Groups = append(out.Groups, g)
+		}
+	}
+	return out, nil
 }

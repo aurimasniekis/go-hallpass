@@ -640,6 +640,133 @@
   - An attacker spoofing a victim's address cannot trigger a ban, because a TCP handshake is required.
   - Web login keeps its own per-account and per-IP progressive throttling (HP-AUTH-004).
 
+### ADR-0042 — Operator authentication hardening from the internal review (SR-01, SR-03..07, SR-10, SR-11, SR-24..27, SR-30, SR-48)
+- **Status:** accepted. **Security-relevant change:** it tightens defaults and changes some flows; one item (5) deviates
+  from HP-API-006 replay semantics.
+- **Decision:**
+  1. **TOTP enrollment lifecycle (SR-01/03/04/27).**
+     - The secret being enrolled lives in `mfa_totp_pending` (15 min TTL), separate from the confirmed factor. It is
+       consumed exactly once and replaces the factor only on a successful confirm.
+     - Enrollment never refreshes `auth_at`. A Limited session that had to enroll stays Limited and must verify a
+       later code (`/auth/mfa`).
+     - On a full session, adding a factor needs recent authentication; replacing one also needs MFA. The session
+       rotates.
+     - `VerifyMFA` is only for Limited password sessions. `ReauthTOTP` is only for SSO sessions whose provider allows
+       `local_totp` step-up.
+     - Second-factor checks share one throttle and are audited.
+  2. **Break-glass redemption (SR-07, HP-AUTH-016).**
+     - `POST /api/v1/auth/recover` plus the `/recover` page redeem the token from `hallpass admin recover`. The token
+       is single use, expires after 30 min, is per-IP throttled, refused for disabled operators, and audited.
+     - Redeeming revokes the account's other sessions and removes its second factor and recovery codes.
+     - It issues a password-reset link when the account has a password. MFA must be re-enrolled when policy
+       requires it.
+  3. **SSO roles apply only to SSO sessions; deleting a provider strips its roles (SR-26).**
+     - Operators with both a password and IdP-mapped roles get only their local roles on password sessions.
+     - Provider deletion refuses to remove the last administrator.
+  4. **SSO-only lockout guard (SR-06).** While SSO-only is on, role edits, disables and IdP group sync that would leave
+     no SSO-capable administrator are refused or kept.
+  5. **Secret-bearing idempotent responses (SR-11).** Operations that return one-time secrets (invitations, reset and link
+     tokens, link codes, recovery, TOTP and recovery codes) store only the request hash. A replay with the same key
+     gets 409 instead of the stored body, so secrets never sit in `api_idempotency`. The operation still never runs
+     twice. *Deviation from HP-API-006 replay semantics, recorded for operator review.*
+  6. **Role changes revoke sessions (SR-27)**, elevation included. An administrator who edits their own roles is
+     signed out.
+  7. **API limiter (SR-30).** IPv6 is keyed by /64 and the table is capped at 100k keys. When full, new
+     unauthenticated keys fail closed; session and flood-guard keys fail open so signed-in operators keep working.
+  8. **Self-service links need recent authentication (SR-10).** Chat link codes require recent auth plus MFA, and OIDC
+     self-link requires recent auth. A password-only operator must enroll TOTP (or use SSO) before linking a chat
+     account.
+  9. **Redirects (SR-24, SR-48).** `return_to` values that path cleaning would change, including those with
+     fragments, are refused. SSO test-login needs `auth.settings` and a full session.
+
+### ADR-0043 — Recording integrity, confinement and key maintenance from the internal review (SR-02, SR-16..18, SR-36..39)
+- **Status:** accepted. **Security-relevant change:** it strengthens verification; operators of databases created
+  before migration 0019 must act once (item 1).
+- **Decision:**
+  1. **Verify binds the chain to the rows (SR-02).**
+     - `hallpass verify` rebuilds every chain entry's manifest from the segment's current row and requires an entry
+       for every finalized, interrupted or deleted row.
+     - A separately MACed head record (`recording_chain_head`) catches removal of the newest entries. MACs are
+       domain-separated HMAC-SHA-256 under the manifest key: `hallpass/rec/chain-head/v1|…`.
+     - Databases from before 0019 report "head record missing" until an operator runs
+       `hallpass verify --adopt-chain-head` (offline, audited). That command checks every link and MAC first;
+       compare with exported anchors before adopting.
+     - A key holder can still rewrite history after the last external anchor (unchanged, T-15).
+  2. **Retention tombstones (SR-17).**
+     - Deleting a segment writes an audited `recording.deleted` event and a MACed tombstone
+       (`hallpass/rec/tombstone/v1|…`) in the same transaction.
+     - Verify and anchors verify accept a deleted segment only with a matching tombstone.
+     - Deletions from before 0019 show as `corrupt` once.
+  3. **Confined segment paths (SR-16).**
+     - Segment file locations are derived from validated IDs everywhere: reconcile, verify, replay, export,
+       retention, rewrap, backup and restore.
+     - The stored path is only compared, never opened. Backup refuses rows whose path is not their own location.
+  4. **Tampered final files are quarantined (SR-38).** A final file that fails verification at startup is moved to
+     `quarantine/`, its segment is marked `failed`, and it is never chained (refines PLAN §13.6).
+  5. **Recording-key rewrap and slot repair are wired (SR-39).**
+     - A 6-hourly `recording.rewrap` job moves segment keys to the active recording key.
+     - Startup repairs damaged key slots after checking the header.
+  6. **KEK rotation covers retired keys (SR-18).** The backup `kek_id` check ignores retired rows.
+  7. **Token-key retirement is guarded (SR-36).** Lookups try every non-retired version. Retiring a version is
+     refused while codes or tokens created before its successor are still usable.
+  8. **Destination-audit details are re-sealed and covered by the retire guard (SR-37).**
+- **Consequences:**
+  - G-9 and HP-CRY-005 hold against keyless deletion, relabeling and truncation of finalized recordings.
+  - The new MAC message formats are flagged for the R-02 external review.
+
+### ADR-0044 — Access, policy, SSH and notification hardening from the internal review (SR-08..10, SR-12..15, SR-19..23, SR-28..34, SR-36, SR-40..45)
+- **Status:** accepted. **Security-relevant change.** Most items tighten; items 6, 9, 10 and 13 record explicit
+  acceptances.
+- **Decision:**
+  1. **Policy reconciliation (SR-12).** Every transaction that bumps the policy version publishes `policy.changed`, so
+     group, label and limit changes reach the enforcer at once.
+  2. **Revoked keys and disabled agents close SSH connections (SR-15).** The connection closes at once on the event, and
+     a 2 s database re-check covers lost events. Creating a request re-checks the authenticating key.
+  3. **Refusal audit limits (SR-20).** Refusal audits are limited per connection (10/min) and per agent (30/min), the
+     excess is counted as `suppressed`, and a connection is closed after 64 refusals. This trades individual refusal
+     rows for protection against audit flooding (T-22).
+  4. **Source keying (SR-22, SR-44).**
+     - Pre-auth limits and the auth-failure audit limit key by IPv4 address or IPv6 /64, with a /48 cap of 4× the
+       per-IP limit.
+     - Hosts sharing one /64 share one limit.
+  5. **Chat links are removed on operator disable and on password set or reset (SR-10)**, by database triggers.
+     Operators re-link afterwards.
+  6. **Self-approval (SR-14, SR-32).**
+     - Agent owners are set through `PUT /agents/{id}/owners` (`policy.write`, recent auth and MFA) and must be
+       existing operators.
+     - The ban (`/policy/self-approval`, default on) applies to approving only. Owners may still deny, cancel, revoke
+       and terminate, which only withdraws access.
+  7. **Reasons (SR-33, SR-29).** An omitted `require_reason` means true. Approvers read reasons only within their
+     approver scope.
+  8. **Decisions re-read the operator (SR-23).** Decide refuses missing or disabled operators and narrows roles and
+     groups to those still assigned. Cancel and revoke narrow too, but internal non-operator actors keep their stated
+     authority, because withdrawal cannot widen access.
+  9. **Webhook and collector limits (SR-19, SR-40).**
+     - Unknown IDs are excluded from per-ID budgets.
+     - Limits: 40/s per source (IPv4 or /64), 5/s per provider user, and a shared 20/s for unknown collector IDs.
+     - Residual, accepted: an attacker who knows an integration ID and controls several sources can exhaust its
+       budget. This is denial of service only, and notification failure never changes a request (HP-NTF-010).
+     - Behind a reverse proxy without `trusted_proxies`, the per-source limit becomes one global budget.
+  10. **Telegram allowlist semantics (SR-42).**
+      - Button presses are accepted only from route chats or configured extra chats.
+      - Users are not filtered by a separate allowlist: every decision requires an explicit provider link to an
+        enabled operator plus all decision checks.
+      - Recorded against HP-NTF-006 as written.
+  11. **Destination algorithm floor (SR-45).**
+      - Newly enrolled host keys and CAs need RSA ≥ 3072. SHA-1 CA signatures are refused. RSA login keys sign with
+        SHA-2 only.
+      - Destinations with only RSA-2048 host keys or OpenSSH before 7.2 can no longer be enrolled.
+  12. **Address confidentiality in the audit API (SR-08, SR-28).**
+      - Audit details redact addresses, ports, host-CA principals and raw dial errors for callers without
+        `inventory.address.read`.
+      - Host-key alerts audit the address-free classification.
+      - `remote_user` stays visible (operator review: THREAT_MODEL AS-9 and ADR-0031 differ).
+  13. **Accepted (SR-34).** Policy rules may name groups not in use yet: write-policy-first and lazily created IdP
+      groups need this, and group assignment is itself privileged and audited. The UI should warn on unknown group
+      names.
+  14. **Live-event streams (SR-09, SR-31).** Streams re-validate without refreshing the session's idle timer, close at
+      idle or absolute expiry, and are capped at 16 per operator.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

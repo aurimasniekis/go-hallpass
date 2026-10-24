@@ -265,7 +265,7 @@ func (svc *Service) ResetPassword(ctx context.Context, token, password string) e
 			return err
 		}
 		if r, err := tx.Q.GetOperator(ctx, opID); err == nil {
-			for _, k := range []string{throttleKeyAccount(r.Email.String), "mfa:" + opID} {
+			for _, k := range []string{throttleKeyAccount(r.Email.String), "acct-op:" + opID, mfaKey(opID)} {
 				if err := tx.Q.DeleteThrottle(ctx, k); err != nil {
 					return err
 				}

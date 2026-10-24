@@ -10,6 +10,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,11 +23,16 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
 )
 
-// limiters are fixed-window per-key counters (per minute) for API rate limiting (HP-API-008).
+// limiters are fixed-window per-key counters (per minute) for API rate limiting (HP-API-008). The table is bounded
+// (maxKeys, SR-30): once full, expired windows are dropped first; a key that still finds no room is refused when the
+// limit protects an unauthenticated path (failClosed) and passes otherwise, so a flood of fresh source addresses can
+// neither grow memory without bound nor lock out signed-in operators.
 type limiters struct {
-	clk clock.Clock
-	mu  sync.Mutex
-	m   map[string]*window
+	clk     clock.Clock
+	maxKeys int
+	mu      sync.Mutex
+	m       map[string]*window
+	swept   time.Time
 }
 
 type window struct {
@@ -34,19 +40,60 @@ type window struct {
 	n     int
 }
 
-func newLimiters(c clock.Clock) *limiters { return &limiters{clk: c, m: map[string]*window{}} }
+// defaultLimiterKeys bounds the limiter table (about 100 bytes per key).
+const defaultLimiterKeys = 100_000
 
-func (l *limiters) allow(key string, perMinute int) bool {
+func newLimiters(c clock.Clock) *limiters {
+	return &limiters{clk: c, maxKeys: defaultLimiterKeys, m: map[string]*window{}}
+}
+
+func (l *limiters) allow(key string, perMinute int) bool { return l.allowKey(key, perMinute, false) }
+
+func (l *limiters) allowKey(key string, perMinute int, failClosed bool) bool {
 	now := l.clk.Now()
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	w := l.m[key]
+	if w == nil && len(l.m) >= l.maxKeys {
+		// Sweeping is O(n); do it at most once per second while the table stays full.
+		if now.Sub(l.swept) >= time.Second {
+			l.swept = now
+			l.sweep(now)
+		}
+		if len(l.m) >= l.maxKeys {
+			return !failClosed
+		}
+	}
 	if w == nil || now.Sub(w.start) >= time.Minute {
 		w = &window{start: now}
 		l.m[key] = w
 	}
 	w.n++
 	return w.n <= perMinute
+}
+
+// sweep drops windows that can no longer limit anything; l.mu must be held.
+func (l *limiters) sweep(now time.Time) {
+	for k, w := range l.m {
+		if now.Sub(w.start) >= time.Minute {
+			delete(l.m, k)
+		}
+	}
+}
+
+// sourceKey is the rate-limit identity of a client address: IPv4 addresses as they are, IPv6 by /64, the smallest
+// prefix a single site is normally given (SR-30, the same rule as login throttling and SSH bans).
+func sourceKey(ip string) string {
+	a, err := netip.ParseAddr(ip)
+	if err != nil {
+		return ip
+	}
+	a = a.Unmap()
+	if a.Is6() {
+		p, _ := a.Prefix(64)
+		return p.String()
+	}
+	return a.String()
 }
 
 func (l *limiters) gc(ctx context.Context) {
@@ -60,11 +107,7 @@ func (l *limiters) gc(ctx context.Context) {
 		}
 		now := l.clk.Now()
 		l.mu.Lock()
-		for k, w := range l.m {
-			if now.Sub(w.start) > 2*time.Minute {
-				delete(l.m, k)
-			}
-		}
+		l.sweep(now)
 		l.mu.Unlock()
 	}
 }
@@ -73,6 +116,17 @@ func (l *limiters) gc(ctx context.Context) {
 // stored response, a different request with the same key is a conflict.
 
 const idempotencyTTL = 24 * time.Hour
+
+// secretResponseOps return one-time secrets (invitation, reset and link tokens, recovery and link codes, TOTP
+// secrets) that are otherwise stored only as MACs (HP-AUTH-018, AS-7). Their idempotency records keep the request
+// hash and status but never the body (SR-11); a replay is answered 409 instead of repeating the secret.
+var secretResponseOps = map[string]bool{
+	"createInvitation": true, "issueResetToken": true, "issueLinkInvite": true, "createProviderLinkCode": true, "recoverLogin": true,
+	"beginTOTP": true, "confirmTOTP": true, "regenerateRecoveryCodes": true,
+}
+
+var errSecretReplay = apperr.New(apperr.CodeConflict,
+	"this request already succeeded; its one-time secret is shown only once and is not stored, so create a new one")
 
 type idemCtxKey struct{}
 
@@ -119,6 +173,10 @@ func (s *Server) replayIdempotent(c *gen.Call) bool {
 		s.problem(c.W, c.R, apperr.New(apperr.CodeConflict, "Idempotency-Key was already used for a different request"))
 		return true
 	}
+	if secretResponseOps[c.Op.ID] {
+		s.problem(c.W, c.R, errSecretReplay)
+		return true
+	}
 	c.W.Header().Set("Idempotent-Replayed", "true")
 	if len(row.Body) > 0 {
 		c.W.Header().Set("Content-Type", "application/json")
@@ -133,7 +191,7 @@ func (s *Server) storeIdempotent(c *gen.Call, status int, body []byte) {
 	if st == nil || status >= 300 || c.Principal == nil {
 		return
 	}
-	if body == nil {
+	if body == nil || secretResponseOps[c.Op.ID] {
 		body = []byte{}
 	}
 	ctx := context.WithoutCancel(c.R.Context())

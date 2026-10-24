@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/aurimasniekis/go-hallpass/internal/clock"
+	"github.com/aurimasniekis/go-hallpass/internal/recording/layout"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 )
 
@@ -99,7 +100,7 @@ func Restore(ctx context.Context, backupDir, dataDir string, opts RestoreOptions
 		res.Files++
 		res.Bytes += size
 	}
-	if err := rewritePaths(ctx, filepath.Join(staging, DBFile), m.SourceDataDir, dataDir); err != nil {
+	if err := rewritePaths(ctx, filepath.Join(staging, DBFile), dataDir); err != nil {
 		return nil, err
 	}
 	if err := fsyncTree(staging); err != nil {
@@ -155,14 +156,12 @@ func emptyDir(p string) bool {
 	return err == nil && len(entries) == 0
 }
 
-// rewritePaths points recording_segments.path at the restore target. Paths are stored absolute, so a restore into
-// a different data directory would otherwise leave every segment "missing".
-func rewritePaths(ctx context.Context, dbPath, oldDataDir, newDataDir string) error {
-	oldPrefix := filepath.Join(oldDataDir, store.RecordingsDir) + string(filepath.Separator)
-	newPrefix := filepath.Join(newDataDir, store.RecordingsDir) + string(filepath.Separator)
-	if oldDataDir == "" || oldPrefix == newPrefix {
-		return nil
-	}
+// rewritePaths points recording_segments.path at each segment's canonical location in the restore target, derived
+// from the row's IDs (Verify has already refused rows whose path was not their canonical location in the source).
+// Paths are stored absolute, so a restore into a different data directory would otherwise leave every segment
+// "missing". The running gateway derives locations from IDs too and never trusts the stored path (SR-16).
+func rewritePaths(ctx context.Context, dbPath, newDataDir string) error {
+	recDir := filepath.Join(newDataDir, store.RecordingsDir)
 	q := url.Values{}
 	q.Add("_pragma", "journal_mode(DELETE)")
 	q.Add("_pragma", "trusted_schema(0)")
@@ -181,12 +180,15 @@ func rewritePaths(ctx context.Context, dbPath, oldDataDir, newDataDir string) er
 	if err != nil {
 		return fmt.Errorf("rewrite recording paths: %w", err)
 	}
-	for id, p := range todo {
-		rest, ok := strings.CutPrefix(p, oldPrefix)
-		if !ok {
+	for id, r := range todo {
+		p, err := layout.Path(recDir, r.sessionID, id)
+		if err != nil {
+			return fmt.Errorf("%w: segment %s: %w", ErrInvalid, id, err)
+		}
+		if p == r.path {
 			continue
 		}
-		if _, err := tx.ExecContext(ctx, "UPDATE recording_segments SET path = ? WHERE id = ?", newPrefix+rest, id); err != nil {
+		if _, err := tx.ExecContext(ctx, "UPDATE recording_segments SET path = ? WHERE id = ?", p, id); err != nil {
 			return fmt.Errorf("rewrite recording path of %s: %w", id, err)
 		}
 	}
@@ -199,19 +201,22 @@ func rewritePaths(ctx context.Context, dbPath, oldDataDir, newDataDir string) er
 	return fsyncPath(dbPath)
 }
 
-func segmentPaths(ctx context.Context, tx *sql.Tx) (map[string]string, error) {
-	rows, err := tx.QueryContext(ctx, "SELECT id, path FROM recording_segments")
+type pathRow struct{ sessionID, path string }
+
+func segmentPaths(ctx context.Context, tx *sql.Tx) (map[string]pathRow, error) {
+	rows, err := tx.QueryContext(ctx, "SELECT id, access_session_id, path FROM recording_segments")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := map[string]string{}
+	out := map[string]pathRow{}
 	for rows.Next() {
-		var id, p string
-		if err := rows.Scan(&id, &p); err != nil {
+		var id string
+		var r pathRow
+		if err := rows.Scan(&id, &r.sessionID, &r.path); err != nil {
 			return nil, err
 		}
-		out[id] = p
+		out[id] = r
 	}
 	return out, rows.Err()
 }

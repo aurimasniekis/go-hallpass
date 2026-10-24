@@ -423,6 +423,17 @@ type ApprovalCheck struct {
 // approver or administrator role, a matching enabled approver rule covering the duration, and not an owner of the
 // requesting agent when self-approval is prohibited.
 func (s *Snapshot) CanApprove(op OperatorInfo, agentID, serverID, roleID string, dur time.Duration) ApprovalCheck {
+	return s.authority(op, agentID, serverID, roleID, dur, true)
+}
+
+// CanAct checks the authority to deny, cancel or revoke (and terminate activity under) a request or grant: the same
+// role and approver-rule scope as CanApprove, but without the self-approval prohibition, which restricts only
+// approving (HP-POL-012). Owners may always withdraw their own agent's access (HP-GRT-009, HP-REQ-006, SR-32).
+func (s *Snapshot) CanAct(op OperatorInfo, agentID, serverID, roleID string, dur time.Duration) ApprovalCheck {
+	return s.authority(op, agentID, serverID, roleID, dur, false)
+}
+
+func (s *Snapshot) authority(op OperatorInfo, agentID, serverID, roleID string, dur time.Duration, approving bool) ApprovalCheck {
 	if !op.Enabled {
 		return ApprovalCheck{Reason: "operator disabled"}
 	}
@@ -433,7 +444,7 @@ func (s *Snapshot) CanApprove(op OperatorInfo, agentID, serverID, roleID string,
 	if srv == nil || role == nil {
 		return ApprovalCheck{Reason: "unknown target"}
 	}
-	if a := s.agents[agentID]; a != nil && s.settings.ProhibitSelfApproval && slices.Contains(a.Owners, op.ID) {
+	if a := s.agents[agentID]; approving && a != nil && s.settings.ProhibitSelfApproval && slices.Contains(a.Owners, op.ID) {
 		return ApprovalCheck{Reason: "self-approval is prohibited for owners of the requesting agent"}
 	}
 	opObj := Object{ID: op.ID, Groups: op.Groups}

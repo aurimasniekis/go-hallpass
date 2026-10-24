@@ -3,6 +3,7 @@
 package recording
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -19,12 +20,14 @@ import (
 	"time"
 
 	"github.com/aurimasniekis/go-hallpass/internal/access"
+	"github.com/aurimasniekis/go-hallpass/internal/audit"
 	"github.com/aurimasniekis/go-hallpass/internal/clock"
 	"github.com/aurimasniekis/go-hallpass/internal/ids"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
 	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/recording/hprec"
+	"github.com/aurimasniekis/go-hallpass/internal/recording/layout"
 	"github.com/aurimasniekis/go-hallpass/internal/sshproxy"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
@@ -44,6 +47,8 @@ type Options struct {
 	// Metrics records bytes/records written, queue depth, failures and segment finalize latency (HP-OBS-004).
 	// Nil disables.
 	Metrics *metrics.Metrics
+	// Audit receives retention deletions and chain-head adoption (HP-REC-013). Nil uses a writer without a sink.
+	Audit *audit.Writer
 }
 
 // Service creates recorders and maintains the segment index.
@@ -87,6 +92,9 @@ func New(s *store.Store, kr *keyring.Keyring, seq *access.Sequencer, o Options) 
 	if o.Logger == nil {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
+	if o.Audit == nil {
+		o.Audit = audit.NewWriter(kr)
+	}
 	return &Service{s: s, kr: kr, seq: seq, opts: o, log: obs.Component(o.Logger, "recording"),
 		dir: s.Path(store.RecordingsDir), qdir: s.Path(store.QuarantineDir), wrapper: KeyringWrapper{KR: kr}}
 }
@@ -115,13 +123,23 @@ func (k KeyringWrapper) Unwrap(_ string, wrapped, aad []byte) ([]byte, error) {
 	return k.KR.Open(keyring.PurposeRecording, aad, wrapped)
 }
 
-// segmentPath returns the final path for a segment (sharded by session).
+// recordingKeyID is the slot key ID KeyringWrapper writes for recording key version v.
+func recordingKeyID(v uint32) string { return "recording:v" + strconv.FormatUint(uint64(v), 10) }
+
+// segmentPath returns the canonical final path for a segment, or "" if the IDs are not valid identifiers.
 func (svc *Service) segmentPath(sessionID, segmentID string) string {
-	shard := "00"
-	if len(sessionID) >= 2 {
-		shard = sessionID[len(sessionID)-2:]
+	p, err := layout.Path(svc.dir, sessionID, segmentID)
+	if err != nil {
+		return ""
 	}
-	return filepath.Join(svc.dir, shard, sessionID, segmentID+".hprec")
+	return p
+}
+
+// SegmentFile returns the canonical location of a segment's final file (append hprec.PartialSuffix for an open
+// segment). It is derived from the row's validated IDs only; the stored path column is never used for file I/O, so a
+// tampered row cannot point at a file outside the recordings directory (SR-16). Exports must use it too.
+func (svc *Service) SegmentFile(seg db.RecordingSegment) (string, error) {
+	return layout.Path(svc.dir, seg.AccessSessionID, seg.ID)
 }
 
 // Open establishes a recording for a registered channel: the segment row is inserted, then the segment file with
@@ -211,7 +229,12 @@ func (r *channelRecorder) openSegment(ctx context.Context, ordinal uint32, prev 
 	if err != nil {
 		return fmt.Errorf("prepare segment: %w", err)
 	}
-	path := r.svc.segmentPath(r.reg.SessionID, segID)
+	path, err := layout.Path(r.svc.dir, r.reg.SessionID, segID)
+	if err != nil {
+		prep.Discard()
+		r.m().RecordingFailed(metrics.RecCreate)
+		return fmt.Errorf("segment path: %w", err)
+	}
 	hh := prep.HeaderSHA256()
 	slot := prep.Slot()
 	err = r.svc.s.W().TxNamed(ctx, "recording.open_segment", func(tx *store.Tx) error {
@@ -505,7 +528,8 @@ func (r *channelRecorder) Notice(text string) error {
 	return r.enqueue(hprec.RecGatewayNotice, hprec.StreamMeta, hprec.Notice{Code: "gateway", Message: text}.Marshal())
 }
 
-// manifestDoc is the canonical manifest hashed into the integrity chain.
+// manifestDoc is the canonical manifest hashed into the integrity chain. internal/backup mirrors it to check chain
+// entries without the keys; field order and types must stay identical.
 type manifestDoc struct {
 	SegmentID        string `json:"segment_id"`
 	SessionID        string `json:"session_id"`
@@ -520,44 +544,98 @@ type manifestDoc struct {
 	State            string `json:"state"`
 }
 
+func (d manifestDoc) sum() []byte {
+	b, _ := json.Marshal(d) // strings and integers only: cannot fail
+	s := sha256.Sum256(b)
+	return s[:]
+}
+
+// rowManifest rebuilds the manifest a chain entry was computed from out of the segment's current row, with state
+// as chained ("finalized" or "interrupted"). Any change to the row's hashes, counters or IDs after chaining changes
+// the result (SR-02).
+func rowManifest(row db.RecordingSegment, state string) manifestDoc {
+	return manifestDoc{SegmentID: row.ID, SessionID: row.AccessSessionID, ChannelID: row.ChannelID,
+		HeaderSHA256: hex.EncodeToString(row.HeaderSha256), CiphertextSHA256: hex.EncodeToString(row.CiphertextSha256),
+		Frames: uint64(row.Frames.Int64), Bytes: row.Bytes.Int64, Records: uint64(row.Records.Int64), //nolint:gosec // stored from uint64 counters
+		FirstSeq: uint64(row.FirstSeq.Int64), LastSeq: uint64(row.LastSeq.Int64), State: state} //nolint:gosec // stored from uint64 sequence numbers
+}
+
 // finalizeRowTx records a segment's manifest and appends it to the integrity chain:
 // hash = SHA-256(prev_hash || manifest_sha256), mac = HMAC(manifest key, hash) (PLAN §13.5, HP-CRY-005).
 func (svc *Service) finalizeRowTx(ctx context.Context, tx *store.Tx, segID, state string, m hprec.Manifest) error {
-	row, err := tx.Q.GetSegment(ctx, segID)
-	if err != nil {
-		return err
-	}
 	n, err := tx.Q.FinalizeSegment(ctx, db.FinalizeSegmentParams{State: state, FirstSeq: nullI(int64(m.FirstSeq)), LastSeq: nullI(int64(m.LastSeq)), //nolint:gosec // sequence numbers fit int64
 		Records: nullI(int64(m.Records)), Frames: nullI(int64(m.Frames)), Bytes: nullI(m.Bytes), CiphertextSha256: m.CiphertextSHA256[:], //nolint:gosec // counts fit int64
 		EndReason: sql.NullString{String: m.EndReason, Valid: m.EndReason != ""}, Now: sql.NullInt64{Int64: tx.NowMicros(), Valid: true}, ID: segID})
 	if err != nil || n == 0 {
 		return err
 	}
-	doc, _ := json.Marshal(manifestDoc{SegmentID: segID, SessionID: row.AccessSessionID, ChannelID: row.ChannelID,
-		HeaderSHA256: hex.EncodeToString(m.HeaderSHA256[:]), CiphertextSHA256: hex.EncodeToString(m.CiphertextSHA256[:]), Frames: m.Frames,
-		Bytes: m.Bytes, Records: m.Records, FirstSeq: m.FirstSeq, LastSeq: m.LastSeq, State: state})
-	return svc.appendChainTx(ctx, tx, segID, doc)
+	// The manifest is computed from the row as just written, exactly as verification recomputes it.
+	row, err := tx.Q.GetSegment(ctx, segID)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(row.HeaderSha256, m.HeaderSHA256[:]) {
+		return fmt.Errorf("segment %s: file header hash differs from the registered header", segID)
+	}
+	return svc.appendChainTx(ctx, tx, segID, rowManifest(row, state).sum())
 }
 
-func (svc *Service) appendChainTx(ctx context.Context, tx *store.Tx, segID string, manifest []byte) error {
-	ms := sha256.Sum256(manifest)
+// chainHeadData is the message authenticated by the chain-head record's MAC (domain-separated from entry MACs,
+// which cover a bare 32-byte hash).
+func chainHeadData(seq int64, hash []byte) []byte {
+	return []byte("hallpass/rec/chain-head/v1|" + strconv.FormatInt(seq, 10) + "|" + hex.EncodeToString(hash))
+}
+
+// appendChainTx appends one entry and, while the authenticated head record still matches the chain, moves the head
+// record to the new entry. A missing (with a non-empty chain), unauthenticated or stale head record is left as it
+// is, so that verification keeps reporting the removed or rewritten history instead of the next append hiding it.
+func (svc *Service) appendChainTx(ctx context.Context, tx *store.Tx, segID string, manifestSHA256 []byte) error {
 	seq, prev := int64(1), make([]byte, sha256.Size)
-	head, err := tx.Q.ChainHead(ctx)
+	tip, err := tx.Q.ChainHead(ctx)
+	empty := errors.Is(err, sql.ErrNoRows)
 	switch {
 	case err == nil:
-		seq, prev = head.Seq+1, head.Hash
-	case !errors.Is(err, sql.ErrNoRows):
+		seq, prev = tip.Seq+1, tip.Hash
+	case !empty:
 		return err
+	}
+	consistent := false
+	head, err := tx.Q.GetChainHeadRecord(ctx)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		consistent = empty
+	case err != nil:
+		return err
+	default:
+		consistent = !empty && head.Seq == tip.Seq && bytes.Equal(head.Hash, tip.Hash) &&
+			svc.kr.VerifyMAC(keyring.PurposeManifest, chainHeadData(head.Seq, head.Hash), head.Mac)
 	}
 	h := sha256.New()
 	h.Write(prev)
-	h.Write(ms[:])
+	h.Write(manifestSHA256)
 	hash := h.Sum(nil)
 	mac, err := svc.kr.MAC(keyring.PurposeManifest, hash)
 	if err != nil {
 		return err
 	}
-	return tx.Q.InsertChainEntry(ctx, db.InsertChainEntryParams{Seq: seq, SegmentID: segID, ManifestSha256: ms[:], PrevHash: prev, Hash: hash, Mac: mac, At: tx.NowMicros()})
+	if err := tx.Q.InsertChainEntry(ctx, db.InsertChainEntryParams{Seq: seq, SegmentID: segID, ManifestSha256: manifestSHA256, PrevHash: prev,
+		Hash: hash, Mac: mac, At: tx.NowMicros()}); err != nil {
+		return err
+	}
+	if !consistent {
+		svc.log.Error("integrity chain head record does not match the chain; left unchanged for verification",
+			slog.String(obs.FieldSegmentID, segID), slog.Int64("seq", seq))
+		return nil
+	}
+	return svc.writeChainHeadTx(ctx, tx, seq, hash)
+}
+
+func (svc *Service) writeChainHeadTx(ctx context.Context, tx *store.Tx, seq int64, hash []byte) error {
+	hm, err := svc.kr.MAC(keyring.PurposeManifest, chainHeadData(seq, hash))
+	if err != nil {
+		return err
+	}
+	return tx.Q.UpsertChainHeadRecord(ctx, db.UpsertChainHeadRecordParams{Seq: seq, Hash: hash, Mac: hm, At: tx.NowMicros()})
 }
 
 func nullI(v int64) sql.NullInt64 { return sql.NullInt64{Int64: v, Valid: true} }

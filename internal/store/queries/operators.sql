@@ -58,12 +58,26 @@ INSERT INTO operator_group_members (group_id, operator_id, source) VALUES (?, ?,
 -- name: GetTOTP :one
 SELECT * FROM mfa_totp WHERE operator_id = ?;
 
--- name: UpsertTOTP :exec
-INSERT INTO mfa_totp (operator_id, secret_enc, confirmed_at, last_step, created_at) VALUES (?, ?, NULL, 0, ?)
-ON CONFLICT (operator_id) DO UPDATE SET secret_enc = excluded.secret_enc, confirmed_at = NULL, last_step = 0, created_at = excluded.created_at;
+-- name: SetConfirmedTOTP :exec
+INSERT INTO mfa_totp (operator_id, secret_enc, confirmed_at, last_step, created_at) VALUES (sqlc.arg(operator_id), sqlc.arg(secret_enc), sqlc.arg(now), sqlc.arg(last_step), sqlc.arg(now))
+ON CONFLICT (operator_id) DO UPDATE SET secret_enc = excluded.secret_enc, confirmed_at = excluded.confirmed_at, last_step = excluded.last_step,
+  created_at = excluded.created_at;
 
--- name: ConfirmTOTP :execrows
-UPDATE mfa_totp SET confirmed_at = ?, last_step = ? WHERE operator_id = ? AND confirmed_at IS NULL;
+-- name: UpsertTOTPPending :exec
+INSERT INTO mfa_totp_pending (operator_id, secret_enc, created_at, expires_at) VALUES (?, ?, ?, ?)
+ON CONFLICT (operator_id) DO UPDATE SET secret_enc = excluded.secret_enc, created_at = excluded.created_at, expires_at = excluded.expires_at;
+
+-- name: GetTOTPPending :one
+SELECT * FROM mfa_totp_pending WHERE operator_id = ?;
+
+-- name: TakeTOTPPending :execrows
+DELETE FROM mfa_totp_pending WHERE operator_id = sqlc.arg(operator_id) AND secret_enc = sqlc.arg(secret_enc) AND expires_at > sqlc.arg(now);
+
+-- name: DeleteTOTPPending :exec
+DELETE FROM mfa_totp_pending WHERE operator_id = ?;
+
+-- name: PurgeTOTPPending :execrows
+DELETE FROM mfa_totp_pending WHERE expires_at < ?;
 
 -- name: AdvanceTOTPStep :execrows
 UPDATE mfa_totp SET last_step = sqlc.arg(step) WHERE operator_id = sqlc.arg(operator_id) AND last_step < sqlc.arg(step);

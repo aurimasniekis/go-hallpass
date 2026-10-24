@@ -469,6 +469,33 @@ func (q *Queries) ListOIDCProviders(ctx context.Context) ([]OidcProvider, error)
 	return items, nil
 }
 
+const listOperatorIDsForProvider = `-- name: ListOperatorIDsForProvider :many
+SELECT DISTINCT operator_id FROM operator_identities WHERE provider_id = ? ORDER BY operator_id
+`
+
+func (q *Queries) ListOperatorIDsForProvider(ctx context.Context, providerID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listOperatorIDsForProvider, providerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var operator_id string
+		if err := rows.Scan(&operator_id); err != nil {
+			return nil, err
+		}
+		items = append(items, operator_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const purgeAuthStates = `-- name: PurgeAuthStates :execrows
 DELETE FROM oidc_auth_states WHERE expires_at < ?
 `

@@ -53,6 +53,10 @@ hallpass backup create --config /etc/hallpass/hallpass.yaml --out /backup/hallpa
 - A segment file that is missing, or that does not match the database, is recorded in the manifest (`segments.missing`,
   `files[].problem`) instead of aborting the backup. The command prints it and exits with code 3. Run `hallpass verify` on the
   source to investigate.
+- Segment files are read only at their canonical location `recordings/<shard>/<session>/<segment>.hprec`, derived from the
+  IDs. A row whose stored path is anything else aborts the backup.
+- The manifest's `kek_id` is the KEK that wraps the keys a restore loads. Retired key versions are ignored, so a retired
+  key left under an older KEK does not block backups after `hallpass keys rotate-kek`.
 
 Exit codes: `0` ok, `1` error, `2` usage, `3` written with problems (create) or verification failed (verify, restore).
 
@@ -83,6 +87,12 @@ Verify needs no KEK and no data directory. It checks:
 4. The integrity-chain hash links (`hash = SHA-256(prev_hash || manifest_sha256)`) from seq 1 to the head.
 5. Every segment file against the header hash and ciphertext hash recorded in the database copy, and that every segment
    that should have a file is either present or recorded as missing at backup time.
+6. Paths: every `recording_segments` row must name its canonical location under the source's `recordings/` directory, its
+   IDs must be well-formed, and its file in the backup must sit at the matching `recordings/<shard>/<session>/<segment>.hprec`
+   path. A database copy that points a segment anywhere else (for example at the KEK file) is refused, even when the
+   manifest was recomputed to match.
+7. Warnings (not restore blockers, `hallpass verify` reports them after restore): a `deleted` segment without a retention
+   tombstone, and an integrity-chain head record that is missing or does not name the newest chain entry.
 
 Limits: `manifest.sha256` detects accidental damage, not a deliberate rewrite of manifest and files together. The checks in
 steps 3–5 bind files to the database copy, and **MAC verification needs the KEK**. Full authenticity is established by
@@ -101,8 +111,9 @@ On a new or clean host:
    # or into another directory: --data /var/lib/hallpass
    ```
    Restore verifies the backup first, copies every file into a staging directory inside the data directory while re-hashing it
-   against the manifest, rewrites recording paths to the new location, renames everything into place, and finally checks
-   that the KEK unlocks the restored keyring (canary). It needs no network access.
+   against the manifest, rewrites every recording path to the segment's canonical location in the new data directory
+   (derived from its IDs), renames everything into place, and finally checks that the KEK unlocks the restored keyring
+   (canary). It needs no network access.
    A target that already holds data is refused. `--force` moves the existing database, `recordings/` and `quarantine/` to
    `backups/pre-restore-<time>/` inside the data directory. Nothing is deleted.
 4. `hallpass verify --config …` authenticates every segment, including key slots, frames and integrity-chain MACs.
@@ -172,7 +183,10 @@ Verify reports:
 - an anchored `seq` that is missing locally (history truncated or deleted),
 - a local hash that differs from the anchor (history rewritten, even when every link was recomputed),
 - broken links up to the latest anchor,
-- a segment whose current metadata no longer reproduces its chain entry.
+- a segment whose current metadata no longer reproduces its chain entry,
+- a `deleted` segment without a matching retention tombstone (the tombstone's MAC needs the keys and is checked by
+  `hallpass verify`),
+- a chain-head record that does not name the newest local chain entry (newest entries removed).
 
 It **cannot** protect entries written after the latest anchor, data written after a compromise, or deletion of not-yet-anchored
 history. Ship anchors often, to storage with object lock/WORM, a transparency log, or a separate log host. A built-in scheduled push is not in v1.
@@ -188,12 +202,26 @@ disabled, and it has **no remote equivalent**: it needs shell access on the host
    hallpass admin recover --config /etc/hallpass/hallpass.yaml --email alice@example.com
    hallpass admin recover --config /etc/hallpass/hallpass.yaml --email breakglass@example.com --new-admin
    ```
-   A disabled operator is re-enabled. The command prints a single-use link and token, valid for 30 minutes and shown only once.
-   The web page behind the printed `/recover` link ships with the HTTP API (WP15) and UI (WP19); the path is provisional
-   until then.
-3. Start the server and use the link. The token is single use. Its issue is audited as `breakglass.used` (actor `cli`) and its
-   use as `breakglass.login`.
-4. Review the audit log, rotate credentials as needed, and disable or remove a break-glass account created with `--new-admin`.
+   A disabled operator is re-enabled. The command prints a single-use `<public_url>/recover?token=…` link and the token,
+   valid for 30 minutes and shown only once. Its issue is audited as `breakglass.used` (actor `cli`).
+3. Start the server, open the link and choose **Use recovery login**. Nothing is redeemed until you confirm, so link
+   scanners cannot use up the token. The page calls `POST /api/v1/auth/recover`, which:
+   - accepts the token once and only before it expires; wrong, used or expired tokens are refused with one generic error,
+     audited as `breakglass.login.failed` and throttled per source address (like password logins), and the endpoint is
+     under the strict per-IP limit for `/api/v1/auth` and the same-origin check of every mutation;
+   - ends every other session of the account and removes its TOTP factor and recovery codes (they may be lost or
+     compromised), then signs you in with a `breakglass` session (12 hours at most, idle timeout as usual). The use is
+     audited as `breakglass.login`;
+   - when policy requires MFA for the account (administrators and approvers with a password), keeps the session limited
+     until you enroll a new authenticator on the page;
+   - for accounts with a local password, returns a one-time password reset link (1 hour). A `--new-admin` account has a
+     random password that is never shown, so set one with this link. Using the link ends every session of the account,
+     including the break-glass one, so finish urgent work (for example re-enabling password login or fixing the identity
+     provider) first. With password login disabled you can sign in again only with SSO or another break-glass login.
+   - Changes that need recent authentication (provider and auth settings, operators, keys) work for 5 minutes after the
+     redemption; after that the break-glass session re-authenticates with the account's password and new authenticator.
+4. Review the audit log, rotate credentials as needed, acknowledge the break-glass alert (raised at every start until
+   acknowledged), and disable or remove a break-glass account created with `--new-admin`.
 
 First-time setup uses the same offline path: `hallpass admin bootstrap` prints a one-time `/setup?token=…` link (30 minutes,
 single use, refused once an administrator exists).

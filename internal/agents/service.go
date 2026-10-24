@@ -203,7 +203,7 @@ func (svc *Service) Create(ctx context.Context, actor audit.Actor, in CreateInpu
 				return err
 			}
 		}
-		if _, err := tx.Q.BumpPolicyVersion(ctx, tx.NowMicros()); err != nil {
+		if err := svc.bumpPolicy(ctx, tx); err != nil {
 			return err
 		}
 		_, err := svc.audit.Append(ctx, tx, audit.Event{
@@ -296,7 +296,7 @@ func (svc *Service) Update(ctx context.Context, actor audit.Actor, id string, in
 				return err
 			}
 		}
-		if _, err := tx.Q.BumpPolicyVersion(ctx, tx.NowMicros()); err != nil {
+		if err := svc.bumpPolicy(ctx, tx); err != nil {
 			return err
 		}
 		details := map[string]any{"name": name}
@@ -344,7 +344,7 @@ func (svc *Service) SetEnabled(ctx context.Context, actor audit.Actor, id string
 				}
 			}
 		}
-		if _, err := tx.Q.BumpPolicyVersion(ctx, tx.NowMicros()); err != nil {
+		if err := svc.bumpPolicy(ctx, tx); err != nil {
 			return err
 		}
 		action := "agent.enabled"
@@ -485,6 +485,22 @@ func (svc *Service) RevokeKey(ctx context.Context, actor audit.Actor, agentID, k
 		return nil, err
 	}
 	return keyFromRow(k), nil
+}
+
+// bumpPolicy increments policy_version and publishes policy.changed after commit. Group, label, source and enabled
+// changes alter policy evaluation, so the access service must re-apply policy to pending requests and active grants
+// within the enforcement bound (HP-POL-008, SR-12); the agent.* topics alone have no reconciling subscriber.
+func (svc *Service) bumpPolicy(ctx context.Context, tx *store.Tx) error {
+	v, err := tx.Q.BumpPolicyVersion(ctx, tx.NowMicros())
+	if err != nil {
+		return err
+	}
+	tx.AfterCommit(func() {
+		if svc.bus != nil {
+			svc.bus.Publish(eventbus.Event{Topic: eventbus.TopicPolicyChanged, Payload: v})
+		}
+	})
+	return nil
 }
 
 func (svc *Service) afterCommit(tx *store.Tx, topic, agentID string) {

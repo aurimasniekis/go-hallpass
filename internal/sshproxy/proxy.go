@@ -607,7 +607,9 @@ func (t *terminator) finish(code int) {
 }
 
 func (p *Proxy) hostKeyAlert(ctx context.Context, s *Session, serverID string, err error) {
-	details := map[string]any{"server_id": serverID, "error": err.Error()}
+	// The raw error embeds the destination host:port; the audit row carries the address-free classification and the
+	// raw error stays in the gateway log (HP-SRV-010, SR-08).
+	details := map[string]any{"server_id": serverID, "error": dialDetail(err)}
 	if he, ok := destssh.IsHostKeyError(err); ok {
 		details["presented_fingerprint"], details["algorithm"], details["reason"] = he.Presented, he.Algorithm, he.Reason
 	}

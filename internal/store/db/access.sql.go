@@ -843,26 +843,36 @@ func (q *Queries) GetSessionByGrant(ctx context.Context, grantID string) (Access
 	return i, err
 }
 
-const grantsChangedSince = `-- name: GrantsChangedSince :many
-SELECT id, state, expires_at, updated_at FROM grants WHERE updated_at > ? ORDER BY updated_at LIMIT 1000
+const grantsChangedAfter = `-- name: GrantsChangedAfter :many
+SELECT id, state, expires_at, updated_at FROM grants
+WHERE updated_at >= ?1 AND (updated_at > ?1 OR id > ?2)
+ORDER BY updated_at, id LIMIT ?3
 `
 
-type GrantsChangedSinceRow struct {
+type GrantsChangedAfterParams struct {
+	AfterAt int64
+	AfterID string
+	Lim     int64
+}
+
+type GrantsChangedAfterRow struct {
 	ID        string
 	State     string
 	ExpiresAt int64
 	UpdatedAt int64
 }
 
-func (q *Queries) GrantsChangedSince(ctx context.Context, updatedAt int64) ([]GrantsChangedSinceRow, error) {
-	rows, err := q.db.QueryContext(ctx, grantsChangedSince, updatedAt)
+// Keyset page over (updated_at, id), the key of the WITHOUT ROWID index ix_grant_updated: a mass revocation that stamps
+// more than one page of rows with the same timestamp cannot stall the enforcer's safety net (SR-13).
+func (q *Queries) GrantsChangedAfter(ctx context.Context, arg GrantsChangedAfterParams) ([]GrantsChangedAfterRow, error) {
+	rows, err := q.db.QueryContext(ctx, grantsChangedAfter, arg.AfterAt, arg.AfterID, arg.Lim)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []GrantsChangedSinceRow{}
+	items := []GrantsChangedAfterRow{}
 	for rows.Next() {
-		var i GrantsChangedSinceRow
+		var i GrantsChangedAfterRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.State,

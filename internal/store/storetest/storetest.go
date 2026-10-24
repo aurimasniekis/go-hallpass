@@ -14,9 +14,9 @@ import (
 )
 
 // MaxTxDuration is the longest a write transaction may take in tests (HP-DB-004).
-// HALLPASS_TEST_TX_MAX overrides it for slow CI runners; the default matches the requirement.
+// HP_TEST_TX_MAX overrides it for slow CI runners; the default matches the requirement.
 var MaxTxDuration = func() time.Duration {
-	if v, err := time.ParseDuration(os.Getenv("HALLPASS_TEST_TX_MAX")); err == nil && v > 0 {
+	if v, err := time.ParseDuration(os.Getenv("HP_TEST_TX_MAX")); err == nil && v > 0 {
 		return v
 	}
 	return 100 * time.Millisecond

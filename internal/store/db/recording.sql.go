@@ -11,13 +11,14 @@ import (
 )
 
 const allSegmentPaths = `-- name: AllSegmentPaths :many
-SELECT id, path, state FROM recording_segments
+SELECT id, access_session_id, path, state FROM recording_segments
 `
 
 type AllSegmentPathsRow struct {
-	ID    string
-	Path  string
-	State string
+	ID              string
+	AccessSessionID string
+	Path            string
+	State           string
 }
 
 func (q *Queries) AllSegmentPaths(ctx context.Context) ([]AllSegmentPathsRow, error) {
@@ -29,7 +30,12 @@ func (q *Queries) AllSegmentPaths(ctx context.Context) ([]AllSegmentPathsRow, er
 	items := []AllSegmentPathsRow{}
 	for rows.Next() {
 		var i AllSegmentPathsRow
-		if err := rows.Scan(&i.ID, &i.Path, &i.State); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccessSessionID,
+			&i.Path,
+			&i.State,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -41,6 +47,74 @@ func (q *Queries) AllSegmentPaths(ctx context.Context) ([]AllSegmentPathsRow, er
 		return nil, err
 	}
 	return items, nil
+}
+
+const allSegments = `-- name: AllSegments :many
+SELECT id, access_session_id, channel_id, ordinal, path, format, key_id, wrapped_dek, header_sha256, state, first_seq, last_seq, records, frames, bytes, ciphertext_sha256, end_reason, opened_at, finalized_at, verified_at, verify_result FROM recording_segments ORDER BY opened_at, id
+`
+
+func (q *Queries) AllSegments(ctx context.Context) ([]RecordingSegment, error) {
+	rows, err := q.db.QueryContext(ctx, allSegments)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RecordingSegment{}
+	for rows.Next() {
+		var i RecordingSegment
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccessSessionID,
+			&i.ChannelID,
+			&i.Ordinal,
+			&i.Path,
+			&i.Format,
+			&i.KeyID,
+			&i.WrappedDek,
+			&i.HeaderSha256,
+			&i.State,
+			&i.FirstSeq,
+			&i.LastSeq,
+			&i.Records,
+			&i.Frames,
+			&i.Bytes,
+			&i.CiphertextSha256,
+			&i.EndReason,
+			&i.OpenedAt,
+			&i.FinalizedAt,
+			&i.VerifiedAt,
+			&i.VerifyResult,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const chainEntryForSegment = `-- name: ChainEntryForSegment :one
+SELECT seq, segment_id, manifest_sha256, prev_hash, hash, mac, at FROM integrity_chain WHERE segment_id = ?
+`
+
+func (q *Queries) ChainEntryForSegment(ctx context.Context, segmentID string) (IntegrityChain, error) {
+	row := q.db.QueryRowContext(ctx, chainEntryForSegment, segmentID)
+	var i IntegrityChain
+	err := row.Scan(
+		&i.Seq,
+		&i.SegmentID,
+		&i.ManifestSha256,
+		&i.PrevHash,
+		&i.Hash,
+		&i.Mac,
+		&i.At,
+	)
+	return i, err
 }
 
 const chainFrom = `-- name: ChainFrom :many
@@ -212,6 +286,23 @@ func (q *Queries) FinalizeSegment(ctx context.Context, arg FinalizeSegmentParams
 	return result.RowsAffected()
 }
 
+const getChainHeadRecord = `-- name: GetChainHeadRecord :one
+SELECT seq, hash, mac FROM recording_chain_head WHERE id = 1
+`
+
+type GetChainHeadRecordRow struct {
+	Seq  int64
+	Hash []byte
+	Mac  []byte
+}
+
+func (q *Queries) GetChainHeadRecord(ctx context.Context) (GetChainHeadRecordRow, error) {
+	row := q.db.QueryRowContext(ctx, getChainHeadRecord)
+	var i GetChainHeadRecordRow
+	err := row.Scan(&i.Seq, &i.Hash, &i.Mac)
+	return i, err
+}
+
 const getSegment = `-- name: GetSegment :one
 SELECT id, access_session_id, channel_id, ordinal, path, format, key_id, wrapped_dek, header_sha256, state, first_seq, last_seq, records, frames, bytes, ciphertext_sha256, end_reason, opened_at, finalized_at, verified_at, verify_result FROM recording_segments WHERE id = ?
 `
@@ -241,6 +332,42 @@ func (q *Queries) GetSegment(ctx context.Context, id string) (RecordingSegment, 
 		&i.FinalizedAt,
 		&i.VerifiedAt,
 		&i.VerifyResult,
+	)
+	return i, err
+}
+
+const getSessionRetention = `-- name: GetSessionRetention :one
+SELECT state, delete_after FROM access_sessions WHERE id = ?
+`
+
+type GetSessionRetentionRow struct {
+	State       string
+	DeleteAfter sql.NullInt64
+}
+
+func (q *Queries) GetSessionRetention(ctx context.Context, id string) (GetSessionRetentionRow, error) {
+	row := q.db.QueryRowContext(ctx, getSessionRetention, id)
+	var i GetSessionRetentionRow
+	err := row.Scan(&i.State, &i.DeleteAfter)
+	return i, err
+}
+
+const getTombstone = `-- name: GetTombstone :one
+SELECT segment_id, access_session_id, prior_state, chain_seq, delete_after, deleted_at, audit_event_id, mac FROM recording_tombstones WHERE segment_id = ?
+`
+
+func (q *Queries) GetTombstone(ctx context.Context, segmentID string) (RecordingTombstone, error) {
+	row := q.db.QueryRowContext(ctx, getTombstone, segmentID)
+	var i RecordingTombstone
+	err := row.Scan(
+		&i.SegmentID,
+		&i.AccessSessionID,
+		&i.PriorState,
+		&i.ChainSeq,
+		&i.DeleteAfter,
+		&i.DeletedAt,
+		&i.AuditEventID,
+		&i.Mac,
 	)
 	return i, err
 }
@@ -321,6 +448,36 @@ func (q *Queries) InsertSegment(ctx context.Context, arg InsertSegmentParams) er
 		arg.WrappedDek,
 		arg.HeaderSha256,
 		arg.OpenedAt,
+	)
+	return err
+}
+
+const insertTombstone = `-- name: InsertTombstone :exec
+INSERT INTO recording_tombstones (segment_id, access_session_id, prior_state, chain_seq, delete_after, deleted_at, audit_event_id, mac)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type InsertTombstoneParams struct {
+	SegmentID       string
+	AccessSessionID string
+	PriorState      string
+	ChainSeq        int64
+	DeleteAfter     int64
+	DeletedAt       int64
+	AuditEventID    string
+	Mac             []byte
+}
+
+func (q *Queries) InsertTombstone(ctx context.Context, arg InsertTombstoneParams) error {
+	_, err := q.db.ExecContext(ctx, insertTombstone,
+		arg.SegmentID,
+		arg.AccessSessionID,
+		arg.PriorState,
+		arg.ChainSeq,
+		arg.DeleteAfter,
+		arg.DeletedAt,
+		arg.AuditEventID,
+		arg.Mac,
 	)
 	return err
 }
@@ -553,6 +710,116 @@ func (q *Queries) SegmentsForSession(ctx context.Context, accessSessionID string
 	return items, nil
 }
 
+const segmentsNeedingRewrap = `-- name: SegmentsNeedingRewrap :many
+SELECT id, access_session_id, channel_id, ordinal, path, format, key_id, wrapped_dek, header_sha256, state, first_seq, last_seq, records, frames, bytes, ciphertext_sha256, end_reason, opened_at, finalized_at, verified_at, verify_result FROM recording_segments WHERE key_id != ?1 AND state NOT IN ('open', 'deleted') AND id > ?2
+ORDER BY id LIMIT ?3
+`
+
+type SegmentsNeedingRewrapParams struct {
+	ActiveKeyID string
+	After       string
+	Lim         int64
+}
+
+func (q *Queries) SegmentsNeedingRewrap(ctx context.Context, arg SegmentsNeedingRewrapParams) ([]RecordingSegment, error) {
+	rows, err := q.db.QueryContext(ctx, segmentsNeedingRewrap, arg.ActiveKeyID, arg.After, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RecordingSegment{}
+	for rows.Next() {
+		var i RecordingSegment
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccessSessionID,
+			&i.ChannelID,
+			&i.Ordinal,
+			&i.Path,
+			&i.Format,
+			&i.KeyID,
+			&i.WrappedDek,
+			&i.HeaderSha256,
+			&i.State,
+			&i.FirstSeq,
+			&i.LastSeq,
+			&i.Records,
+			&i.Frames,
+			&i.Bytes,
+			&i.CiphertextSha256,
+			&i.EndReason,
+			&i.OpenedAt,
+			&i.FinalizedAt,
+			&i.VerifiedAt,
+			&i.VerifyResult,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const segmentsWithFilesAfter = `-- name: SegmentsWithFilesAfter :many
+SELECT id, access_session_id, channel_id, ordinal, path, format, key_id, wrapped_dek, header_sha256, state, first_seq, last_seq, records, frames, bytes, ciphertext_sha256, end_reason, opened_at, finalized_at, verified_at, verify_result FROM recording_segments WHERE state IN ('finalized', 'interrupted') AND id > ?1 ORDER BY id LIMIT ?2
+`
+
+type SegmentsWithFilesAfterParams struct {
+	After string
+	Lim   int64
+}
+
+func (q *Queries) SegmentsWithFilesAfter(ctx context.Context, arg SegmentsWithFilesAfterParams) ([]RecordingSegment, error) {
+	rows, err := q.db.QueryContext(ctx, segmentsWithFilesAfter, arg.After, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RecordingSegment{}
+	for rows.Next() {
+		var i RecordingSegment
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccessSessionID,
+			&i.ChannelID,
+			&i.Ordinal,
+			&i.Path,
+			&i.Format,
+			&i.KeyID,
+			&i.WrappedDek,
+			&i.HeaderSha256,
+			&i.State,
+			&i.FirstSeq,
+			&i.LastSeq,
+			&i.Records,
+			&i.Frames,
+			&i.Bytes,
+			&i.CiphertextSha256,
+			&i.EndReason,
+			&i.OpenedAt,
+			&i.FinalizedAt,
+			&i.VerifiedAt,
+			&i.VerifyResult,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setSegmentState = `-- name: SetSegmentState :execrows
 UPDATE recording_segments SET state = ?1, end_reason = ?2 WHERE id = ?3 AND state = ?4
 `
@@ -588,5 +855,54 @@ type SetSessionDeleteAfterParams struct {
 
 func (q *Queries) SetSessionDeleteAfter(ctx context.Context, arg SetSessionDeleteAfterParams) error {
 	_, err := q.db.ExecContext(ctx, setSessionDeleteAfter, arg.DeleteAfter, arg.ID)
+	return err
+}
+
+const updateSegmentKey = `-- name: UpdateSegmentKey :execrows
+UPDATE recording_segments SET key_id = ?1, wrapped_dek = ?2
+WHERE id = ?3 AND key_id = ?4 AND wrapped_dek = ?5 AND state != 'deleted'
+`
+
+type UpdateSegmentKeyParams struct {
+	KeyID         string
+	WrappedDek    []byte
+	ID            string
+	OldKeyID      string
+	OldWrappedDek []byte
+}
+
+func (q *Queries) UpdateSegmentKey(ctx context.Context, arg UpdateSegmentKeyParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateSegmentKey,
+		arg.KeyID,
+		arg.WrappedDek,
+		arg.ID,
+		arg.OldKeyID,
+		arg.OldWrappedDek,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const upsertChainHeadRecord = `-- name: UpsertChainHeadRecord :exec
+INSERT INTO recording_chain_head (id, seq, hash, mac, at) VALUES (1, ?1, ?2, ?3, ?4)
+ON CONFLICT (id) DO UPDATE SET seq = excluded.seq, hash = excluded.hash, mac = excluded.mac, at = excluded.at
+`
+
+type UpsertChainHeadRecordParams struct {
+	Seq  int64
+	Hash []byte
+	Mac  []byte
+	At   int64
+}
+
+func (q *Queries) UpsertChainHeadRecord(ctx context.Context, arg UpsertChainHeadRecordParams) error {
+	_, err := q.db.ExecContext(ctx, upsertChainHeadRecord,
+		arg.Seq,
+		arg.Hash,
+		arg.Mac,
+		arg.At,
+	)
 	return err
 }

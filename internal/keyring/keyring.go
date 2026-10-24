@@ -405,6 +405,13 @@ func (kr *Keyring) VerifyMAC(p Purpose, data, m []byte) bool {
 	return ok
 }
 
+// ActiveVersion returns the active key version of purpose p (0 if the keyring is not loaded or p is unknown).
+func (kr *Keyring) ActiveVersion(p Purpose) uint32 {
+	kr.mu.RLock()
+	defer kr.mu.RUnlock()
+	return kr.active[p]
+}
+
 // KEKID returns the identifier of the KEK wrapping this keyring.
 func (kr *Keyring) KEKID() string { return kr.wrapper.ID() }
 
@@ -500,8 +507,11 @@ func (kr *Keyring) Retire(ctx context.Context, s *store.Store, p Purpose, versio
 	})
 }
 
-// RotateKEK rewraps every non-retired purpose key from oldW to newW in one transaction (offline operation; the
-// caller holds the data-directory lock). After success only newW can load the keyring.
+// RotateKEK rewraps every purpose key from oldW to newW in one transaction (offline operation; the caller holds the
+// data-directory lock). After success only newW can load the keyring. Retired keys wrapped under oldW are rewrapped
+// too, so that no row is left under the old KEK (SR-18: backups refuse a keyring wrapped under several KEKs, and the
+// old KEK should protect nothing once rotation is done). Retired keys still wrapped under an even older KEK (left by
+// a rotation from before this rule) cannot be unwrapped and are left as they are; they are never loaded.
 func RotateKEK(ctx context.Context, s *store.Store, oldW, newW KeyWrapper) (int, error) {
 	if oldW.ID() == newW.ID() {
 		return 0, errors.New("new KEK is identical to the current KEK")
@@ -514,7 +524,7 @@ func RotateKEK(ctx context.Context, s *store.Store, oldW, newW KeyWrapper) (int,
 			return err
 		}
 		for _, r := range rows {
-			if r.State == StateRetired {
+			if r.State == StateRetired && r.WrapKekID != oldW.ID() {
 				continue
 			}
 			if r.WrapKekID != oldW.ID() {

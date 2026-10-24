@@ -299,3 +299,27 @@ func TestSlotCodec(t *testing.T) {
 		t.Fatal("empty slot not reported as empty")
 	}
 }
+
+// SR-16/SR-39: slot maintenance checks the caller's header expectations before writing, so a substituted file (a
+// different segment at the expected path) is never modified.
+func TestSlotMaintenanceChecksHeader(t *testing.T) {
+	w1, w2 := newTestWrapper(t, "rec-v1"), newTestWrapper(t, "rec-v2")
+	recs := genRecords(newRand(), KindPTY, 5, 64)
+	path := tempPath(t, "seg.hprec")
+	m := writeSegment(t, path, testHeader(KindPTY), w1, recs, 2)
+	before := readFile(t, path)
+	var other [32]byte
+	other[0] = 1
+	if _, err := RewrapSlot(path, w1, w2, ExpectHeaderSHA256(other)); !errors.Is(err, ErrHeaderMismatch) {
+		t.Fatalf("rewrap of a substituted file: %v", err)
+	}
+	if _, _, err := RepairSlotIfNeeded(path, w1, "rec-v1", nil, ExpectSegmentID("seg_other")); !errors.Is(err, ErrHeaderMismatch) {
+		t.Fatalf("repair of a substituted file: %v", err)
+	}
+	if !bytes.Equal(before, readFile(t, path)) {
+		t.Fatal("file modified despite the header mismatch")
+	}
+	if _, err := RewrapSlot(path, w1, w2, ExpectHeaderSHA256(m.HeaderSHA256), ExpectSegmentID(m.SegmentID)); err != nil {
+		t.Fatal(err)
+	}
+}

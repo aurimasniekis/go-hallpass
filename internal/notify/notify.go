@@ -27,6 +27,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/opauth"
 	"github.com/aurimasniekis/go-hallpass/internal/outbox"
 	"github.com/aurimasniekis/go-hallpass/internal/policy"
+	"github.com/aurimasniekis/go-hallpass/internal/ratelimit"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
 )
@@ -67,11 +68,26 @@ type Service struct {
 	opts      Options
 	log       *slog.Logger
 
-	mu       sync.Mutex
-	clients  map[string]cachedProvider // integration ID → provider client (per version)
-	limiter  map[string][]time.Time    // operator ID → recent chat decisions
-	rejected map[string]time.Time      // rejection audit rate limit
+	mu      sync.Mutex
+	clients map[string]cachedProvider // integration ID → provider client (per version)
+	limiter map[string][]time.Time    // operator ID → recent chat decisions
+
+	// Bounded limiters (ratelimit.Window caps its key table, SR-43): rejection-audit dedupe, per provider user
+	// actions (HP-NTF-012, SR-40) and refused-action audit (SR-41, per key and globally).
+	rejected, userActions, refusals, refusalsAll *ratelimit.Window
+	// knownIntegrations gates the webhook limiter to existing integration IDs (SR-19); invalidated on changes.
+	knownIntegrations *ratelimit.KnownSet
 }
+
+// Inbound chat limits (HP-NTF-012, PLAN §10.7).
+const (
+	// UserActionsPerSecond limits verified actions (clicks, link and status commands) per provider user.
+	UserActionsPerSecond = 5
+	// refusalAuditsPerMinute bounds refused-action audit rows per integration, user and reason, and
+	// refusalAuditsGlobal all of them together.
+	refusalAuditsPerMinute = 3
+	refusalAuditsGlobal    = 120
+)
 
 type cachedProvider struct {
 	version int64
@@ -109,7 +125,12 @@ func New(d Deps, o Options) *Service {
 	o.PublicURL = strings.TrimRight(o.PublicURL, "/")
 	svc := &Service{s: d.Store, kr: d.Keyring, audit: d.Audit, access: d.Access, engine: d.Engine, agents: d.Agents, inventory: d.Inventory,
 		auth: d.Auth, out: d.Outbox, opts: o, log: obs.Component(o.Logger, "notify"), clients: map[string]cachedProvider{},
-		limiter: map[string][]time.Time{}, rejected: map[string]time.Time{}}
+		limiter:     map[string][]time.Time{},
+		rejected:    &ratelimit.Window{Limit: 1, Period: time.Minute, MaxKeys: 4096},
+		userActions: &ratelimit.Window{Limit: UserActionsPerSecond, Period: time.Second, MaxKeys: 4096},
+		refusals:    &ratelimit.Window{Limit: refusalAuditsPerMinute, Period: time.Minute, MaxKeys: 4096},
+		refusalsAll: &ratelimit.Window{Limit: refusalAuditsGlobal, Period: time.Minute}}
+	svc.knownIntegrations = &ratelimit.KnownSet{Load: svc.integrationIDs}
 	if d.Outbox != nil {
 		d.Outbox.RegisterProvider(OutboxProvider, svc)
 	}
@@ -132,6 +153,13 @@ func newTokenID() (string, error) {
 // tokenHash is HMAC-SHA-256 with the token purpose key: possession of the database alone does not reveal tokens.
 func (svc *Service) tokenHash(id string) ([]byte, error) {
 	return svc.kr.MAC(keyring.PurposeToken, []byte("hallpass/action-token/v1|"+id))
+}
+
+// tokenHashes are the candidate stored hashes of an action token under every non-retired token key, active first:
+// tokens issued before a token-key rotation keep working until they expire (HP-CRY-002, SR-36). Inserts use
+// tokenHash (active key only).
+func (svc *Service) tokenHashes(id string) ([][]byte, error) {
+	return svc.kr.MACAll(keyring.PurposeToken, []byte("hallpass/action-token/v1|"+id))
 }
 
 // pendingBody is the outbox payload of a new approval message. Content is rendered at delivery time from the

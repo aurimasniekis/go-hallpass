@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/aurimasniekis/go-hallpass/internal/recording/hprec"
+	"github.com/aurimasniekis/go-hallpass/internal/recording/layout"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 )
 
@@ -233,6 +235,13 @@ func checkDatabase(ctx context.Context, dbPath string, m *Manifest, rep *Report)
 		rep.problem("integrity chain in the database copy: %v", err)
 	case head.Seq != m.ChainHead.Seq || head.Hash != m.ChainHead.Hash:
 		rep.problem("integrity chain head %d %s differs from the manifest (%d %s)", head.Seq, head.Hash, m.ChainHead.Seq, m.ChainHead.Hash)
+	default:
+		// Not a restore blocker: `hallpass verify` reports it on the restored system.
+		if p, err := headRecordProblem(ctx, d, head); err != nil {
+			rep.problem("%v", err)
+		} else if p != "" {
+			rep.Warnings = append(rep.Warnings, p)
+		}
 	}
 	checkSegments(ctx, d, dbPath, m, rep)
 }
@@ -274,6 +283,21 @@ func checkSegments(ctx context.Context, d *sql.DB, dbPath string, m *Manifest, r
 	byID := make(map[string]segmentRow, len(rows))
 	for _, r := range rows {
 		byID[r.id] = r
+		// SR-16: every row must have valid IDs and name its canonical location; restore rewrites paths from the IDs.
+		if _, err := layout.RelPath(r.sessionID, r.id); err != nil {
+			rep.problem("segment %s: %v", r.id, err)
+		} else if !layout.Matches(r.path, r.sessionID, r.id) {
+			rep.problem("segment %s: stored path %q is not its location under recordings/", r.id, r.path)
+		}
+		if r.state == "deleted" {
+			if _, _, ok, err := tombstoneOf(ctx, d, r.id); err != nil {
+				rep.problem("%v", err)
+			} else if !ok {
+				if has, _ := hasTable(ctx, d, "recording_tombstones"); has {
+					rep.Warnings = append(rep.Warnings, fmt.Sprintf("segment %s is deleted without a retention tombstone", r.id))
+				}
+			}
+		}
 	}
 	backupDir := filepath.Dir(dbPath)
 	inBackup := map[string]bool{}
@@ -286,6 +310,13 @@ func checkSegments(ctx context.Context, d *sql.DB, dbPath string, m *Manifest, r
 		if !ok {
 			rep.problem("segment file %s has no row in the database copy", f.Path)
 			continue
+		}
+		if rel, err := layout.RelPath(row.sessionID, row.id); err == nil {
+			want := path.Join(store.RecordingsDir, filepath.ToSlash(rel))
+			if f.Path != want && (!f.OpenAtSnapshot || f.Path != want+hprec.PartialSuffix) {
+				rep.problem("segment %s: backup file path %s is not its location %s", f.SegmentID, f.Path, want)
+				continue
+			}
 		}
 		if f.OpenAtSnapshot != (row.state == "open") {
 			rep.problem("segment %s: manifest and database copy disagree about its state", f.SegmentID)

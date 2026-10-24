@@ -150,6 +150,22 @@ func (svc *Service) runDisableHooks(ctx context.Context, tx *store.Tx, kind, id 
 	return nil
 }
 
+// bumpPolicy increments policy_version and publishes policy.changed after commit. Server, role, group, label and
+// limit changes alter policy evaluation, so the access service must re-apply policy to pending requests and active
+// grants within the enforcement bound (HP-POL-008, SR-12); inventory.changed alone has no reconciling subscriber.
+func (svc *Service) bumpPolicy(ctx context.Context, tx *store.Tx) error {
+	v, err := tx.Q.BumpPolicyVersion(ctx, tx.NowMicros())
+	if err != nil {
+		return err
+	}
+	tx.AfterCommit(func() {
+		if svc.bus != nil {
+			svc.bus.Publish(eventbus.Event{Topic: eventbus.TopicPolicyChanged, Payload: v})
+		}
+	})
+	return nil
+}
+
 func (svc *Service) publish(tx *store.Tx, topic, key string) {
 	tx.AfterCommit(func() {
 		if svc.bus != nil {
@@ -239,7 +255,7 @@ func (svc *Service) CreateServer(ctx context.Context, actor audit.Actor, in Serv
 		if err := svc.setServerGroupsLabels(ctx, tx, id, srv.Groups, srv.Labels); err != nil {
 			return err
 		}
-		if _, err := tx.Q.BumpPolicyVersion(ctx, tx.NowMicros()); err != nil {
+		if err := svc.bumpPolicy(ctx, tx); err != nil {
 			return err
 		}
 		_, err := svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "server.created", Target: audit.Target{Type: "server", ID: id},
@@ -324,7 +340,7 @@ func (svc *Service) UpdateServer(ctx context.Context, actor audit.Actor, id stri
 		if err := svc.setServerGroupsLabels(ctx, tx, id, grps, labels); err != nil {
 			return err
 		}
-		if _, err := tx.Q.BumpPolicyVersion(ctx, tx.NowMicros()); err != nil {
+		if err := svc.bumpPolicy(ctx, tx); err != nil {
 			return err
 		}
 		details := map[string]any{"alias": next.Alias}
@@ -358,7 +374,7 @@ func (svc *Service) SetServerEnabled(ctx context.Context, actor audit.Actor, id 
 				return err
 			}
 		}
-		if _, err := tx.Q.BumpPolicyVersion(ctx, tx.NowMicros()); err != nil {
+		if err := svc.bumpPolicy(ctx, tx); err != nil {
 			return err
 		}
 		action, topic := "server.enabled", eventbus.TopicInventoryChanged

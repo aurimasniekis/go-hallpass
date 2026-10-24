@@ -92,8 +92,12 @@ WHERE id = sqlc.arg(id) AND state = 'active';
 UPDATE grants SET expires_at = sqlc.arg(expires_at), updated_at = sqlc.arg(now)
 WHERE id = sqlc.arg(id) AND state = 'active' AND expires_at > sqlc.arg(expires_at);
 
--- name: GrantsChangedSince :many
-SELECT id, state, expires_at, updated_at FROM grants WHERE updated_at > ? ORDER BY updated_at LIMIT 1000;
+-- name: GrantsChangedAfter :many
+-- Keyset page over (updated_at, id), the key of the WITHOUT ROWID index ix_grant_updated: a mass revocation that stamps
+-- more than one page of rows with the same timestamp cannot stall the enforcer's safety net (SR-13).
+SELECT id, state, expires_at, updated_at FROM grants
+WHERE updated_at >= sqlc.arg(after_at) AND (updated_at > sqlc.arg(after_at) OR id > sqlc.arg(after_id))
+ORDER BY updated_at, id LIMIT sqlc.arg(lim);
 
 -- name: InsertSession :exec
 INSERT INTO access_sessions (id, grant_id, state, seq_reserved, opened_at, retention_class) VALUES (?, ?, 'open', ?, ?, ?);

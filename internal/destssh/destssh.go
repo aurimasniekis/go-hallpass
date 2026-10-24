@@ -54,7 +54,7 @@ func Dial(ctx context.Context, guard *egress.Guard, t Target, timeout time.Durat
 	cfg := &ssh.ClientConfig{
 		Config:            sshalg.Config(),
 		User:              t.User,
-		Auth:              []ssh.AuthMethod{ssh.PublicKeys(t.Signers...)},
+		Auth:              []ssh.AuthMethod{ssh.PublicKeys(RestrictRSA(t.Signers)...)},
 		HostKeyCallback:   t.Verifier.Callback,
 		HostKeyAlgorithms: t.Verifier.Algorithms,
 		ClientVersion:     ClientVersion,
@@ -84,6 +84,24 @@ func Dial(ctx context.Context, guard *egress.Guard, t Target, timeout time.Durat
 		_ = conn.SetDeadline(time.Time{})
 		return ssh.NewClient(r.c, r.chans, r.reqs), nil
 	}
+}
+
+// RestrictRSA limits plain RSA signers to rsa-sha2-512/256 so a destination that sends no server-sig-algs cannot
+// make the gateway sign with SHA-1 "ssh-rsa" (HP-SSH-004 on the destination leg, SR-45). Other signers are returned
+// unchanged.
+func RestrictRSA(signers []ssh.Signer) []ssh.Signer {
+	out := make([]ssh.Signer, 0, len(signers))
+	for _, s := range signers {
+		if as, ok := s.(ssh.AlgorithmSigner); ok && s.PublicKey().Type() == ssh.KeyAlgoRSA {
+			if ms, err := ssh.NewSignerWithAlgorithms(as, []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256}); err == nil {
+				out = append(out, ms)
+				continue
+			}
+			continue // never fall back to an unrestricted RSA signer
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 // IsHostKeyError reports whether err is a host verification failure and returns its details.

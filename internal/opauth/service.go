@@ -277,8 +277,10 @@ func (svc *Service) create(ctx context.Context, actor audit.Actor, in CreateInpu
 	return svc.Get(ctx, id)
 }
 
-// SetRoles replaces an operator's manual roles. Removing the last enabled administrator is refused (HP-AUTH-015);
-// reducing privileges revokes the operator's sessions (HP-AUTH-010).
+// SetRoles replaces an operator's manual roles. Removing the last enabled administrator, or under SSO-only
+// enforcement the last administrator who can sign in with SSO, is refused (HP-AUTH-015). Any change of the effective
+// roles revokes the operator's sessions: a reduction must take effect at once (HP-AUTH-010) and an elevation is only
+// granted to a new session (rotation on privilege change, HP-AUTH-012).
 func (svc *Service) SetRoles(ctx context.Context, actor audit.Actor, id string, roles []string) (*Operator, error) {
 	if err := validRoles(roles); err != nil {
 		return nil, err
@@ -295,6 +297,10 @@ func (svc *Service) SetRoles(ctx context.Context, actor audit.Actor, id string, 
 		if err != nil {
 			return err
 		}
+		guard, err := newSSOAdminGuard(ctx, tx.Q)
+		if err != nil {
+			return err
+		}
 		if err := tx.Q.DeleteOperatorRolesBySource(ctx, db.DeleteOperatorRolesBySourceParams{OperatorID: id, Source: "manual"}); err != nil {
 			return err
 		}
@@ -306,11 +312,14 @@ func (svc *Service) SetRoles(ctx context.Context, actor audit.Actor, id string, 
 		if err := ensureAdminRemains(ctx, tx); err != nil {
 			return err
 		}
+		if err := guard.check(ctx, tx.Q); err != nil {
+			return err
+		}
 		after, err := svc.hydrate(ctx, tx.Q, row)
 		if err != nil {
 			return err
 		}
-		if reduced(before.Roles, after.Roles) {
+		if !slices.Equal(before.Roles, after.Roles) {
 			if _, err := tx.Q.RevokeOperatorSessions(ctx, db.RevokeOperatorSessionsParams{Now: sql.NullInt64{Int64: tx.NowMicros(), Valid: true},
 				Reason: sql.NullString{String: "roles_changed", Valid: true}, OperatorID: id, ExceptHash: []byte{}}); err != nil {
 				return err
@@ -327,17 +336,57 @@ func (svc *Service) SetRoles(ctx context.Context, actor audit.Actor, id string, 
 	return svc.Get(ctx, id)
 }
 
-func reduced(before, after []string) bool {
-	for _, r := range before {
-		if !slices.Contains(after, r) {
-			return true
-		}
-	}
-	return false
-}
-
 // ErrLastAdmin protects against administrator lockout.
 var ErrLastAdmin = apperr.New(apperr.CodePrecondition, "this change would leave no enabled administrator")
+
+// ErrLastSSOAdmin protects SSO-only deployments against administrator lockout (HP-AUTH-015, SR-06).
+var ErrLastSSOAdmin = apperr.New(apperr.CodePrecondition,
+	"password login is disabled and this change would leave no enabled administrator who can sign in with SSO; re-enable password login first")
+
+// SSOAdminsAtRisk reports whether SSO-only enforcement is on and no enabled administrator with a linked identity on an
+// enabled provider remains, i.e. nobody could administer Hallpass without break-glass (HP-AUTH-015).
+func SSOAdminsAtRisk(ctx context.Context, q *db.Queries) (bool, error) {
+	n, on, err := ssoAdmins(ctx, q)
+	return on && n == 0, err
+}
+
+func ssoAdmins(ctx context.Context, q *db.Queries) (n int64, ssoOnly bool, err error) {
+	v, err := q.GetSetting(ctx, SettingLocalLoginDisabled)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && v.Value != "true") {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	n, err = q.CountSSOAdmins(ctx)
+	return n, true, err
+}
+
+// ssoAdminGuard remembers how many SSO-capable administrators existed before a change; check refuses the change when
+// SSO-only enforcement is on and it removed the last one.
+type ssoAdminGuard struct {
+	on     bool
+	before int64
+}
+
+func newSSOAdminGuard(ctx context.Context, q *db.Queries) (ssoAdminGuard, error) {
+	n, on, err := ssoAdmins(ctx, q)
+	return ssoAdminGuard{on: on, before: n}, err
+}
+
+func (g ssoAdminGuard) check(ctx context.Context, q *db.Queries) error {
+	if !g.on || g.before == 0 {
+		return nil
+	}
+	n, err := q.CountSSOAdmins(ctx)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrLastSSOAdmin
+	}
+	return nil
+}
 
 func ensureAdminRemains(ctx context.Context, tx *store.Tx) error {
 	n, err := tx.Q.CountEnabledAdmins(ctx)
@@ -355,9 +404,13 @@ func ensureAdminRemains(ctx context.Context, tx *store.Tx) error {
 }
 
 // SetEnabled enables or disables an operator; disabling revokes all sessions and is refused for the last enabled
-// administrator.
+// administrator and, under SSO-only enforcement, for the last administrator who can sign in with SSO.
 func (svc *Service) SetEnabled(ctx context.Context, actor audit.Actor, id string, enabled bool) (*Operator, error) {
 	err := svc.s.W().TxNamed(ctx, "opauth.set_enabled", func(tx *store.Tx) error {
+		guard, err := newSSOAdminGuard(ctx, tx.Q)
+		if err != nil {
+			return err
+		}
 		n, err := tx.Q.SetOperatorEnabled(ctx, db.SetOperatorEnabledParams{Enabled: b2i(enabled), Now: tx.NowMicros(), ID: id})
 		if err != nil || n == 0 {
 			if _, gerr := tx.Q.GetOperator(ctx, id); errors.Is(gerr, sql.ErrNoRows) {
@@ -366,6 +419,9 @@ func (svc *Service) SetEnabled(ctx context.Context, actor audit.Actor, id string
 			return err
 		}
 		if err := ensureAdminRemains(ctx, tx); err != nil {
+			return err
+		}
+		if err := guard.check(ctx, tx.Q); err != nil {
 			return err
 		}
 		if !enabled {

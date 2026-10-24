@@ -26,6 +26,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/buildinfo"
 	"github.com/aurimasniekis/go-hallpass/internal/clock"
 	"github.com/aurimasniekis/go-hallpass/internal/recording/hprec"
+	"github.com/aurimasniekis/go-hallpass/internal/recording/layout"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 )
 
@@ -273,8 +274,10 @@ func readSnapshot(ctx context.Context, dbPath string) (*snapshotInfo, error) {
 	return info, nil
 }
 
+// kekIDs lists the KEKs wrapping the keys a restored keyring loads. Retired keys are never loaded, so a retired row
+// left under an older KEK does not make the backup ambiguous (SR-18).
 func kekIDs(ctx context.Context, d *sql.DB) ([]string, error) {
-	rows, err := d.QueryContext(ctx, "SELECT DISTINCT wrap_kek_id FROM keyring_keys ORDER BY 1")
+	rows, err := d.QueryContext(ctx, "SELECT DISTINCT wrap_kek_id FROM keyring_keys WHERE state != 'retired' ORDER BY 1")
 	if err != nil {
 		return nil, fmt.Errorf("read keyring: %w", err)
 	}
@@ -324,22 +327,31 @@ func segmentRows(ctx context.Context, d *sql.DB) ([]segmentRow, error) {
 
 // copySegment copies one segment file into the backup according to its snapshot state. It returns (nil, "", nil)
 // for segments without a file by design, and (nil, warning, nil) when an expected file is absent.
+// Only the segment's canonical location (derived from its IDs) is read; a row whose stored path does not name that
+// location is refused, because restore and verify would refuse it too (SR-16).
 func copySegment(seg segmentRow, recDir, tmp string) (*File, string, error) {
+	final, err := layout.Path(recDir, seg.sessionID, seg.id)
+	if err != nil {
+		return nil, "", fmt.Errorf("segment %s: %w", seg.id, err)
+	}
+	if !layout.Matches(seg.path, seg.sessionID, seg.id) {
+		return nil, "", fmt.Errorf("segment %s: stored path %s is not its location under a recordings directory (%s)", seg.id, seg.path, final)
+	}
 	var candidates []string
 	switch seg.state {
 	case "finalized", "interrupted":
-		candidates = []string{seg.path}
+		candidates = []string{final}
 	case "open":
 		// Prefer the partial file; if the segment was finalized after the snapshot, its final file is copied and
 		// reconciliation after restore finalizes the row.
-		candidates = []string{seg.path + hprec.PartialSuffix, seg.path}
+		candidates = []string{final + hprec.PartialSuffix, final}
 	default: // deleted, failed, missing
 		return nil, "", nil
 	}
 	for _, src := range candidates {
 		rel, err := filepath.Rel(recDir, src)
 		if err != nil || !filepath.IsLocal(rel) {
-			return nil, "", fmt.Errorf("segment %s: path %s is outside the recordings directory %s", seg.id, seg.path, recDir)
+			return nil, "", fmt.Errorf("segment %s: path %s is outside the recordings directory %s", seg.id, src, recDir)
 		}
 		relSlash := path.Join(store.RecordingsDir, filepath.ToSlash(rel))
 		var h *segHasher

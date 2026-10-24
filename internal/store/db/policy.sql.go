@@ -258,6 +258,33 @@ func (q *Queries) ListApproverRules(ctx context.Context) ([]ApproverRule, error)
 	return items, nil
 }
 
+const listOwnersForAgent = `-- name: ListOwnersForAgent :many
+SELECT operator_id FROM agent_owners WHERE agent_id = ? ORDER BY operator_id
+`
+
+func (q *Queries) ListOwnersForAgent(ctx context.Context, agentID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listOwnersForAgent, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var operator_id string
+		if err := rows.Scan(&operator_id); err != nil {
+			return nil, err
+		}
+		items = append(items, operator_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPolicyRules = `-- name: ListPolicyRules :many
 SELECT id, name, description, effect, level, subjects_json, targets_json, roles_json, max_duration_s, auto_max_duration_s, require_reason, enabled, version, created_at, updated_at, updated_by FROM policy_rules ORDER BY name
 `

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as Char91__dsChar93RouteImport } from './routes/[__ds]'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as RecoverRouteImport } from './routes/recover'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppActivitiesRouteImport } from './routes/_app/activities'
@@ -50,6 +51,11 @@ const AppRoute = AppRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RecoverRoute = RecoverRouteImport.update({
+  id: '/recover',
+  path: '/recover',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SetupRoute = SetupRouteImport.update({
@@ -182,6 +188,7 @@ export interface FileRoutesByFullPath {
   '/__ds': typeof Char91__dsChar93Route
   '/': typeof AppIndexRoute
   '/login': typeof LoginRoute
+  '/recover': typeof RecoverRoute
   '/setup': typeof SetupRoute
   '/activities': typeof AppActivitiesRoute
   '/audit': typeof AppAuditRoute
@@ -210,6 +217,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/__ds': typeof Char91__dsChar93Route
   '/login': typeof LoginRoute
+  '/recover': typeof RecoverRoute
   '/setup': typeof SetupRoute
   '/activities': typeof AppActivitiesRoute
   '/audit': typeof AppAuditRoute
@@ -241,6 +249,7 @@ export interface FileRoutesById {
   '/__ds': typeof Char91__dsChar93Route
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/recover': typeof RecoverRoute
   '/setup': typeof SetupRoute
   '/_app/activities': typeof AppActivitiesRoute
   '/_app/audit': typeof AppAuditRoute
@@ -273,6 +282,7 @@ export interface FileRouteTypes {
     | '/__ds'
     | '/'
     | '/login'
+    | '/recover'
     | '/setup'
     | '/activities'
     | '/audit'
@@ -301,6 +311,7 @@ export interface FileRouteTypes {
   to:
     | '/__ds'
     | '/login'
+    | '/recover'
     | '/setup'
     | '/activities'
     | '/audit'
@@ -331,6 +342,7 @@ export interface FileRouteTypes {
     | '/__ds'
     | '/_app'
     | '/login'
+    | '/recover'
     | '/setup'
     | '/_app/activities'
     | '/_app/audit'
@@ -362,6 +374,7 @@ export interface RootRouteChildren {
   Char91__dsChar93Route: typeof Char91__dsChar93Route
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
+  RecoverRoute: typeof RecoverRoute
   SetupRoute: typeof SetupRoute
   InviteTokenRoute: typeof InviteTokenRoute
   ResetTokenRoute: typeof ResetTokenRoute
@@ -388,6 +401,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/recover': {
+      id: '/recover'
+      path: '/recover'
+      fullPath: '/recover'
+      preLoaderRoute: typeof RecoverRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/setup': {
@@ -624,6 +644,7 @@ const rootRouteChildren: RootRouteChildren = {
   Char91__dsChar93Route: Char91__dsChar93Route,
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
+  RecoverRoute: RecoverRoute,
   SetupRoute: SetupRoute,
   InviteTokenRoute: InviteTokenRoute,
   ResetTokenRoute: ResetTokenRoute,

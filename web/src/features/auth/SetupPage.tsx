@@ -5,6 +5,7 @@ import { api as defaultClient, type ApiClient } from '../../api/client';
 import { errorMessage } from '../../api/errors';
 import type { BootstrapRequest } from '../../api/types';
 import { AuthLayout } from './AuthLayout';
+import { AFTER_ENROLL_INTRO, CodeForm } from './LoginPage';
 import { NewPasswordFields } from './PasswordFields';
 import { TotpEnrollment } from './TotpEnrollment';
 
@@ -15,6 +16,8 @@ import { TotpEnrollment } from './TotpEnrollment';
  * 1. `POST /auth/bootstrap` creates the first administrator (MFA required).
  * 2. The page signs in with the same credentials (`POST /auth/login` → `must_enroll`), held in memory
  *    only for this step, and runs TOTP enrollment; recovery codes are shown once.
+ * 3. Enrollment does not complete sign-in (SR-03): the administrator verifies a later code
+ *    (`POST /auth/mfa`), which turns the limited session into a full one.
  */
 
 interface SetupValues extends BootstrapRequest {
@@ -66,7 +69,7 @@ export function SetupPage({
         size="small"
         current={step}
         style={{ marginBottom: 24 }}
-        items={[{ title: 'Administrator' }, { title: 'Two-factor authentication' }]}
+        items={[{ title: 'Administrator' }, { title: 'Two-factor authentication' }, { title: 'Verify' }]}
       />
       {step === 0 ? (
         <Form<SetupValues>
@@ -108,8 +111,28 @@ export function SetupPage({
             Create administrator
           </Button>
         </Form>
+      ) : step === 1 ? (
+        <TotpEnrollment
+          client={client}
+          limited
+          onDone={() => {
+            setStep(2);
+          }}
+        />
       ) : (
-        <TotpEnrollment client={client} onDone={onDone} />
+        <CodeForm
+          label="Verify authenticator"
+          intro={AFTER_ENROLL_INTRO}
+          onSubmit={async (code) => {
+            const me = await client.call('post', '/api/v1/auth/mfa', {
+              body: { code },
+              authRedirect: false,
+              reauth: false,
+            });
+            client.setCsrfToken(me.csrf_token);
+            onDone();
+          }}
+        />
       )}
     </AuthLayout>
   );

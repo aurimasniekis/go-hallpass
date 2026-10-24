@@ -215,7 +215,11 @@ type segmentFile struct {
 	raw     [2][SlotSize]byte
 }
 
-func openSegmentRW(path string) (*segmentFile, error) {
+func openSegmentRW(path string, opts []Option) (*segmentFile, error) {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
 	f, err := os.OpenFile(path, os.O_RDWR, 0) //nolint:gosec // G304: path is a recording segment chosen by the caller
 	if err != nil {
 		return nil, err
@@ -224,6 +228,10 @@ func openSegmentRW(path string) (*segmentFile, error) {
 	br := bufio.NewReader(io.NewSectionReader(f, 0, math.MaxInt64))
 	hdr, raw, h, err := readPrefixHeader(br)
 	if err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	if err := o.check(&hdr, h); err != nil {
 		_ = f.Close()
 		return nil, err
 	}
@@ -249,9 +257,10 @@ func (sf *segmentFile) writeSlot(idx int, slot [SlotSize]byte) error {
 // the inactive slot as a full SlotSize block with gen = highest gen + 1, and fsyncs. A torn write leaves the
 // previously active slot usable. The returned SlotInfo is the new slot, for updating the database copy of the
 // wrapped DEK after this function returns. It is safe to call while a Writer is appending to the same file, because
-// writers never touch the slots after Create.
-func RewrapSlot(path string, wrapper, newWrapper DEKWrapper) (SlotInfo, error) {
-	sf, err := openSegmentRW(path)
+// writers never touch the slots after Create. opts (ExpectSegmentID, ExpectHeaderSHA256, …) are checked against the
+// header before anything is written, so a substituted file is refused.
+func RewrapSlot(path string, wrapper, newWrapper DEKWrapper, opts ...Option) (SlotInfo, error) {
+	sf, err := openSegmentRW(path, opts)
 	if err != nil {
 		return SlotInfo{}, err
 	}
@@ -324,17 +333,28 @@ func repairTarget(c *[2]SlotCheck) int {
 // RepairSlot restores a key slot from a copy of the wrapped DEK kept elsewhere (the database, PLAN §13.4). The copy
 // must unwrap with w under this segment's AAD. If both slots already unwrap nothing is written and the active slot is
 // returned. Otherwise the copy is written into a slot that does not unwrap, with gen = highest gen + 1, and fsynced.
-// If one slot does unwrap, its DEK must equal the copy's, or ErrCorrupt is returned.
-func RepairSlot(path string, w DEKWrapper, keyID string, wrapped []byte) (SlotInfo, error) {
-	sf, err := openSegmentRW(path)
+// If one slot does unwrap, its DEK must equal the copy's, or ErrCorrupt is returned. opts are checked against the
+// header before anything is written.
+func RepairSlot(path string, w DEKWrapper, keyID string, wrapped []byte, opts ...Option) (SlotInfo, error) {
+	s, _, err := RepairSlotIfNeeded(path, w, keyID, wrapped, opts...)
+	return s, err
+}
+
+// RepairSlotIfNeeded is RepairSlot that also reports whether a slot was written.
+func RepairSlotIfNeeded(path string, w DEKWrapper, keyID string, wrapped []byte, opts ...Option) (SlotInfo, bool, error) {
+	return repairSlot(path, w, keyID, wrapped, opts)
+}
+
+func repairSlot(path string, w DEKWrapper, keyID string, wrapped []byte, opts []Option) (SlotInfo, bool, error) {
+	sf, err := openSegmentRW(path, opts)
 	if err != nil {
-		return SlotInfo{}, err
+		return SlotInfo{}, false, err
 	}
 	defer sf.f.Close()
 	aad := DEKAAD(sf.hdr.SegmentID, sf.h)
 	dek, err := unwrapSlot(w, SlotInfo{KeyID: keyID, Wrapped: wrapped}, aad)
 	if err != nil {
-		return SlotInfo{}, fmt.Errorf("%w: database copy: %w", ErrNoKey, err)
+		return SlotInfo{}, false, fmt.Errorf("%w: database copy: %w", ErrNoKey, err)
 	}
 	defer clear(dek)
 	checks := checkSlots(&sf.raw, aad, w, -1)
@@ -345,29 +365,29 @@ func RepairSlot(path string, w DEKWrapper, keyID string, wrapped []byte) (SlotIn
 		s, _ := decodeSlot(sf.raw[i][:])
 		cur, err := unwrapSlot(w, s, aad)
 		if err != nil {
-			return SlotInfo{}, err
+			return SlotInfo{}, false, err
 		}
 		same := subtle.ConstantTimeCompare(cur, dek) == 1
 		clear(cur)
 		if !same {
-			return SlotInfo{}, fmt.Errorf("%w: key slot %d holds a different DEK than the copy", ErrCorrupt, i)
+			return SlotInfo{}, false, fmt.Errorf("%w: key slot %d holds a different DEK than the copy", ErrCorrupt, i)
 		}
 	}
 	target := repairTarget(&checks)
 	if target < 0 {
 		_, active, err := selectSlot(&sf.raw, aad, w)
-		return active, err
+		return active, false, err
 	}
 	gen := maxGen(&sf.raw)
 	if gen == math.MaxUint32 {
-		return SlotInfo{}, fmt.Errorf("%w: slot generation exhausted", ErrInvalidSlot)
+		return SlotInfo{}, false, fmt.Errorf("%w: slot generation exhausted", ErrInvalidSlot)
 	}
 	slot, err := encodeSlot(gen+1, keyID, wrapped)
 	if err != nil {
-		return SlotInfo{}, err
+		return SlotInfo{}, false, err
 	}
 	if err := sf.writeSlot(target, slot); err != nil {
-		return SlotInfo{}, err
+		return SlotInfo{}, false, err
 	}
-	return SlotInfo{Index: target, Gen: gen + 1, KeyID: keyID, Wrapped: bytes.Clone(wrapped)}, sf.f.Close()
+	return SlotInfo{Index: target, Gen: gen + 1, KeyID: keyID, Wrapped: bytes.Clone(wrapped)}, true, sf.f.Close()
 }

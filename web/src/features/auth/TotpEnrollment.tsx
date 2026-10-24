@@ -10,18 +10,24 @@ import { OneTimeSecret } from '../../ds/OneTimeSecret';
 /**
  * TOTP enrollment (HP-AUTH-006): `POST /me/mfa/totp` returns a secret and `otpauth://` URI, the
  * operator scans it (QR rendered locally, never sent anywhere) and confirms a code with
- * `POST /me/mfa/totp/confirm`, which returns recovery codes shown exactly once. Works for limited
- * sessions that must enroll before they are allowed in.
+ * `POST /me/mfa/totp/confirm`, which returns recovery codes shown exactly once.
+ *
+ * - `limited`: a limited session that must enroll before it is allowed in (login, setup, break-glass).
+ *   No reauthentication prompt; a password session still finishes sign-in with a later code afterwards.
+ * - Otherwise (a full session adding or replacing a factor) the server requires recent authentication,
+ *   so the reauth prompt is allowed, and the session is rotated on confirmation (SR-27).
  */
 export function TotpEnrollment({
   client = defaultClient,
   onDone,
   onCancel,
+  limited = false,
 }: {
   client?: ApiClient;
   /** Called after the recovery codes were acknowledged. */
   onDone: () => void;
   onCancel?: () => void;
+  limited?: boolean;
 }) {
   const [enrollment, setEnrollment] = useState<TOTPEnrollment | null>(null);
   const [codes, setCodes] = useState<string[] | null>(null);
@@ -33,7 +39,9 @@ export function TotpEnrollment({
     setPending(true);
     setError(null);
     try {
-      setEnrollment(await client.call('post', '/api/v1/me/mfa/totp', { reauth: false, authRedirect: false }));
+      setEnrollment(
+        await client.call('post', '/api/v1/me/mfa/totp', { reauth: !limited, authRedirect: false }),
+      );
     } catch (e) {
       setError(e);
     } finally {
@@ -56,9 +64,11 @@ export function TotpEnrollment({
     try {
       const res = await client.call('post', '/api/v1/me/mfa/totp/confirm', {
         body: { code: code.trim() },
-        reauth: false,
+        reauth: !limited,
         authRedirect: false,
       });
+      // A full session was rotated; fetch the new CSRF token on the next mutation.
+      client.clearSession();
       setCodes(res.codes);
     } catch (e) {
       setError(e);

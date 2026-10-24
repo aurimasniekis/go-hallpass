@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/aurimasniekis/go-hallpass/internal/apperr"
@@ -103,7 +104,18 @@ func (svc *Service) createSession(ctx context.Context, tx *store.Tx, operatorID,
 var ErrUnauthorized = apperr.New(apperr.CodeUnauthorized, "authentication required")
 
 // Authenticate resolves a session token to a principal, enforcing revocation, idle and absolute expiry (HP-AUTH-012).
+// It marks the session active (idle timer), so call it only for operator-initiated requests.
 func (svc *Service) Authenticate(ctx context.Context, token string) (*Principal, error) {
+	return svc.authenticate(ctx, token, true)
+}
+
+// Validate is Authenticate without marking the session active: background re-checks of long-lived requests (the SSE
+// stream) use it so they never defeat the idle timeout (SR-09).
+func (svc *Service) Validate(ctx context.Context, token string) (*Principal, error) {
+	return svc.authenticate(ctx, token, false)
+}
+
+func (svc *Service) authenticate(ctx context.Context, token string, touch bool) (*Principal, error) {
 	if token == "" || len(token) > 128 {
 		return nil, ErrUnauthorized
 	}
@@ -123,23 +135,44 @@ func (svc *Service) Authenticate(ctx context.Context, token string) (*Principal,
 	if err != nil || !op.Enabled {
 		return nil, ErrUnauthorized
 	}
+	if row.AuthMethod == MethodPassword {
+		// SSO-managed roles are synced only by SSO logins, so they apply only to SSO sessions (HP-OIDC-011, SR-26).
+		op.Roles = rolesWithoutSource(op.Assignments, "sso")
+	}
 	p := &Principal{Operator: op, SessionID: row.DisplayID, Method: row.AuthMethod, Provider: row.AuthProvider, AuthAt: time.UnixMicro(row.AuthAt).UTC(),
 		ExpiresAt: time.UnixMicro(row.AbsoluteExpiresAt).UTC(), tokenHash: h, csrfSecret: row.CsrfSecret}
 	if row.MfaAt.Valid {
 		t := time.UnixMicro(row.MfaAt.Int64).UTC()
 		p.MFAAt = &t
 	}
-	if row.AuthMethod == MethodPassword {
+	switch row.AuthMethod {
+	case MethodPassword:
 		p.NeedsEnroll = op.MFARequired && !op.MFAEnrolled
 		p.Limited = p.NeedsEnroll || (op.MFAEnrolled && p.MFAAt == nil)
+	case MethodBreakGlass:
+		// Break-glass removes the lost factor; an account that policy requires MFA for enrolls a new one before the
+		// recovery session can be used (SR-07).
+		p.NeedsEnroll = op.MFARequired && !op.MFAEnrolled
+		p.Limited = p.NeedsEnroll
 	}
 	p.CSRFToken = csrfToken(row.CsrfSecret, row.DisplayID)
-	if now.Sub(time.UnixMicro(row.LastSeenAt)) > time.Minute {
+	if touch && now.Sub(time.UnixMicro(row.LastSeenAt)) > time.Minute {
 		_ = svc.s.W().TxNamed(ctx, "opauth.touch_session", func(tx *store.Tx) error {
 			return tx.Q.TouchWebSession(ctx, db.TouchWebSessionParams{LastSeenAt: tx.NowMicros(), IDHash: h})
 		})
 	}
 	return p, nil
+}
+
+func rolesWithoutSource(as []RoleAssignment, source string) []string {
+	out := []string{}
+	for _, a := range as {
+		if a.Source != source && !slices.Contains(out, a.Role) {
+			out = append(out, a.Role)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 func csrfToken(secret []byte, displayID string) string {
@@ -200,6 +233,30 @@ func (svc *Service) Rotate(ctx context.Context, p *Principal, meta SessionMeta) 
 		return tx.Q.UpdateWebSessionAuth(ctx, db.UpdateWebSessionAuthParams{AuthAt: old.AuthAt, MfaAt: old.MfaAt, IDHash: hashSessionToken(token)})
 	})
 	return token, err
+}
+
+// rotateTx revokes p's session and issues a replacement for the same operator, method and provider inside tx, with
+// the given authentication times (mfaAt nil: no MFA). It fails with ErrUnauthorized when p's session was already
+// revoked, so a session can be rotated only once.
+func (svc *Service) rotateTx(ctx context.Context, tx *store.Tx, p *Principal, authAt time.Time, mfaAt *time.Time, meta SessionMeta) (string, error) {
+	n, err := tx.Q.RevokeWebSession(ctx, db.RevokeWebSessionParams{RevokedAt: sql.NullInt64{Int64: tx.NowMicros(), Valid: true},
+		RevokeReason: sql.NullString{String: "rotated", Valid: true}, IDHash: p.tokenHash})
+	if err != nil {
+		return "", err
+	}
+	if n == 0 {
+		return "", ErrUnauthorized
+	}
+	meta.Provider = p.Provider
+	token, err := svc.createSession(ctx, tx, p.Operator.ID, p.Method, mfaAt, meta)
+	if err != nil {
+		return "", err
+	}
+	var mfa sql.NullInt64
+	if mfaAt != nil {
+		mfa = sql.NullInt64{Int64: mfaAt.UnixMicro(), Valid: true}
+	}
+	return token, tx.Q.UpdateWebSessionAuth(ctx, db.UpdateWebSessionAuthParams{AuthAt: authAt.UnixMicro(), MfaAt: mfa, IDHash: hashSessionToken(token)})
 }
 
 // Logout revokes the session (HP-OIDC-015: provider logout is separate and not global).
@@ -263,6 +320,9 @@ func (svc *Service) RevokeAllSessions(ctx context.Context, operatorID, reason st
 func (svc *Service) PurgeExpired(ctx context.Context) error {
 	return svc.s.W().TxNamed(ctx, "opauth.purge", func(tx *store.Tx) error {
 		if _, err := tx.Q.PurgeWebSessions(ctx, tx.Now.Add(-24*time.Hour).UnixMicro()); err != nil {
+			return err
+		}
+		if _, err := tx.Q.PurgeTOTPPending(ctx, tx.NowMicros()); err != nil {
 			return err
 		}
 		_, err := tx.Q.PurgeOneTimeTokens(ctx, tx.Now.Add(-7*24*time.Hour).UnixMicro())

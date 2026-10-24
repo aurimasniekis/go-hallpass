@@ -15,7 +15,8 @@ import { TotpEnrollment } from './TotpEnrollment';
 /**
  * Login (docs/PLAN.md §12.1; HP-UI-006). Renders from `GET /auth/config`: local form only, SSO buttons
  * only, or both. `POST /auth/login` returns `{mfa_pending, must_enroll, me}`: a pending MFA moves to the
- * code step (`POST /auth/mfa`), a required enrollment to TOTP setup. An existing limited session (for
+ * code step (`POST /auth/mfa`), a required enrollment to TOTP setup. Enrollment does not complete sign-in
+ * (SR-03): the code step follows, with a later code from the new authenticator. An existing limited session (for
  * example after a reload) resumes at the right step. SSO errors arrive as `?sso_error=<code>`; for
  * `mfa_required` after an SSO step-up the TOTP fallback (`POST /auth/reauth/totp`) is offered.
  *
@@ -27,6 +28,10 @@ const PUBLIC_OPTS = { csrf: 'none', authRedirect: false, reauth: false } as cons
 const SESSION_OPTS = { authRedirect: false, reauth: false } as const;
 
 type Step = 'credentials' | 'mfa' | 'enroll' | 'stepup-totp';
+
+/** Shown on the code step right after enrollment: the code used to confirm cannot be reused. */
+export const AFTER_ENROLL_INTRO =
+  'Your authenticator is set up. To finish signing in, wait for it to show a new code and enter that code (or one of your recovery codes).';
 
 function LocalLoginForm({
   client,
@@ -84,7 +89,8 @@ function LocalLoginForm({
   );
 }
 
-function CodeForm({
+/** One code field (TOTP or recovery code) with a submit button; also used by setup and recovery. */
+export function CodeForm({
   label,
   intro,
   onSubmit,
@@ -188,6 +194,7 @@ export function LoginForms({
   ssoError,
 }: LoginFormsProps) {
   const [step, setStep] = useState<Step>(initialStep);
+  const [justEnrolled, setJustEnrolled] = useState(false);
   const providers = config.providers;
   const back = () => {
     // Abandon the limited session server-side; ignore failures (it expires anyway).
@@ -200,7 +207,11 @@ export function LoginForms({
     return (
       <CodeForm
         label="Two-factor authentication"
-        intro="Enter the code from your authenticator app, or one of your recovery codes."
+        intro={
+          justEnrolled
+            ? AFTER_ENROLL_INTRO
+            : 'Enter the code from your authenticator app, or one of your recovery codes.'
+        }
         onSubmit={async (code) => {
           const me = await client.call('post', '/api/v1/auth/mfa', { body: { code }, ...SESSION_OPTS });
           client.setCsrfToken(me.csrf_token);
@@ -222,8 +233,10 @@ export function LoginForms({
         />
         <TotpEnrollment
           client={client}
+          limited
           onDone={() => {
-            onSignedIn();
+            setJustEnrolled(true);
+            setStep('mfa');
           }}
           onCancel={back}
         />

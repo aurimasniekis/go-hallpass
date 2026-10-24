@@ -253,9 +253,16 @@ That chain is outside this format.
    slot (not the one in use) as one full 256-byte block with `gen` = highest gen + 1, then fsync. Afterwards the caller
    updates the database copy. A torn slot write fails its checksum, so readers fall back to the previous slot. Writers
    never touch the slots after Create, so rewrapping an open segment is safe.
-6. **Repair** (`RepairSlot`): if no slot unwraps but the database copy of the wrapped DEK does (under this segment's
-   AAD), write it into a slot that does not unwrap, with `gen` = highest gen + 1. A slot that does unwrap MUST yield the
-   same DEK, or the file is reported corrupt.
+6. **Repair** (`RepairSlot`, `RepairSlotIfNeeded`): if a slot does not unwrap but the database copy of the wrapped DEK
+   does (under this segment's AAD), write the copy into a slot that does not unwrap, with `gen` = highest gen + 1. A slot
+   that does unwrap MUST yield the same DEK, or the file is reported corrupt. Nothing is written when both slots unwrap.
+7. Both maintenance operations accept the reader options (`ExpectSegmentID`, `ExpectSessionID`, `ExpectChannelID`,
+   `ExpectHeaderSHA256`) and check them against the header before anything is written, so a substituted file at the
+   expected path is never modified.
+
+The gateway uses both (security review SR-39): the `recording.rewrap` job rewraps every segment still on an old
+recording key after a rotation and then updates the database copy (compare-and-set), and startup reconciliation runs
+repair for every finalized or interrupted segment (`docs/operator/keys.md`).
 
 ## 10. Reading, verification and recovery
 
@@ -341,7 +348,9 @@ Limits:
   the MAC'd integrity chain in SQLite plus **external anchoring** (`hallpass anchors export`, HP-CRY-008). Anchoring
   protects history up to the last exported anchor, not data written after a compromise (THREAT_MODEL T-12, T-15).
 - **Whole-file substitution and deletion** are not detectable from the file alone. Each file is self-consistent, so
-  verification MUST compare `H`, IDs and `ciphertext_sha256` with the database, and the database with anchors.
+  verification MUST compare `H`, IDs and `ciphertext_sha256` with the database, the database rows with the MAC'd
+  integrity chain (recomputing each entry's manifest from the row), deletions with authenticated retention tombstones,
+  the newest chain entry with the MAC'd chain-head record, and the database with anchors (`docs/operator/recording.md`).
 - **Slot metadata** (`gen`, `key_id`) is unauthenticated. Tampering can cause fallback to the other slot or loss of
   access (denial of service), never a different plaintext. `Verify` reports the state of both slots.
 - **No key commitment.** ChaCha20-Poly1305 and AES-GCM are not key-committing. DEK authenticity relies on the wrapper's

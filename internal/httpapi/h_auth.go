@@ -9,6 +9,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/httpapi/gen"
 	"github.com/aurimasniekis/go-hallpass/internal/oidc"
 	"github.com/aurimasniekis/go-hallpass/internal/opauth"
+	"github.com/aurimasniekis/go-hallpass/internal/rbac"
 )
 
 func (s *Server) GetAuthConfig(c *gen.Call) (*gen.Result, error) {
@@ -106,11 +107,33 @@ func (s *Server) ReauthTOTP(c *gen.Call) (*gen.Result, error) {
 	if err := decode(c, &in, false); err != nil {
 		return nil, err
 	}
-	token, err := s.d.Auth.ReauthTOTP(c.R.Context(), c.Principal, in.Code, s.meta(c.R))
+	token, err := s.d.OIDC.ReauthTOTP(c.R.Context(), c.Principal, in.Code, s.meta(c.R))
 	if err != nil {
 		return nil, err
 	}
 	return s.withSession(c, token)
+}
+
+// RecoverLogin redeems a break-glass recovery token (HP-AUTH-016). The route is public (the token is the
+// credential), Origin-checked and under the strict per-IP auth rate limit like every /api/v1/auth mutation; opauth
+// adds a per-source failure throttle, single use, expiry and audit.
+func (s *Server) RecoverLogin(c *gen.Call) (*gen.Result, error) {
+	var in struct {
+		Token string `json:"token"`
+	}
+	if err := decode(c, &in, false); err != nil {
+		return nil, err
+	}
+	res, err := s.d.Auth.RecoveryLogin(c.R.Context(), in.Token, s.meta(c.R))
+	if err != nil {
+		return nil, err
+	}
+	var reset any
+	if res.ResetToken != "" {
+		reset = map[string]any{"token": res.ResetToken, "expires_at": res.ResetExpiresAt.UTC(), "url": "/reset/" + res.ResetToken}
+	}
+	return &gen.Result{SetSession: res.Token, Body: map[string]any{"must_enroll": res.Principal.NeedsEnroll, "password_reset": reset,
+		"me": s.me(res.Principal)}}, nil
 }
 
 func (s *Server) Bootstrap(c *gen.Call) (*gen.Result, error) {
@@ -159,6 +182,12 @@ func (s *Server) OidcStart(c *gen.Call) (*gen.Result, error) {
 	purpose := q.Get("purpose")
 	if purpose == "" {
 		purpose = oidc.PurposeLogin
+	}
+	if purpose == oidc.PurposeTest {
+		// The test login sets the SSO-only precondition: same permission as the auth settings it unlocks (SR-48).
+		if err := s.d.Matrix.Authorize(c.Principal, rbac.AuthSettings); err != nil {
+			return s.loginErrorRedirect(err)
+		}
 	}
 	res, err := s.d.OIDC.Start(c.R.Context(), oidc.StartInput{Provider: c.R.PathValue("provider"), Purpose: purpose, ReturnTo: q.Get("return_to"),
 		Principal: c.Principal, LinkToken: q.Get("link_token")})
@@ -252,11 +281,12 @@ func (s *Server) ConfirmTOTP(c *gen.Call) (*gen.Result, error) {
 	if err := decode(c, &in, false); err != nil {
 		return nil, err
 	}
-	codes, err := s.d.Auth.ConfirmTOTP(c.R.Context(), c.Principal, in.Code)
+	codes, token, err := s.d.Auth.ConfirmTOTP(c.R.Context(), c.Principal, in.Code, s.meta(c.R))
 	if err != nil {
 		return nil, err
 	}
-	return ok(map[string]any{"codes": codes})
+	// A full session is rotated on enrollment (SR-27); a limited one is unchanged and finishes with verifyMFA.
+	return &gen.Result{SetSession: token, Body: map[string]any{"codes": codes}}, nil
 }
 
 func (s *Server) DisableTOTP(c *gen.Call) (*gen.Result, error) {

@@ -22,6 +22,8 @@ var Operations = []Operation{
 	{ID: "enableAgent", Method: "POST", Path: "/api/v1/agents/{id}/enable", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"agents"}},
 	{ID: "addAgentKey", Method: "POST", Path: "/api/v1/agents/{id}/keys", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: true, Stream: false, Redirect: false, Tags: []string{"agents"}},
 	{ID: "revokeAgentKey", Method: "POST", Path: "/api/v1/agents/{id}/keys/{kid}/revoke", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: true, Stream: false, Redirect: false, Tags: []string{"agents"}},
+	{ID: "getAgentOwners", Method: "GET", Path: "/api/v1/agents/{id}/owners", Permission: "policy.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"agents", "policy"}},
+	{ID: "setAgentOwners", Method: "PUT", Path: "/api/v1/agents/{id}/owners", Permission: "policy.write", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"agents", "policy"}},
 	{ID: "listAuditEvents", Method: "GET", Path: "/api/v1/audit-events", Permission: "audit.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"audit"}},
 	{ID: "verifyAuditChain", Method: "GET", Path: "/api/v1/audit-events/verify", Permission: "audit.verify", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"audit"}},
 	{ID: "bootstrap", Method: "POST", Path: "/api/v1/auth/bootstrap", Permission: "public", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"auth"}},
@@ -32,6 +34,7 @@ var Operations = []Operation{
 	{ID: "verifyMFA", Method: "POST", Path: "/api/v1/auth/mfa", Permission: "session.limited", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"auth"}},
 	{ID: "reauth", Method: "POST", Path: "/api/v1/auth/reauth", Permission: "session", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"auth"}},
 	{ID: "reauthTOTP", Method: "POST", Path: "/api/v1/auth/reauth/totp", Permission: "session", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"auth"}},
+	{ID: "recoverLogin", Method: "POST", Path: "/api/v1/auth/recover", Permission: "public", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"auth"}},
 	{ID: "resetPassword", Method: "POST", Path: "/api/v1/auth/reset/{token}", Permission: "public", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"auth"}},
 	{ID: "activateCredential", Method: "POST", Path: "/api/v1/credentials/{id}/activate", Permission: "credentials.manage", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"credentials"}},
 	{ID: "probeCredential", Method: "POST", Path: "/api/v1/credentials/{id}/probe", Permission: "credentials.manage", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"credentials"}},
@@ -62,7 +65,7 @@ var Operations = []Operation{
 	{ID: "disableTOTP", Method: "DELETE", Path: "/api/v1/me/mfa/totp", Permission: "session", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"me"}},
 	{ID: "confirmTOTP", Method: "POST", Path: "/api/v1/me/mfa/totp/confirm", Permission: "session.limited", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"me"}},
 	{ID: "changeMyPassword", Method: "POST", Path: "/api/v1/me/password", Permission: "session", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"me"}},
-	{ID: "createProviderLinkCode", Method: "POST", Path: "/api/v1/me/provider-link-codes", Permission: "session", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"me"}},
+	{ID: "createProviderLinkCode", Method: "POST", Path: "/api/v1/me/provider-link-codes", Permission: "session", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"me"}},
 	{ID: "listMyProviderLinks", Method: "GET", Path: "/api/v1/me/provider-links", Permission: "session", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"me"}},
 	{ID: "unlinkMyProviderLink", Method: "DELETE", Path: "/api/v1/me/provider-links", Permission: "session", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"me"}},
 	{ID: "regenerateRecoveryCodes", Method: "POST", Path: "/api/v1/me/recovery-codes", Permission: "session", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"me"}},
@@ -104,6 +107,8 @@ var Operations = []Operation{
 	{ID: "getPolicyRule", Method: "GET", Path: "/api/v1/policy/rules/{id}", Permission: "policy.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"policy"}},
 	{ID: "updatePolicyRule", Method: "PATCH", Path: "/api/v1/policy/rules/{id}", Permission: "policy.write", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"policy"}},
 	{ID: "deletePolicyRule", Method: "DELETE", Path: "/api/v1/policy/rules/{id}", Permission: "policy.write", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"policy"}},
+	{ID: "getSelfApprovalSetting", Method: "GET", Path: "/api/v1/policy/self-approval", Permission: "policy.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"policy"}},
+	{ID: "setSelfApprovalSetting", Method: "PUT", Path: "/api/v1/policy/self-approval", Permission: "policy.write", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"policy"}},
 	{ID: "getPolicyVersion", Method: "GET", Path: "/api/v1/policy/version", Permission: "policy.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"policy"}},
 	{ID: "getRecordingRecords", Method: "GET", Path: "/api/v1/recordings/{id}/records", Permission: "recording.play", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"sessions"}},
 	{ID: "listRequests", Method: "GET", Path: "/api/v1/requests", Permission: "requests.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Tags: []string{"access"}},
@@ -183,6 +188,10 @@ type Server interface {
 	AddAgentKey(c *Call) (*Result, error)
 	// RevokeAgentKey POST /api/v1/agents/{id}/keys/{kid}/revoke (permission inventory.write)
 	RevokeAgentKey(c *Call) (*Result, error)
+	// GetAgentOwners GET /api/v1/agents/{id}/owners (permission policy.read)
+	GetAgentOwners(c *Call) (*Result, error)
+	// SetAgentOwners PUT /api/v1/agents/{id}/owners (permission policy.write)
+	SetAgentOwners(c *Call) (*Result, error)
 	// ListAuditEvents GET /api/v1/audit-events (permission audit.read)
 	ListAuditEvents(c *Call) (*Result, error)
 	// VerifyAuditChain GET /api/v1/audit-events/verify (permission audit.verify)
@@ -203,6 +212,8 @@ type Server interface {
 	Reauth(c *Call) (*Result, error)
 	// ReauthTOTP POST /api/v1/auth/reauth/totp (permission session)
 	ReauthTOTP(c *Call) (*Result, error)
+	// RecoverLogin POST /api/v1/auth/recover (permission public)
+	RecoverLogin(c *Call) (*Result, error)
 	// ResetPassword POST /api/v1/auth/reset/{token} (permission public)
 	ResetPassword(c *Call) (*Result, error)
 	// ActivateCredential POST /api/v1/credentials/{id}/activate (permission credentials.manage)
@@ -347,6 +358,10 @@ type Server interface {
 	UpdatePolicyRule(c *Call) (*Result, error)
 	// DeletePolicyRule DELETE /api/v1/policy/rules/{id} (permission policy.write)
 	DeletePolicyRule(c *Call) (*Result, error)
+	// GetSelfApprovalSetting GET /api/v1/policy/self-approval (permission policy.read)
+	GetSelfApprovalSetting(c *Call) (*Result, error)
+	// SetSelfApprovalSetting PUT /api/v1/policy/self-approval (permission policy.write)
+	SetSelfApprovalSetting(c *Call) (*Result, error)
 	// GetPolicyVersion GET /api/v1/policy/version (permission policy.read)
 	GetPolicyVersion(c *Call) (*Result, error)
 	// GetRecordingRecords GET /api/v1/recordings/{id}/records (permission recording.play)
@@ -448,6 +463,8 @@ func Handlers(s Server) map[string]Handler {
 		"enableAgent":                   s.EnableAgent,
 		"addAgentKey":                   s.AddAgentKey,
 		"revokeAgentKey":                s.RevokeAgentKey,
+		"getAgentOwners":                s.GetAgentOwners,
+		"setAgentOwners":                s.SetAgentOwners,
 		"listAuditEvents":               s.ListAuditEvents,
 		"verifyAuditChain":              s.VerifyAuditChain,
 		"bootstrap":                     s.Bootstrap,
@@ -458,6 +475,7 @@ func Handlers(s Server) map[string]Handler {
 		"verifyMFA":                     s.VerifyMFA,
 		"reauth":                        s.Reauth,
 		"reauthTOTP":                    s.ReauthTOTP,
+		"recoverLogin":                  s.RecoverLogin,
 		"resetPassword":                 s.ResetPassword,
 		"activateCredential":            s.ActivateCredential,
 		"probeCredential":               s.ProbeCredential,
@@ -530,6 +548,8 @@ func Handlers(s Server) map[string]Handler {
 		"getPolicyRule":                 s.GetPolicyRule,
 		"updatePolicyRule":              s.UpdatePolicyRule,
 		"deletePolicyRule":              s.DeletePolicyRule,
+		"getSelfApprovalSetting":        s.GetSelfApprovalSetting,
+		"setSelfApprovalSetting":        s.SetSelfApprovalSetting,
 		"getPolicyVersion":              s.GetPolicyVersion,
 		"getRecordingRecords":           s.GetRecordingRecords,
 		"listRequests":                  s.ListRequests,

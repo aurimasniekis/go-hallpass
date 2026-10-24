@@ -166,6 +166,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	a.Recording = recording.New(a.Store, a.Keyring, a.Access.Sequencer(), recording.Options{
 		Durability: rc.Durability, FlushInterval: rc.FlushInterval.D(), SegmentMaxBytes: rc.SegmentMaxBytes, SegmentMaxAge: rc.SegmentMaxAge.D(),
 		QueueRecords: rc.QueueRecords, QueueBytes: rc.QueueBytes, BlockTimeout: rc.BlockTimeout.D(), Clock: a.Clock, Logger: log, Metrics: a.Metrics,
+		Audit: a.Audit,
 	})
 	a.Recorders = a.Recording
 	a.Auth = opauth.New(a.Store, a.Keyring, a.Audit, a.Bus, opauth.Options{PasswordMinBytes: cfg.Auth.PasswordMinBytes,
@@ -272,6 +273,13 @@ func (a *App) RunBackground(ctx context.Context) (wait func()) {
 		})
 	})
 	wg.Go(func() {
+		// HP-CRY-002, PLAN §13.4: move recording segment DEKs (key slots) to the active recording key.
+		jobs.Periodic(ctx, log, "recording.rewrap", 6*time.Hour, false, func(ctx context.Context) error {
+			_, err := a.Recording.RewrapSegments(ctx, 500)
+			return err
+		})
+	})
+	wg.Go(func() {
 		jobs.Periodic(ctx, log, "store.wal_checkpoint", 5*time.Minute, false, func(ctx context.Context) error {
 			return a.Store.Checkpoint(ctx, "TRUNCATE")
 		})
@@ -318,6 +326,7 @@ func SealedColumns() []keyring.Column {
 		keyring.FieldColumn("login_credentials", "id", "private_enc", keyring.PurposeCredential),
 		keyring.FieldColumn("user_cas", "id", "private_enc", keyring.PurposeCredential),
 		keyring.FieldColumn("gateway_host_keys", "id", "private_enc", keyring.PurposeCredential),
+		keyring.FieldColumn("destaudit_records", "id", "details_enc", keyring.PurposeField),
 		{Table: "oidc_providers", IDColumn: "id", BlobColumn: "client_secret_enc", Purpose: keyring.PurposeField,
 			AAD: func(id string) []byte { return []byte("hallpass/oidc-client-secret/v1|" + id) }},
 	}

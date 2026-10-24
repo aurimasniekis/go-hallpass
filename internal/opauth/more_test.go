@@ -28,12 +28,15 @@ func TestOptionalMFAAndCodes(t *testing.T) {
 	if enr.Secret == "" || enr.URI == "" {
 		t.Fatal("enrollment data missing")
 	}
-	if _, err := f.svc.ConfirmTOTP(f.ctx, res.Principal, "000000"); err == nil {
+	if _, _, err := f.svc.ConfirmTOTP(f.ctx, res.Principal, "000000", SessionMeta{}); err == nil {
 		t.Fatal("wrong confirmation code accepted")
 	}
-	_, err = f.svc.ConfirmTOTP(f.ctx, res.Principal, f.totpCode(res.Principal.Operator.ID))
+	_, rotated, err := f.svc.ConfirmTOTP(f.ctx, res.Principal, f.pendingCode(res.Principal.Operator.ID), SessionMeta{})
 	must(t, err)
-	p, err := f.svc.Authenticate(f.ctx, res.Token)
+	if _, err := f.svc.Authenticate(f.ctx, res.Token); err == nil {
+		t.Fatal("full session not rotated on enrollment")
+	}
+	p, err := f.svc.Authenticate(f.ctx, rotated)
 	must(t, err)
 	codes, err := f.svc.RegenerateRecoveryCodes(f.ctx, p)
 	if err != nil || len(codes) != RecoveryCodeCount {

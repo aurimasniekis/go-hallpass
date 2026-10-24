@@ -533,9 +533,16 @@ func (svc *Service) UpdateProvider(ctx context.Context, actor audit.Actor, id st
 	return svc.GetProvider(ctx, p.ID)
 }
 
-// DeleteProvider removes a provider with its mappings and linked identities.
+// DeleteProvider removes a provider with its mappings and linked identities. Operators who were linked to it lose
+// their SSO-sourced roles and groups, which only SSO logins maintain (HP-OIDC-011, SR-26); they are restored from
+// the mappings at the next SSO login through another provider. Leaving no enabled administrator is refused.
 func (svc *Service) DeleteProvider(ctx context.Context, actor audit.Actor, id string) error {
+	var affected []string
 	err := svc.s.W().TxNamed(ctx, "oidc.delete_provider", func(tx *store.Tx) error {
+		var err error
+		if affected, err = tx.Q.ListOperatorIDsForProvider(ctx, id); err != nil {
+			return err
+		}
 		n, err := tx.Q.DeleteOIDCProvider(ctx, id)
 		if err != nil {
 			return err
@@ -543,14 +550,41 @@ func (svc *Service) DeleteProvider(ctx context.Context, actor audit.Actor, id st
 		if n == 0 {
 			return apperr.New(apperr.CodeNotFound, "provider not found")
 		}
+		for _, opID := range affected {
+			if err := tx.Q.DeleteSSORoles(ctx, opID); err != nil {
+				return err
+			}
+			if err := tx.Q.DeleteSSOGroups(ctx, opID); err != nil {
+				return err
+			}
+		}
+		if len(affected) > 0 {
+			admins, err := tx.Q.CountEnabledAdmins(ctx)
+			if err != nil {
+				return err
+			}
+			if admins == 0 {
+				return opauth.ErrLastAdmin
+			}
+			// Operator-group membership feeds approver rules.
+			if _, err := tx.Q.BumpPolicyVersion(ctx, tx.NowMicros()); err != nil {
+				return err
+			}
+		}
 		if err := svc.checkSSOOnlyStillSafe(ctx, tx); err != nil {
 			return err
 		}
-		_, err = svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "oidc.provider.deleted", Target: audit.Target{Type: "oidc_provider", ID: id}})
+		_, err = svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "oidc.provider.deleted", Target: audit.Target{Type: "oidc_provider", ID: id},
+			Details: map[string]any{"unlinked_operators": len(affected)}})
 		return err
 	})
 	if err == nil {
 		svc.forget(id)
+		if svc.bus != nil {
+			for _, opID := range affected {
+				svc.bus.Publish(eventbus.Event{Topic: eventbus.TopicOperatorChanged, Key: opID})
+			}
+		}
 	}
 	return err
 }

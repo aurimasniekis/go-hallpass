@@ -203,6 +203,7 @@ func (svc *Service) CreateIntegration(ctx context.Context, actor audit.Actor, in
 	if err != nil {
 		return nil, err
 	}
+	svc.knownIntegrations.Invalidate()
 	svc.registerWebhook(ctx, id)
 	return svc.GetIntegration(ctx, id)
 }
@@ -441,6 +442,7 @@ func (svc *Service) forget(id string) {
 	svc.mu.Lock()
 	delete(svc.clients, id)
 	svc.mu.Unlock()
+	svc.knownIntegrations.Invalidate()
 }
 
 type providerParts struct {
@@ -536,8 +538,9 @@ func (svc *Service) webhookHandler(ctx context.Context, provider, id string) (ht
 	return nil, apperr.New(apperr.CodeNotFound, "unknown integration")
 }
 
-// allowlist accepts private chats (linking; decisions still need a linked approver), route destinations and the
-// configured extra chats. Users are not pre-filtered: the core requires a provider link for every action.
+// allowlist gates Telegram callbacks (button presses; HP-NTF-006, SR-42). Buttons are only ever posted to route
+// destinations, so a callback must come from a route destination of this integration or a configured extra chat;
+// private chats are accepted only for /link messages, which do not consult the allowlist.
 type allowlist struct {
 	svc           *Service
 	integrationID string
@@ -545,7 +548,7 @@ type allowlist struct {
 }
 
 func (a allowlist) ChatAllowed(ctx context.Context, chatID int64) (bool, error) {
-	if chatID > 0 || slices.Contains(a.extra, chatID) {
+	if slices.Contains(a.extra, chatID) {
 		return true, nil
 	}
 	routes, err := a.svc.s.R().ListRoutes(ctx)
@@ -560,4 +563,7 @@ func (a allowlist) ChatAllowed(ctx context.Context, chatID int64) (bool, error) 
 	return false, nil
 }
 
+// UserAllowed admits every platform-verified user: unlinked users get a "link your account" reply from the core,
+// which maps the user to an enabled operator through an explicit link and runs every decision check (HP-NTF-011,
+// ADR draft for SR-42). There is no separate per-user allowlist.
 func (allowlist) UserAllowed(context.Context, int64) (bool, error) { return true, nil }

@@ -67,10 +67,11 @@ func TestAnchors(t *testing.T) {
 		if rep := verifyAnchors(t, f, anchors); !rep.OK || rep.LocalHeadSeq != 4 {
 			t.Fatalf("after growth: %+v", rep)
 		}
-		// Retention turns rows into tombstones; the chain still verifies.
+		// A row relabeled "deleted" without the retention job's tombstone is reported (SR-17); real retention is
+		// covered by TestAnchorsDeletedNeedsTombstone.
 		exec(t, f, "UPDATE recording_segments SET state = 'deleted' WHERE id = (SELECT segment_id FROM integrity_chain WHERE seq = 1)")
-		if rep := verifyAnchors(t, f, anchors+"\n"); !rep.OK {
-			t.Fatalf("after retention: %+v", rep)
+		if rep := verifyAnchors(t, f, anchors+"\n"); rep.OK || !hasProblem(rep, "without a retention tombstone") {
+			t.Fatalf("after relabeling: %+v", rep)
 		}
 		if _, err := ExportAnchors(f.ctx, f.a.Store.ReadDB(), -1, &bytes.Buffer{}); err == nil {
 			t.Fatal("negative since accepted")

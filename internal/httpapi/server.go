@@ -252,11 +252,12 @@ func mutating(m string) bool { return m != http.MethodGet && m != http.MethodHea
 func (s *Server) wrap(op *gen.Operation, h gen.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := s.o.Clock.Now()
-		ip := s.clientIP(r)
+		src := sourceKey(s.clientIP(r))
 		authOp := strings.HasPrefix(op.Path, "/api/v1/auth/") || strings.HasPrefix(op.Path, "/auth/")
-		// Per-IP flood guard for every request (operators behind one NAT share it, so it is generous); unauthenticated
-		// requests get the stricter IPRate below, authenticated ones the per-session SessionRate (HP-API-008).
-		if !s.limits.allow("ip:"+ip, 4*s.o.IPRate) || (authOp && op.Method != http.MethodGet && !s.limits.allow("auth:"+ip, s.o.AuthRate)) {
+		// Per-source flood guard for every request (operators behind one NAT share it, so it is generous);
+		// unauthenticated requests get the stricter IPRate below, authenticated ones the per-session SessionRate
+		// (HP-API-008). Sources are IPv4 addresses or IPv6 /64 prefixes (SR-30).
+		if !s.limits.allow("ip:"+src, 4*s.o.IPRate) || (authOp && op.Method != http.MethodGet && !s.limits.allowKey("auth:"+src, s.o.AuthRate, true)) {
 			w.Header().Set("Retry-After", "60")
 			s.problem(w, r, apperr.New(apperr.CodeRateLimited, "too many requests; slow down"))
 			return
@@ -275,7 +276,7 @@ func (s *Server) wrap(op *gen.Operation, h gen.Handler) http.Handler {
 				c.Principal = p
 			}
 		}
-		if (c.Principal == nil && !s.limits.allow("anon:"+ip, s.o.IPRate)) ||
+		if (c.Principal == nil && !s.limits.allowKey("anon:"+src, s.o.IPRate, true)) ||
 			(c.Principal != nil && !s.limits.allow("ses:"+c.Principal.SessionID, s.o.SessionRate)) {
 			w.Header().Set("Retry-After", "60")
 			s.problem(w, r, apperr.New(apperr.CodeRateLimited, "too many requests; slow down"))
@@ -341,7 +342,11 @@ func (s *Server) writeResult(c *gen.Call, res *gen.Result) int {
 		if status == 0 {
 			status = http.StatusSeeOther
 		}
-		http.Redirect(w, c.R, res.Location, status)
+		// The Location is set verbatim: http.Redirect would path-clean relative targets (fragment included) and turn
+		// a sanitized "/#/../api/…" into "/api/…" (SR-24). Handlers only produce sanitized relative paths or the
+		// identity provider's absolute authorization URL.
+		w.Header().Set("Location", res.Location)
+		w.WriteHeader(status)
 		return status
 	}
 	status := res.Status

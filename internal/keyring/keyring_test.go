@@ -286,3 +286,55 @@ func TestLoadKEKSources(t *testing.T) {
 		t.Fatalf("dev KEK not stable: %v", err)
 	}
 }
+
+// SR-18 (HP-CRY-002): KEK rotation also rewraps retired keys, so no keyring row stays under the old KEK and backups
+// (which refuse a keyring wrapped under several KEKs) keep working. A retired row left under an even older KEK by an
+// earlier binary is skipped instead of failing the rotation.
+func TestKEKRotationRewrapsRetiredKeys(t *testing.T) {
+	kr, w1, s := loadRing(t)
+	ctx := context.Background()
+	if _, err := kr.Rotate(ctx, s, PurposeToken); err != nil {
+		t.Fatal(err)
+	}
+	if err := kr.Retire(ctx, s, PurposeToken, 1); err != nil {
+		t.Fatal(err)
+	}
+	if v := kr.ActiveVersion(PurposeToken); v != 2 {
+		t.Fatalf("active token version %d", v)
+	}
+	kekOf := func() map[string]int {
+		out := map[string]int{}
+		rows, err := s.ReadDB().QueryContext(ctx, "SELECT wrap_kek_id FROM keyring_keys")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				t.Fatal(err)
+			}
+			out[id]++
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	w2 := newKEK(t)
+	n, err := RotateKEK(ctx, s, w1, w2)
+	if err != nil || n != len(Purposes)+1 {
+		t.Fatalf("rotated %d: %v", n, err)
+	}
+	if got := kekOf(); len(got) != 1 || got[w2.ID()] != len(Purposes)+1 {
+		t.Fatalf("keys by KEK after rotation: %v", got)
+	}
+	// Simulate a retired row left under w1 by an older binary: the next rotation skips it.
+	if err := s.W().Exec(ctx, "UPDATE keyring_keys SET wrap_kek_id = ? WHERE state = 'retired'", w1.ID()); err != nil {
+		t.Fatal(err)
+	}
+	w3 := newKEK(t)
+	if n, err := RotateKEK(ctx, s, w2, w3); err != nil || n != len(Purposes) {
+		t.Fatalf("rotation with a stale retired row: %d %v", n, err)
+	}
+}

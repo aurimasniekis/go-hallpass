@@ -45,6 +45,9 @@ setup('sign in as administrator', async ({ page, request }) => {
     );
     await dialog.getByRole('checkbox', { name: 'I have stored this securely' }).check();
     await dialog.getByRole('button', { name: 'Done' }).click();
+    // Enrollment never completes MFA by itself (SR-01/SR-03): verify a code from a later step to get a full session.
+    await page.getByLabel('Authentication code').fill(await freshTotp(admin.totpSecret));
+    await page.getByRole('button', { name: 'Verify' }).click();
   } else {
     const admin = loadAdmin();
     setup.skip(admin === null, 'Backend already set up by another run without saved credentials.');

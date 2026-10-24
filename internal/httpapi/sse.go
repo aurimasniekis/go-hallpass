@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/aurimasniekis/go-hallpass/internal/apperr"
@@ -22,11 +23,13 @@ import (
 // SSE contract (PLAN §8.3, HP-API-005): frames carry `id: <boot_id>.<n>`; a ring buffer of the last 4096 events
 // supports Last-Event-ID resume; unknown IDs, other boots and per-client overflow (256) produce `event: reset`.
 // Events carry only type, resource and ID — never reasons, addresses or secrets — and are filtered per subscriber
-// by permission at fan-out. Limits: 4 streams per web session, 512 total. Heartbeat every 15 s.
+// by permission at fan-out. Limits: 4 streams per web session, 16 per operator, 512 total. Heartbeat every 15 s.
+// An open stream is not user activity: its periodic re-check never extends the session's idle timeout.
 const (
 	ringSize        = 4096
 	clientBuffer    = 256
 	streamsPerSess  = 4
+	streamsPerOp    = 16 // one operator with many sessions cannot take every global slot (SR-31)
 	streamsTotal    = 512
 	heartbeatPeriod = 15 * time.Second
 	revalidateEvery = 30 * time.Second
@@ -60,6 +63,7 @@ type sseEvent struct {
 type sseClient struct {
 	ch       chan *sseEvent
 	session  string
+	operator string
 	mu       sync.Mutex
 	roles    []string
 	overflow bool
@@ -71,16 +75,29 @@ type Hub struct {
 	clk clock.Clock
 	log *slog.Logger
 
+	// revalidate is the stream re-check period.
+	revalidate atomic.Int64
+
 	mu      sync.Mutex
 	n       uint64
 	ring    []*sseEvent
 	clients map[*sseClient]struct{}
 	perSess map[string]int
+	perOp   map[string]int
 }
 
 // NewHub returns a hub.
 func NewHub(d Deps, clk clock.Clock, log *slog.Logger) *Hub {
-	return &Hub{d: d, clk: clk, log: log, clients: map[*sseClient]struct{}{}, perSess: map[string]int{}}
+	h := &Hub{d: d, clk: clk, log: log, clients: map[*sseClient]struct{}{}, perSess: map[string]int{}, perOp: map[string]int{}}
+	h.revalidate.Store(int64(revalidateEvery))
+	return h
+}
+
+// SetStreamRevalidate overrides the stream re-check period (tests; default 30 s).
+func (s *Server) SetStreamRevalidate(d time.Duration) {
+	if d > 0 {
+		s.hub.revalidate.Store(int64(d))
+	}
 }
 
 // Run consumes bus events until ctx ends.
@@ -140,12 +157,13 @@ func (h *Hub) Publish(ev eventbus.Event) {
 func (h *Hub) register(p *opauth.Principal) (*sseClient, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if len(h.clients) >= streamsTotal || h.perSess[p.SessionID] >= streamsPerSess {
+	if len(h.clients) >= streamsTotal || h.perSess[p.SessionID] >= streamsPerSess || h.perOp[p.Operator.ID] >= streamsPerOp {
 		return nil, apperr.New(apperr.CodeRateLimited, "too many live-event streams")
 	}
-	c := &sseClient{ch: make(chan *sseEvent, clientBuffer), session: p.SessionID, roles: p.Operator.Roles}
+	c := &sseClient{ch: make(chan *sseEvent, clientBuffer), session: p.SessionID, operator: p.Operator.ID, roles: p.Operator.Roles}
 	h.clients[c] = struct{}{}
 	h.perSess[p.SessionID]++
+	h.perOp[p.Operator.ID]++
 	h.d.Metrics.SSEClientConnected()
 	return c, nil
 }
@@ -157,6 +175,9 @@ func (h *Hub) unregister(c *sseClient) {
 	h.d.Metrics.SSEClientDisconnected()
 	if h.perSess[c.session]--; h.perSess[c.session] <= 0 {
 		delete(h.perSess, c.session)
+	}
+	if h.perOp[c.operator]--; h.perOp[c.operator] <= 0 {
+		delete(h.perOp, c.operator)
 	}
 }
 
@@ -247,7 +268,7 @@ func (s *Server) StreamEvents(c *gen.Call) (*gen.Result, error) {
 
 	hb := time.NewTicker(heartbeatPeriod)
 	defer hb.Stop()
-	reval := time.NewTicker(revalidateEvery)
+	reval := time.NewTicker(time.Duration(h.revalidate.Load()))
 	defer reval.Stop()
 	ctx := c.R.Context()
 	for {
@@ -258,14 +279,11 @@ func (s *Server) StreamEvents(c *gen.Call) (*gen.Result, error) {
 		case <-hb.C:
 			_, err = fmt.Fprint(w, ": hb\n\n")
 		case <-reval.C:
-			// Session revocation closes the stream; role changes take effect for later events.
-			p, aerr := s.d.Auth.Authenticate(ctx, c.SessionToken)
-			if aerr != nil {
+			// Session revocation, expiry and operator disable close the stream; role changes take effect for later
+			// events. The check does not touch the session (SR-09).
+			if !s.revalidateStream(ctx, c.SessionToken, cl) {
 				return nil, nil
 			}
-			cl.mu.Lock()
-			cl.roles = p.Operator.Roles
-			cl.mu.Unlock()
 			continue
 		case e := <-cl.ch:
 			cl.mu.Lock()
@@ -286,4 +304,19 @@ func (s *Server) StreamEvents(c *gen.Call) (*gen.Result, error) {
 		}
 		flusher.Flush()
 	}
+}
+
+// revalidateStream re-checks a stream's session with opauth Validate, which does not refresh last_seen_at:
+// Authenticate counts as activity and would keep an idle session alive for as long as a tab stays open
+// (HP-AUTH-012, T-11, SR-09). It reports false once the session is revoked, past its absolute lifetime or idle
+// timeout, or the operator is disabled, and refreshes the roles used for filtering.
+func (s *Server) revalidateStream(ctx context.Context, token string, cl *sseClient) bool {
+	p, err := s.d.Auth.Validate(ctx, token)
+	if err != nil {
+		return false
+	}
+	cl.mu.Lock()
+	cl.roles = p.Operator.Roles
+	cl.mu.Unlock()
+	return true
 }

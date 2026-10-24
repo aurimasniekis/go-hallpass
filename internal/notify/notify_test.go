@@ -286,6 +286,7 @@ func TestSlackApprovalFlow(t *testing.T) {
 	if reply := f.click(chat.ActionApprove, deny, "U1", 3); !strings.Contains(reply, "not valid") {
 		t.Fatalf("kind mismatch: %s", reply)
 	}
+	time.Sleep(1100 * time.Millisecond) // stay under the per-user limit of 5 actions per second (HP-NTF-012)
 	if reply := f.click(chat.ActionApprove, approve, "U1", 4); !strings.Contains(reply, "approved") || f.state(r.ID) != access.ReqApproved {
 		t.Fatalf("approve: %s", reply)
 	}
@@ -382,6 +383,10 @@ func TestTelegramApproval(t *testing.T) {
 	}
 	if _, body := post(secret, update(3, -100123, 7)); !strings.Contains(body, "not linked") {
 		t.Fatalf("unlinked user: %s", body)
+	}
+	// SR-42: a callback from a chat that is not a route destination (here the user's private chat) is ignored.
+	if _, body := post(secret, update(30, 42, 42)); strings.Contains(body, "approved") || f.state(r.ID) != access.ReqPending {
+		t.Fatalf("private-chat callback accepted: %s", body)
 	}
 	if _, body := post(secret, update(4, -100123, 42)); !strings.Contains(body, "approved") || f.state(r.ID) != access.ReqApproved {
 		t.Fatalf("approve: %s", body)

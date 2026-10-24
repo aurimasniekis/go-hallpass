@@ -45,6 +45,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/rbac"
 	"github.com/aurimasniekis/go-hallpass/internal/sshproxy"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
+	"github.com/aurimasniekis/go-hallpass/internal/store/db"
 	"github.com/aurimasniekis/go-hallpass/internal/testutil/sshkeys"
 )
 
@@ -571,6 +572,21 @@ func TestAdministrationFlow(t *testing.T) {
 	c.ok("createApproverRule", 201, "POST", "/api/v1/policy/approver-rules", map[string]any{"name": "admins", "enabled": true,
 		"operators": map[string]any{"operators": []string{me.Operator.ID}}, "targets": map[string]any{"all": true}, "roles": map[string]any{"all": true}})
 	c.ok("getAgentEffectiveAccess", 200, "GET", "/api/v1/agents/"+agent.ID+"/effective-access", nil)
+	// HP-POL-012 / SR-14: owners are settable; unknown operators are refused; the self-approval ban is a setting.
+	r = c.ok("setAgentOwners", 200, "PUT", "/api/v1/agents/"+agent.ID+"/owners", map[string]any{"owners": []string{me.Operator.ID}})
+	if !strings.Contains(string(r.body), me.Operator.ID) {
+		t.Fatalf("owners %s", r.body)
+	}
+	c.ok("getAgentOwners", 200, "GET", "/api/v1/agents/"+agent.ID+"/owners", nil)
+	if r := c.do("PUT", "/api/v1/agents/"+agent.ID+"/owners", map[string]any{"owners": []string{"opr_doesnotexist0000000000000"}}); r.status < 400 {
+		t.Fatalf("unknown owner accepted: %d", r.status)
+	}
+	r = c.ok("getSelfApprovalSetting", 200, "GET", "/api/v1/policy/self-approval", nil)
+	if !strings.Contains(string(r.body), `"prohibit_self_approval":true`) {
+		t.Fatalf("self-approval default %s", r.body)
+	}
+	c.ok("setSelfApprovalSetting", 200, "PUT", "/api/v1/policy/self-approval", map[string]any{"prohibit_self_approval": true})
+	c.ok("setAgentOwners", 200, "PUT", "/api/v1/agents/"+agent.ID+"/owners", map[string]any{"owners": []string{}})
 	c.ok("getServerEffectiveAccess", 200, "GET", "/api/v1/servers/"+srv.ID+"/effective-access", nil)
 	c.ok("getPolicyVersion", 200, "GET", "/api/v1/policy/version", nil)
 
@@ -664,6 +680,18 @@ func TestAdministrationFlow(t *testing.T) {
 	}
 	// HP-REC-014: the default export is a ciphertext bundle: manifest plus the stored HPREC1 files, nothing decrypted.
 	r = c.ok("exportSessionRecordings", 200, "GET", "/api/v1/access-sessions/"+dec.Grant.SessionID+"/export", nil)
+	checkBundle(t, r, segs.Items[0].ID, "up 3 days")
+	// SR-16: a tampered segment row pointing at another file must not make the export read that file.
+	victim := filepath.Join(t.TempDir(), "victim.txt")
+	must(t, os.WriteFile(victim, []byte("TOP-SECRET-VICTIM"), 0o600))
+	must(t, h.a.Store.W().Tx(h.ctx, func(tx *store.Tx) error {
+		_, err := tx.SQL.ExecContext(h.ctx, `UPDATE recording_segments SET path = ? WHERE id = ?`, victim, segs.Items[0].ID)
+		return err
+	}))
+	r = c.ok("exportSessionRecordings", 200, "GET", "/api/v1/access-sessions/"+dec.Grant.SessionID+"/export", nil)
+	if bytes.Contains(r.body, []byte("TOP-SECRET-VICTIM")) {
+		t.Fatal("export followed a tampered segment path")
+	}
 	checkBundle(t, r, segs.Items[0].ID, "up 3 days")
 	// HP-REC-012: destination audit collectors and records.
 	ck := sshkeys.Ed25519(t)
@@ -1011,5 +1039,123 @@ func checkBundle(t *testing.T, r resp, segmentID, plaintext string) {
 	}
 	if bytes.Contains(r.body, []byte(plaintext)) {
 		t.Fatal("bundle contains plaintext")
+	}
+}
+
+// ---- regression tests for the 2026-10-24 internal security review (docs/security/review-2026-10-24.md)
+
+func (c *client) meID() string {
+	c.h.t.Helper()
+	var me struct {
+		Operator struct {
+			ID string `json:"id"`
+		} `json:"operator"`
+	}
+	c.ok("getMe", 200, "GET", "/api/v1/me", nil).json(c.h.t, &me)
+	return me.Operator.ID
+}
+
+// SR-01: an MFA-pending session (password only) cannot enroll over the confirmed factor.
+func TestReviewSR01ConfirmRefusedOnMFAPendingSession(t *testing.T) {
+	h := newHarness(t)
+	h.bootstrapAdmin()
+	c := h.client()
+	r := c.ok("login", 200, "POST", "/api/v1/auth/login", map[string]string{"email": "admin@example.com", "password": "correct horse battery staple"})
+	var lr struct {
+		MFAPending bool `json:"mfa_pending"`
+		Me         struct {
+			CSRF string `json:"csrf_token"`
+		} `json:"me"`
+	}
+	r.json(t, &lr)
+	if !lr.MFAPending {
+		t.Fatalf("login: %s", r.body)
+	}
+	c.csrf = lr.Me.CSRF
+	if r := c.do("POST", "/api/v1/me/mfa/totp/confirm", map[string]string{"code": "000000"}); r.status != 403 {
+		t.Fatalf("confirm on an MFA-pending session: %d %s", r.status, r.body)
+	}
+	if r := c.do("POST", "/api/v1/me/mfa/totp", nil); r.status != 403 {
+		t.Fatalf("begin on an MFA-pending session: %d %s", r.status, r.body)
+	}
+	if r := c.do("GET", "/api/v1/agents", nil); r.status != 401 || r.problemCode() != "mfa_required" {
+		t.Fatalf("pending session reached the API: %d %s", r.status, r.body)
+	}
+}
+
+// SR-07: POST /auth/recover redeems the break-glass token once: limited until a new factor is enrolled, with a
+// password reset link, other sessions revoked; Origin-checked like every mutation.
+func TestReviewSR07RecoverEndpoint(t *testing.T) {
+	h := newHarness(t)
+	admin := h.bootstrapAdmin()
+	adminID := admin.meID()
+	tok, _, err := h.a.Auth.IssueRecoveryLogin(h.ctx, adminID, "")
+	must(t, err)
+	b := h.client()
+	if r := b.do("POST", "/api/v1/auth/recover", map[string]string{"token": tok}, "Origin", "https://evil.example"); r.status != 403 {
+		t.Fatalf("cross-origin recover: %d", r.status)
+	}
+	r := b.ok("recoverLogin", 200, "POST", "/api/v1/auth/recover", map[string]string{"token": tok})
+	var rr struct {
+		MustEnroll    bool `json:"must_enroll"`
+		PasswordReset *struct {
+			URL string `json:"url"`
+		} `json:"password_reset"`
+		Me struct {
+			CSRF    string `json:"csrf_token"`
+			Session struct {
+				Method  string `json:"method"`
+				Limited bool   `json:"limited"`
+			} `json:"session"`
+		} `json:"me"`
+	}
+	r.json(t, &rr)
+	if !rr.MustEnroll || rr.PasswordReset == nil || !strings.HasPrefix(rr.PasswordReset.URL, "/reset/") || rr.Me.Session.Method != "breakglass" ||
+		!rr.Me.Session.Limited {
+		t.Fatalf("recover result %s", r.body)
+	}
+	b.csrf = rr.Me.CSRF
+	if r := admin.do("GET", "/api/v1/me", nil); r.status != 401 {
+		t.Fatalf("pre-recovery session survived: %d", r.status)
+	}
+	if r := b.do("GET", "/api/v1/agents", nil); r.status != 401 || r.problemCode() != "mfa_required" {
+		t.Fatalf("recovery session usable before enrollment: %d %s", r.status, r.body)
+	}
+	r = b.ok("beginTOTP", 200, "POST", "/api/v1/me/mfa/totp", nil)
+	var enr struct{ Secret string }
+	r.json(t, &enr)
+	b.ok("confirmTOTP", 200, "POST", "/api/v1/me/mfa/totp/confirm", map[string]string{"code": totp(t, enr.Secret, h.clk.Now())})
+	b.ok("listAgents", 200, "GET", "/api/v1/agents", nil)
+	if r := h.client().do("POST", "/api/v1/auth/recover", map[string]string{"token": tok}); r.status != 401 {
+		t.Fatalf("recovery token reused: %d %s", r.status, r.body)
+	}
+}
+
+// SR-10: chat link codes need recent authentication.
+func TestReviewSR10LinkCodeNeedsReauth(t *testing.T) {
+	h := newHarness(t)
+	c := h.bootstrapAdmin()
+	h.clk.Advance(10 * time.Minute)
+	if r := c.do("POST", "/api/v1/me/provider-link-codes", map[string]string{"provider": "slack"}); r.status != 401 || r.problemCode() != "reauth_required" {
+		t.Fatalf("stale session created a link code: %d %s", r.status, r.body)
+	}
+}
+
+// SR-11: invitation tokens never land in the idempotency table; a replay is a conflict, not the token again.
+func TestReviewSR11InvitationTokenNotCached(t *testing.T) {
+	h := newHarness(t)
+	c := h.bootstrapAdmin()
+	id := c.meID()
+	body := map[string]any{"email": "new@example.com", "roles": []string{"administrator"}}
+	r := c.ok("createInvitation", 200, "POST", "/api/v1/invitations", body, "Idempotency-Key", "invite-key-1")
+	var inv struct{ Token string }
+	r.json(t, &inv)
+	row, err := h.a.Store.R().GetIdempotency(h.ctx, db.GetIdempotencyParams{OperatorID: id, Key: "invite-key-1", ExpiresAt: 0})
+	must(t, err)
+	if inv.Token == "" || bytes.Contains(row.Body, []byte(inv.Token)) {
+		t.Fatalf("invitation token stored in the idempotency table: %q", row.Body)
+	}
+	if r := c.do("POST", "/api/v1/invitations", body, "Idempotency-Key", "invite-key-1"); r.status != 409 || bytes.Contains(r.body, []byte(inv.Token)) {
+		t.Fatalf("replay: %d %s", r.status, r.body)
 	}
 }
