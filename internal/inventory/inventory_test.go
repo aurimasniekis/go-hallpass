@@ -332,6 +332,7 @@ func TestGitRemoteProfiles(t *testing.T) {
 		"write without refs":  {Alias: ptr("a5"), Capabilities: ptr([]string{CapGitWrite}), Git: &GitRules{Repos: []string{"x/y"}}},
 		"push rules no write": {Alias: ptr("a6"), Git: &GitRules{Repos: []string{"x/y"}, Push: gitproto.RefRules{Branches: []string{"a/*"}}}},
 		"record input":        {Alias: ptr("a7"), RecordInput: ptr(true), Git: &GitRules{Repos: []string{"x/y"}}},
+		"file transfer":       {Alias: ptr("a8"), Capabilities: ptr([]string{CapGitRead, CapFileTransfer}), Git: &GitRules{Repos: []string{"x/y"}}},
 	} {
 		if _, err := svc.CreateRole(ctx, admin, git.ID, in); !errors.Is(err, apperr.ErrInvalid) {
 			t.Errorf("%s: accepted (%v)", name, err)
@@ -344,6 +345,10 @@ func TestGitRemoteProfiles(t *testing.T) {
 		if _, err := svc.CreateRole(ctx, admin, ssh.ID, in); !errors.Is(err, apperr.ErrInvalid) {
 			t.Errorf("%s: accepted (%v)", name, err)
 		}
+	}
+	if r, err := svc.CreateRole(ctx, admin, ssh.ID, RoleInput{Alias: ptr("files"), RemoteUser: ptr("deploy"),
+		Capabilities: ptr([]string{CapFileTransfer})}); err != nil || !r.Has(CapFileTransfer) || r.Has(CapExec) {
+		t.Fatalf("file-transfer only role: %+v %v", r, err)
 	}
 	upd, err := svc.UpdateRole(ctx, admin, read.ID, RoleInput{Version: read.Version, Git: &GitRules{Repos: []string{"acme/api"}}})
 	if err != nil || len(upd.Git.Repos) != 1 {

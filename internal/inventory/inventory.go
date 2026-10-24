@@ -39,10 +39,12 @@ const (
 	CapPTY      = "pty"
 	CapGitRead  = "git-read"  // clone, fetch, archive
 	CapGitWrite = "git-write" // push
+	// CapFileTransfer allows SFTP (and scp, which uses SFTP) to the server. Every file operation is recorded.
+	CapFileTransfer = "file-transfer"
 )
 
 // AllCapabilities lists valid capabilities.
-var AllCapabilities = []string{CapShell, CapExec, CapPTY, CapGitRead, CapGitWrite}
+var AllCapabilities = []string{CapShell, CapExec, CapPTY, CapGitRead, CapGitWrite, CapFileTransfer}
 
 // Server kinds.
 const (

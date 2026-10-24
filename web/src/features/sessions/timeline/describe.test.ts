@@ -18,6 +18,8 @@ const channels = new Map<string, ChannelInfo>([
   ['chn_exec', { kind: 'exec', pty: false, connection_id: 'con_1' }],
   ['chn_shell', { kind: 'shell', pty: false, connection_id: 'con_1' }],
   ['chn_pty', { kind: 'shell', pty: true, connection_id: 'con_2' }],
+  ['chn_sftp', { kind: 'exec', pty: false, connection_id: 'con_3', subsystem: 'sftp' }],
+  ['chn_git', { kind: 'exec', pty: false, connection_id: 'con_3', git_service: 'git-receive-pack' }],
 ]);
 
 describe('describeTimeline', () => {
@@ -159,5 +161,55 @@ describe('describeTimeline', () => {
     expect(unknown?.category).toBe('other');
     expect(reason?.text).toBe('Session closed: odd<U+202E>code');
     expect(unknown?.details.find((d) => d.key === 'a')?.value).toBe('1');
+  });
+
+  it('describes file transfers and git operations', () => {
+    const out = describeTimeline(
+      [
+        ev('channel.opened', { kind: 'exec', credential_kind: 'key' }, { channel_id: 'chn_sftp' }),
+        ev(
+          'file.operation',
+          { op: 'write', path: '/tmp/build.tar', bytes: 2048, sha256: 'ab', ok: true },
+          { channel_id: 'chn_sftp' },
+        ),
+        ev('file.operation', {
+          op: 'rename',
+          path: '/a',
+          target: '/b',
+          ok: false,
+          error: 'Permission denied',
+        }),
+        ev('file.summary', { files: 1, bytes_read: 0, bytes_written: 2048, suppressed_events: 0 }),
+        ev('channel.opened', { kind: 'exec' }, { channel_id: 'chn_git' }),
+        ev('git.push', {
+          repo: 'acme/api',
+          updates: [{ ref: 'refs/heads/agent/fix', action: 'update' }],
+        }),
+        ev('git.push_refused', {
+          repo: 'acme/api',
+          refused: [{ ref: 'refs/heads/main', reason: 'protected branch' }],
+        }),
+        ev('request.approval_recorded', {
+          actor_id: 'opr_1',
+          channel: 'web',
+          approvals: 1,
+          approvals_required: 2,
+        }),
+      ],
+      { channels, operatorName: () => 'Ana' },
+    );
+    expect(out.map((e) => e.text)).toEqual([
+      'File transfer started (SFTP) with the login key',
+      'Uploaded /tmp/build.tar (2.0 KiB)',
+      'Renamed /a → /b failed: Permission denied',
+      'File transfer finished: 1 file, 2.0 KiB uploaded, 0 B downloaded',
+      'Push started',
+      'Pushed to acme/api: refs/heads/agent/fix (update)',
+      'Push to acme/api refused: refs/heads/main (protected branch)',
+      'Approval 1 of 2 recorded by Ana (web)',
+    ]);
+    expect(out[1]?.category).toBe('file');
+    expect(out[2]?.tone).toBe('error');
+    expect(out[5]?.category).toBe('git');
   });
 });

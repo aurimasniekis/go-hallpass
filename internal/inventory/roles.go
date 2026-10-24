@@ -138,8 +138,8 @@ func (svc *Service) validateRole(v *apperr.Validation, r *Role, kind string) {
 		if r.Has(CapGitRead) || r.Has(CapGitWrite) {
 			v.Add("capabilities", "git-read and git-write are only for git remotes")
 		}
-		if !slices.Contains(r.Capabilities, CapShell) && !slices.Contains(r.Capabilities, CapExec) {
-			v.Add("capabilities", "must include shell or exec")
+		if !r.Has(CapShell) && !r.Has(CapExec) && !r.Has(CapFileTransfer) {
+			v.Add("capabilities", "must include shell, exec or file-transfer")
 		}
 		if r.Git != nil {
 			v.Add("git", "git rules are only for git remotes")

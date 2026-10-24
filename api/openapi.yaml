@@ -2340,6 +2340,7 @@ components:
         exit_signal: {type: string}
         git_service: {type: string, enum: [git-upload-pack, git-receive-pack, git-upload-archive], description: Git operation on a git remote.}
         git_repo: {type: string, description: Normalized repository of a git operation.}
+        subsystem: {type: string, enum: [sftp], description: "SSH subsystem of a file transfer (scp or sftp)."}
     SSHBan:
       type: object
       required: [id, address, failures, reason, banned_at, expires_at]

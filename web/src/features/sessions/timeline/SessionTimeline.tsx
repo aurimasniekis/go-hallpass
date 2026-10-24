@@ -177,7 +177,13 @@ export function SessionTimeline({ sessionId }: { sessionId: string }) {
     const chanMap = new Map<string, ChannelInfo>(
       (channelsData?.items ?? []).map((c) => [
         c.id,
-        { kind: c.kind, pty: c.pty, connection_id: c.connection_id },
+        {
+          kind: c.kind,
+          pty: c.pty,
+          connection_id: c.connection_id,
+          git_service: c.git_service,
+          subsystem: c.subsystem,
+        },
       ]),
     );
     return describeTimeline(events, {

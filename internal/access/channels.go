@@ -85,6 +85,8 @@ type RegisterInput struct {
 	// grant git-write for git-receive-pack and git-read otherwise, instead of exec.
 	GitService string
 	GitRepo    string
+	// Subsystem is "sftp" for a file transfer; the role must grant file-transfer instead of exec.
+	Subsystem string
 }
 
 // ChannelReg is a registered (opening) channel.
@@ -165,10 +167,12 @@ func (svc *Service) RegisterChannel(ctx context.Context, in RegisterInput) (*Cha
 			need = inventory.CapGitWrite
 		case in.GitService != "":
 			need = inventory.CapGitRead
+		case in.Subsystem == "sftp":
+			need = inventory.CapFileTransfer
 		case in.Kind == KindShell:
 			need = inventory.CapShell
 		}
-		if in.GitService != "" && (in.Kind != KindExec || in.PTY) {
+		if (in.GitService != "" || in.Subsystem != "") && (in.Kind != KindExec || in.PTY) {
 			return ErrCapability
 		}
 		if !slices.Contains(g.Capabilities, need) || !role.Has(need) || (in.PTY && (!role.Has(inventory.CapPTY) || !slices.Contains(g.Capabilities, inventory.CapPTY))) {
@@ -196,7 +200,7 @@ func (svc *Service) RegisterChannel(ctx context.Context, in RegisterInput) (*Cha
 		if err := tx.Q.InsertChannel(ctx, db.InsertChannelParams{
 			ID: chID, ConnectionID: in.ConnectionID, AccessSessionID: sess.ID, GrantID: g.ID, AgentID: g.AgentID, RoleID: g.RoleID,
 			Kind: in.Kind, Pty: b2i(in.PTY), OpenedAt: tx.NowMicros(), BootID: svc.opts.BootID,
-			GitService: optString(in.GitService), GitRepo: optString(in.GitRepo),
+			GitService: optString(in.GitService), GitRepo: optString(in.GitRepo), Subsystem: optString(in.Subsystem),
 		}); err != nil {
 			return err
 		}

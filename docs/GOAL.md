@@ -51,9 +51,10 @@ In scope for v1.0:
 - **Not a sandbox.** HallPass does not restrict what an allowed shell can do on the destination. Command
   allowlists are not offered as a security boundary. Destination-side controls (accounts, sudoers,
   ForceCommand, MAC policies, network egress rules) are required for reliable restriction.
-- **No port, agent, X11 or streamlocal forwarding, and no SFTP/SCP subsystems.** Possible future work is a separately
-  authorized capability (review item R-06). An allowed shell can still open network connections and transfer
-  files by other means. This is documented, not prevented.
+- **No port, agent, X11 or streamlocal forwarding, and no subsystems other than SFTP.** SFTP (and scp over SFTP) is
+  served only for roles with the separately authorized `file-transfer` capability, with file operations recorded as
+  metadata (ADR-0049, resolving R-06). An allowed shell can still open network connections and transfer files by
+  other means. This is documented, not prevented.
 - **No high availability or active-active clustering.** HallPass runs as a single active instance with cold-standby recovery.
 - **No writable SQLite on network filesystems** (NFS, SMB/CIFS).
 - **No agent private keys in HallPass**, and no issuing of destination keys or certificates to agents.
@@ -138,7 +139,7 @@ Test layers are abbreviated in `docs/PLAN.md` §21 and in `docs/TEST_STRATEGY.md
 | HP-SSH-004 | **Algorithm policy.** Accepted agent key types: Ed25519, ECDSA P-256/P-384/P-521, and RSA ≥ 3072 bits with `rsa-sha2-256`/`rsa-sha2-512` signatures. DSA, RSA < 3072 and SHA-1 `ssh-rsa` signatures are rejected. KEX, cipher and MAC sets are restricted to a documented modern allowlist on both the inbound and outbound legs. |
 | HP-SSH-005 | **Gateway host key lifecycle.** The gateway's own Ed25519 host key is generated at initialization, encrypted at rest and shown as SHA-256 fingerprints in the UI and CLI. Operators get a documented procedure for agents to pin it (known_hosts line or an `@cert-authority` host certificate) and to rotate it with an announced overlap. |
 | HP-SSH-006 | **Shell, exec, PTY completeness.** `shell`, `exec`, `pty-req`, `window-change`, `env`, `signal`, `eof`, `close`, `exit-status` and `exit-signal` are handled end to end between agent and destination, matching OpenSSH semantics. |
-| HP-SSH-007 | **Forwarding and unknown channels denied.** Agent forwarding, `direct-tcpip`, `tcpip-forward`, `streamlocal`, X11, unknown channel types and all subsystems (including `sftp`) are rejected with an explicit SSH failure and an audit event. SCP over exec is a shell command and gets no special handling; this is documented. |
+| HP-SSH-007 | **Forwarding and unknown channels denied.** Agent forwarding, `direct-tcpip`, `tcpip-forward`, `streamlocal`, X11, unknown channel types and all subsystems except `sftp` are rejected with an explicit SSH failure and an audit event. `sftp` is accepted only through a role with the `file-transfer` capability (ADR-0049, security-relevant change); the legacy scp protocol over exec is refused. |
 | HP-SSH-008 | **Environment allowlist.** Only allowlisted environment variables (default `TERM`, `LANG`, `LC_*`; extendable per role) are forwarded. Rejected variables are dropped and counted in metrics. |
 | HP-SSH-009 | **Stdout purity.** Destination stdout is forwarded byte-for-byte. For non-PTY sessions, gateway status and progress messages are written only to stderr. For PTY sessions, gateway messages appear only before the destination session starts or after it ends. |
 | HP-SSH-010 | **Exit status and signal propagation.** The destination `exit-status` is propagated unchanged and `exit-signal` is forwarded as `exit-signal`. Gateway-originated failures use exit codes 80–90 together with a single-line JSON error object on stderr carrying `"source":"gateway"`. |

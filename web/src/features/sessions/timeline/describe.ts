@@ -1,6 +1,13 @@
 import type { StatusTone } from '../../../ds/StatusBadge';
 import { revealControls } from '../../../ds/untrusted';
-import { formatDate, formatDateTime, formatDuration, formatTime, parseGoDuration } from '../../../lib/format';
+import {
+  formatBytes,
+  formatDate,
+  formatDateTime,
+  formatDuration,
+  formatTime,
+  parseGoDuration,
+} from '../../../lib/format';
 import { gatewayExitText, reasonText } from '../../../shared/channelClose';
 import { HIDDEN_FIELDS, timelineFields, timelineLabel, timelineProvenance } from './labels';
 
@@ -19,6 +26,8 @@ export type TimelineCategory =
   | 'recording'
   | 'session'
   | 'destination'
+  | 'git'
+  | 'file'
   | 'other';
 
 export interface TimelineEventInput {
@@ -36,6 +45,8 @@ export interface ChannelInfo {
   kind: string;
   pty: boolean;
   connection_id: string;
+  git_service?: string | undefined;
+  subsystem?: string | undefined;
 }
 
 export interface TimelineContext {
@@ -143,6 +154,12 @@ function channelNoun(info: ChannelInfo | undefined, d: Data): string {
   if (kind === 'shell') {
     return pty === false ? 'Shell (no PTY)' : 'Shell';
   }
+  if (info?.subsystem === 'sftp') {
+    return 'File transfer';
+  }
+  if (info?.git_service) {
+    return 'Git operation';
+  }
   if (kind === 'exec') {
     return 'Command';
   }
@@ -227,6 +244,12 @@ function sentence(ev: TimelineEventInput, d: Data, ctx: TimelineContext, info: C
           ? `Interactive shell opened (PTY)${using}`
           : `Shell opened without terminal (no PTY)${using}`;
       }
+      if (info?.subsystem === 'sftp') {
+        return `File transfer started (SFTP)${using}`;
+      }
+      if (info?.git_service) {
+        return `${GIT_SERVICES[info.git_service] ?? 'Git operation'} started${using}`;
+      }
       if (kind === 'exec') {
         return `Command started${pty ? ' with a PTY' : ''}${using}`;
       }
@@ -275,9 +298,95 @@ function sentence(ev: TimelineEventInput, d: Data, ctx: TimelineContext, info: C
       const after = d.after_session_end === true ? ' after the session ended' : '';
       return `Destination reported a command${after}${meta ? ` (${meta})` : ''}, unverified`;
     }
+    case 'request.approval_recorded': {
+      const { who, via } = decider({ ...d, actor_type: 'operator' }, ctx);
+      const k = num(d, 'approvals');
+      const n = num(d, 'approvals_required');
+      const count = k !== null && n !== null ? ` ${String(k)} of ${String(n)}` : '';
+      return `Approval${count} recorded by ${who}${via ? ` (${via})` : ''}`;
+    }
+    case 'git.requested': {
+      const svc = str(d, 'service');
+      const repo = str(d, 'repo');
+      return `${(svc && GIT_SERVICES[svc]) ?? 'Git operation'}${repo ? ` of ${repo}` : ''} requested`;
+    }
+    case 'git.push':
+    case 'git.push_refused': {
+      const repo = str(d, 'repo');
+      const refs = refList(d.updates);
+      if (t === 'git.push') {
+        return `Pushed to ${repo ?? 'the repository'}${refs ? `: ${refs}` : ''}`;
+      }
+      const refused = refList(d.refused, 'reason');
+      const err = str(d, 'error');
+      return `Push to ${repo ?? 'the repository'} refused${refused ? `: ${refused}` : err ? `: ${err}` : ''}`;
+    }
+    case 'git.transferred': {
+      const sent = num(d, 'bytes_in');
+      const got = num(d, 'bytes_out');
+      return `Git transfer finished (${formatBytes(sent ?? 0)} sent, ${formatBytes(got ?? 0)} received)`;
+    }
+    case 'file.operation': {
+      const op = str(d, 'op') ?? 'operation';
+      const path = str(d, 'path') ?? '';
+      const target = str(d, 'target');
+      const bytes = num(d, 'bytes');
+      const verb = FILE_OPS[op] ?? op;
+      const size = (op === 'read' || op === 'write') && bytes !== null ? ` (${formatBytes(bytes)})` : '';
+      const where = `${path}${target ? ` → ${target}` : ''}`;
+      if (d.ok !== true) {
+        const err = str(d, 'error');
+        return `${verb} ${where} failed${err ? `: ${err}` : ''}`;
+      }
+      return `${verb} ${where}${size}`;
+    }
+    case 'file.summary': {
+      const files = num(d, 'files') ?? 0;
+      const read = num(d, 'bytes_read') ?? 0;
+      const written = num(d, 'bytes_written') ?? 0;
+      const skipped = num(d, 'suppressed_events') ?? 0;
+      return `File transfer finished: ${String(files)} file${files === 1 ? '' : 's'}, ${formatBytes(written)} uploaded, ${formatBytes(read)} downloaded${skipped > 0 ? ` (${String(skipped)} further operations not listed)` : ''}`;
+    }
     default:
       return timelineLabel(t).label;
   }
+}
+
+const GIT_SERVICES: Record<string, string> = {
+  'git-upload-pack': 'Clone or fetch',
+  'git-receive-pack': 'Push',
+  'git-upload-archive': 'Archive download',
+};
+
+const FILE_OPS: Record<string, string> = {
+  read: 'Downloaded',
+  write: 'Uploaded',
+  open: 'Opened',
+  list: 'Listed',
+  remove: 'Removed',
+  rename: 'Renamed',
+  mkdir: 'Created directory',
+  rmdir: 'Removed directory',
+  setstat: 'Changed attributes of',
+  symlink: 'Created symlink',
+  hardlink: 'Created hard link',
+};
+
+/** "refs/heads/a (create), refs/heads/b (update)" from a list of ref objects; `extra` names the annotation field. */
+function refList(v: unknown, extra = 'action'): string {
+  if (!Array.isArray(v)) {
+    return '';
+  }
+  return v
+    .slice(0, 5)
+    .map((u: unknown) => {
+      const o = asData(u);
+      const ref = str(o, 'ref') ?? '?';
+      const note = str(o, extra);
+      return note ? `${ref} (${note})` : ref;
+    })
+    .join(', ')
+    .concat(v.length > 5 ? `, and ${String(v.length - 5)} more` : '');
 }
 
 function category(type: string): TimelineCategory {
@@ -292,7 +401,9 @@ function category(type: string): TimelineCategory {
   }
   const head = type.split('.')[0] ?? '';
   return (
-    (['request', 'grant', 'connection', 'channel', 'recording'] as const).find((c) => c === head) ?? 'other'
+    (['request', 'grant', 'connection', 'channel', 'recording', 'git', 'file'] as const).find(
+      (c) => c === head,
+    ) ?? 'other'
   );
 }
 
@@ -308,6 +419,9 @@ function tone(type: string, d: Data): StatusTone {
   }
   if (type === 'connection.closed' || type === 'access_session.closed') {
     return 'neutral';
+  }
+  if (type === 'file.operation') {
+    return d.ok === true ? (d.op === 'remove' || d.op === 'rmdir' ? 'warning' : 'info') : 'error';
   }
   return timelineLabel(type).tone;
 }

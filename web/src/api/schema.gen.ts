@@ -2487,6 +2487,11 @@ export interface components {
             git_service?: "git-upload-pack" | "git-receive-pack" | "git-upload-archive";
             /** @description Normalized repository of a git operation. */
             git_repo?: string;
+            /**
+             * @description SSH subsystem of a file transfer (scp or sftp).
+             * @enum {string}
+             */
+            subsystem?: "sftp";
         };
         SSHBan: {
             id: string;

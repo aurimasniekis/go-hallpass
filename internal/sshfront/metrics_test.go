@@ -106,7 +106,7 @@ func TestServerMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sess.RequestSubsystem("sftp"); err == nil {
+	if err := sess.RequestSubsystem("netconf"); err == nil { // only sftp is served
 		t.Fatal("subsystem accepted")
 	}
 	_ = sess.Close()

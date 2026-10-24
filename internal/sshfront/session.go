@@ -55,7 +55,9 @@ type session struct {
 	diag  io.Writer // gateway messages: stderr, or the terminal when a PTY is allocated
 	snap  *policy.Snapshot
 	jsonE bool // errors as JSON
-	git   bool // a git operation: errors as text lines git shows to its user
+	plain bool // git, scp or sftp: errors as text lines the client shows to its user
+	// subsystem is "sftp" when the client asked for file transfer instead of shell or exec.
+	subsystem string
 }
 
 // HandleSession implements SessionHandler.
@@ -111,6 +113,19 @@ func (s *session) awaitStart(ctx context.Context) (string, bool) {
 			case "shell":
 				reply(r, true)
 				return "", true
+			case "subsystem":
+				var p struct{ Name string }
+				if err := ssh.Unmarshal(r.Payload, &p); err == nil && p.Name == "sftp" {
+					// File transfer: allowed only through a role with the file-transfer capability (checked next).
+					reply(r, true)
+					s.subsystem = "sftp"
+					return "", true
+				}
+				reply(r, false)
+				s.h.Metrics.SSHRefused(refusedType(r.Type))
+				if s.h.Deny != nil {
+					s.h.Deny(ctx, s.c, "ssh.session_request.denied", map[string]any{"request_type": "subsystem", "subsystem": truncate(p.Name, 64)})
+				}
 			case "exec":
 				var p struct{ Cmd string }
 				if err := ssh.Unmarshal(r.Payload, &p); err != nil {
@@ -144,7 +159,7 @@ func (s *session) exit(code int) {
 
 // fail writes a gateway error: one JSON line on stderr for JSON mode or non-PTY sessions, text otherwise.
 func (s *session) fail(err error) int {
-	if s.jsonE || (s.pty == nil && !s.git) {
+	if s.jsonE || (s.pty == nil && !s.plain) {
 		_, _ = s.ch.Stderr().Write(grammar.ErrorJSON(err))
 	} else {
 		_, _ = io.WriteString(s.diag, grammar.ErrorText(err))
@@ -189,8 +204,17 @@ func publicMessage(err error) string {
 }
 
 func (s *session) run(ctx context.Context, command string) int {
+	if s.subsystem == "sftp" {
+		s.plain = true
+		var err error
+		if s.snap, err = s.h.Engine.Current(ctx); err != nil {
+			s.h.Log.Error("policy snapshot unavailable", obs.Err(err))
+			return s.fail(grammar.Internal())
+		}
+		return s.fileTransfer(ctx)
+	}
 	if gc, ok, err := gitproto.ParseCommand(command); ok {
-		s.git = true
+		s.plain = true
 		if err != nil {
 			return s.fail(grammar.Usage("invalid git command"))
 		}
@@ -199,6 +223,11 @@ func (s *session) run(ctx context.Context, command string) int {
 			return s.fail(grammar.Internal())
 		}
 		return s.gitOp(ctx, gc)
+	}
+	if legacySCP(command) {
+		s.plain = true
+		return s.fail(grammar.Usage("the legacy scp protocol is not supported: run scp without -O (it then uses SFTP), " +
+			"for example: scp build.tar web1@<gateway>:/tmp/"))
 	}
 	cmd, err := grammar.Parse(command)
 	if err != nil {
@@ -727,4 +756,19 @@ func (c crlfWriter) Write(p []byte) (int, error) {
 		return 0, err
 	}
 	return len(p), nil
+}
+
+// legacySCP reports whether command is the remote side of the original scp protocol ("scp -t <dir>" or "scp -f
+// <file>", sent by scp -O): the gateway serves file transfers only over SFTP, where every operation can be recorded.
+func legacySCP(command string) bool {
+	f := strings.Fields(command)
+	if len(f) < 2 || f[0] != "scp" {
+		return false
+	}
+	for _, a := range f[1:] {
+		if strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && strings.ContainsAny(a, "tf") {
+			return true
+		}
+	}
+	return false
 }

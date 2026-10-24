@@ -192,6 +192,9 @@ const (
 	EvGitPush        = "git.push"
 	EvGitPushRefused = "git.push_refused"
 	EvGitTransferred = "git.transferred"
+	// File transfers (SFTP) record one event per file operation and a summary; no file content.
+	EvFileOperation = "file.operation"
+	EvFileSummary   = "file.summary"
 	// EvDestinationExec is a destination-reported exec record ingested from a signed collector (WP25, HP-REC-012).
 	// It is never verified by HallPass; its data carries provenance "destination-audit" and verified=false.
 	EvDestinationExec = "destination.exec"

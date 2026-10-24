@@ -21,6 +21,13 @@ const LABELS: Record<string, { label: string; tone: StatusTone }> = {
   'recording.failed': { label: 'Recording failed', tone: 'error' },
   'access_session.closed': { label: 'Session closed', tone: 'neutral' },
   'destination.exec': { label: 'Destination-reported command', tone: 'warning' },
+  'request.approval_recorded': { label: 'Approval recorded', tone: 'info' },
+  'git.requested': { label: 'Git operation', tone: 'info' },
+  'git.push': { label: 'Git push', tone: 'success' },
+  'git.push_refused': { label: 'Git push refused', tone: 'error' },
+  'git.transferred': { label: 'Git transfer finished', tone: 'neutral' },
+  'file.operation': { label: 'File operation', tone: 'info' },
+  'file.summary': { label: 'File transfer finished', tone: 'neutral' },
 };
 
 export function timelineLabel(type: string): { label: string; tone: StatusTone } {

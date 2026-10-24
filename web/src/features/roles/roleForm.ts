@@ -6,6 +6,7 @@ export const CAPABILITIES = [
   { value: 'shell', label: 'Interactive shell' },
   { value: 'exec', label: 'Command execution (exec)' },
   { value: 'pty', label: 'Terminal (PTY) allocation' },
+  { value: 'file-transfer', label: 'File transfer (scp, sftp)' },
 ] as const;
 
 export const APPROVAL_CHANNELS = [
@@ -127,8 +128,8 @@ export function roleFormValues(r: Role): RoleFormValues {
 export function roleFormProblems(v: RoleFormValues): Record<string, string> {
   const problems: Record<string, string> = {};
   const caps = v.capabilities ?? [];
-  if (!caps.includes('shell') && !caps.includes('exec')) {
-    problems.capabilities = 'Include shell or exec.';
+  if (!caps.includes('shell') && !caps.includes('exec') && !caps.includes('file-transfer')) {
+    problems.capabilities = 'Include shell, exec or file transfer.';
   }
   if (v.default_duration != null && v.default_duration < 60) {
     problems.default_duration = 'At least 1 minute.';

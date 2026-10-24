@@ -91,7 +91,7 @@ describe('role form mapping', () => {
         approval_channels: [],
       }),
     ).toEqual({
-      capabilities: 'Include shell or exec.',
+      capabilities: 'Include shell, exec or file transfer.',
       default_duration: 'Must not exceed the maximum duration.',
       max_concurrent_per_agent: 'Must not exceed the total limit.',
       approval_channels: 'Choose at least one approval channel.',

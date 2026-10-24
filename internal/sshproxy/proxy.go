@@ -29,6 +29,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
 	"github.com/aurimasniekis/go-hallpass/internal/obs/metrics"
 	"github.com/aurimasniekis/go-hallpass/internal/obs/tracing"
+	"github.com/aurimasniekis/go-hallpass/internal/sftpaudit"
 	"github.com/aurimasniekis/go-hallpass/internal/sshkeepalive"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 )
@@ -132,6 +133,8 @@ type Session struct {
 	Notify func(msg string)
 	// Git marks a git operation on a git remote (Kind is exec, there is no PTY).
 	Git *GitOp
+	// FileTransfer runs the destination's SFTP subsystem; every file operation is recorded (Kind is exec, no PTY).
+	FileTransfer bool
 }
 
 // GitOp is a git operation on a git remote. The service runs on the upstream host with the forwarded path; only
@@ -168,6 +171,9 @@ func (p *Proxy) Run(ctx context.Context, s *Session) Result {
 		GrantID: s.Grant.ID, Kind: s.Kind, PTY: s.PTY != nil}
 	if s.Git != nil {
 		in.GitService, in.GitRepo = s.Git.Service, s.Git.Repo
+	}
+	if s.FileTransfer {
+		in.Subsystem = "sftp"
 	}
 	reg, err := p.o.Access.RegisterChannel(ctx, in)
 	tracing.End(span, err)
@@ -248,7 +254,7 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 	// 1. Recording must be established before anything is forwarded (mandatory mode). Git operations record
 	// metadata only: the timeline events below, never the pack data.
 	var rec Recorder
-	if s.Git != nil {
+	if s.Git != nil || s.FileTransfer {
 		rec = nopRecorder{}
 	} else if p.o.Recorders != nil {
 		r, err := p.o.Recorders.Open(ctx, reg, s.Kind, s.PTY != nil)
@@ -260,7 +266,7 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 		} else {
 			rec = r
 		}
-	} else if reg.Role.RecordingMode == "mandatory" && s.Git == nil {
+	} else if reg.Role.RecordingMode == "mandatory" && s.Git == nil && !s.FileTransfer {
 		return fail(CodeInternal, "recording unavailable", errors.New("no recorder configured"))
 	}
 	if rec == nil {
@@ -316,7 +322,14 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 		}
 		_ = client.Close()
 	}()
-	sess, err := client.NewSession()
+	var sess remoteSession
+	var sub *subsystemSession
+	if s.FileTransfer {
+		sub, err = newSubsystemSession(client)
+		sess = sub
+	} else {
+		sess, err = client.NewSession()
+	}
 	if err != nil {
 		return fail(CodeDestinationUnavailable, "destination session", err)
 	}
@@ -345,6 +358,9 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 	if s.Git != nil {
 		env = gitEnv(s.Env)
 	}
+	if s.FileTransfer {
+		env = nil
+	}
 	p.o.Metrics.SSHEnvRejected(len(s.Env) - len(env)) // HP-SSH-008: names are never exported
 	for _, kv := range env {
 		_ = sess.Setenv(kv[0], kv[1]) // destination sshd AcceptEnv decides; failures are not fatal
@@ -362,10 +378,13 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 		return fail(CodeInternal, "stderr", err)
 	}
 	data := map[string]any{"kind": s.Kind, "pty": s.PTY != nil, "credential_kind": auth.Kind, "segment_id": rec.SegmentID()}
-	if s.Git != nil {
+	if s.FileTransfer {
+		data["subsystem"] = "sftp"
+		err = sub.Start("sftp")
+	} else if s.Git != nil {
 		data["git_service"], data["repo"] = s.Git.Service, s.Git.Repo
 		_ = p.o.Access.AppendSessionEvent(ctx, reg, access.EvGitRequested, "", map[string]any{"service": s.Git.Service, "repo": s.Git.Repo})
-		err = sess.Start(s.Git.Service + " " + gitproto.Quote(s.Git.Forward))
+		err = sess.(*ssh.Session).Start(s.Git.Service + " " + gitproto.Quote(s.Git.Forward))
 	} else if s.Kind == access.KindExec {
 		if err := rec.ExecRequested(s.Command); err != nil {
 			recFailed.Store(true)
@@ -373,9 +392,9 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 			return fail(CodeInternal, "recording exec", err)
 		}
 		_ = p.o.Access.AppendSessionEvent(ctx, reg, access.EvExecRequested, rec.SegmentID(), map[string]any{"has_command": s.Command != "", "bytes": len(s.Command)})
-		err = sess.Start(s.Command)
+		err = sess.(*ssh.Session).Start(s.Command)
 	} else {
-		err = sess.Shell()
+		err = sess.(*ssh.Session).Shell()
 	}
 	if err != nil {
 		return fail(CodeDestinationUnavailable, "start", err)
@@ -421,9 +440,27 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 	if s.Git != nil {
 		agentOut = countingWriter{w: s.Agent, n: &bytesOut}
 	}
-	outputs.Go(func() { pump(stdout, agentOut, outStream, rec, touch, recFail) })
+	var files *sftpaudit.Tracker
+	if s.FileTransfer {
+		files = sftpaudit.NewTracker(func(e sftpaudit.Event) {
+			_ = p.o.Access.AppendSessionEvent(context.WithoutCancel(ctx), reg, access.EvFileOperation, "", map[string]any{
+				"op": e.Op, "path": e.Path, "target": e.Target, "bytes": e.Bytes, "sha256": e.SHA256, "ok": e.OK, "error": e.Error})
+		})
+		outputs.Go(func() {
+			_ = sftpaudit.Pipe(stdout, s.Agent, func(pkt []byte) { touch(); files.Server(pkt) })
+		})
+	} else {
+		outputs.Go(func() { pump(stdout, agentOut, outStream, rec, touch, recFail) })
+	}
 	outputs.Go(func() { pump(stderr, s.Agent.Stderr(), errStream, rec, touch, recFail) })
 	go func() {
+		if files != nil {
+			if err := sftpaudit.Pipe(s.Agent, stdin, func(pkt []byte) { touch(); files.Client(pkt) }); err != nil {
+				t.terminate("sftp_protocol_error")
+			}
+			_ = stdin.Close()
+			return
+		}
 		var src io.Reader = s.Agent
 		if s.Git != nil && s.Git.Service == gitproto.ReceivePack {
 			r, ok := p.gitPushGate(ctx, s, reg, t, stdin, &bytesIn)
@@ -468,6 +505,11 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 	outputs.Wait()
 	waitErr := sess.Wait()
 	close(stopIdle)
+	if files != nil {
+		sum := files.Summary()
+		_ = p.o.Access.AppendSessionEvent(context.WithoutCancel(ctx), reg, access.EvFileSummary, "", map[string]any{
+			"files": sum.Files, "bytes_read": sum.BytesRead, "bytes_written": sum.BytesWritten, "suppressed_events": sum.Suppressed})
+	}
 	if s.Git != nil {
 		_ = p.o.Access.AppendSessionEvent(context.WithoutCancel(ctx), reg, access.EvGitTransferred, "",
 			map[string]any{"service": s.Git.Service, "repo": s.Git.Repo, "bytes_in": bytesIn.Load(), "bytes_out": bytesOut.Load()})
@@ -500,6 +542,12 @@ func (p *Proxy) run(ctx context.Context, s *Session, reg *access.ChannelReg) Res
 		} else {
 			st := e.ExitStatus()
 			res.ExitStatus = &st
+		}
+	case *remoteExit:
+		if e.signal != "" {
+			res.ExitSignal = e.signal
+		} else {
+			res.ExitStatus = &e.status
 		}
 	case *ssh.ExitMissingError:
 		res.Reason = "destination_no_exit_status"
@@ -541,7 +589,7 @@ func pump(src io.Reader, dst io.Writer, stream Stream, rec Recorder, touch func(
 }
 
 // agentRequests forwards window changes and signals; everything else (including late exec/shell/subsystem) is refused.
-func (p *Proxy) agentRequests(s *Session, sess *ssh.Session, rec Recorder, touch func()) {
+func (p *Proxy) agentRequests(s *Session, sess remoteSession, rec Recorder, touch func()) {
 	for r := range s.AgentReqs {
 		ok := false
 		switch r.Type {
@@ -582,7 +630,7 @@ func idleWatch(limit time.Duration, last *atomic.Int64, stop <-chan struct{}, t 
 // terminator ends a session on enforcer command: notify the agent, HUP and close the destination session.
 type terminator struct {
 	agent  ssh.Channel
-	sess   *ssh.Session
+	sess   remoteSession
 	client *ssh.Client
 	notify func(string)
 

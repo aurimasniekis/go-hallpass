@@ -848,6 +848,37 @@
   role that needs more than one approver. The web API answers a partial approval with 202 and the pending request;
   chat buttons stay usable for the other approvers.
 
+### ADR-0049 — File transfer (SFTP and scp) as a separately authorized capability
+
+- **Status:** accepted (operator request, 2026-10-24). **Security-relevant change:** it relaxes HP-SSH-007 ("all
+  subsystems are rejected") and the v1 non-goal "no SFTP/SCP subsystems" for roles that opt in, and file contents
+  are not recorded as byte streams. Flagged for operator review. Resolves R-06.
+- **Context:** agents need to copy build artifacts and configuration to and from servers. Through a shell they can
+  already do so (`cat > file`), but without any record of which files moved. The operator asked for a separate
+  capability that records file operations.
+- **Decision:**
+  - A new role capability `file-transfer`, for SSH roles only (never for git remotes), not in the default set. A
+    role may have it alone, so it can transfer files without shell or exec.
+  - The gateway serves the `sftp` subsystem and nothing else; every other subsystem is still refused and audited.
+    The legacy scp protocol (`scp -O`, an exec of `scp -t`/`scp -f`) is refused with a hint, because its stream
+    cannot be followed per file. Current OpenSSH scp uses SFTP by default.
+  - SFTP carries no target, so the SSH user name selects it: `web1@gateway` or `web1+deploy@gateway`. The user name
+    is used only for routing, like the command text; the agent's identity is still only its key (HP-SSH-002).
+  - Role choice: the named role, else the roles with `file-transfer` the agent may use, ranked active grant,
+    auto-approve, requestable, then by alias. Access is reused or requested and awaited like `connect`. A role that
+    requires a reason fails with a message telling the agent to `request … --reason … --wait` first.
+  - The destination channel is an exec-kind channel without PTY or forwarded environment; grant expiry, revocation,
+    concurrency limits, idle timeout and lockdown apply unchanged.
+- **Recording:** the gateway follows the SFTP v3 packets in both directions without changing them and records one
+  timeline event per completed operation (`file.operation`: read or write with bytes and SHA-256 when the transfer
+  was sequential from offset 0, list, remove, rename, mkdir, rmdir, setstat, symlink, hardlink, failures with the
+  server's message) and a summary (`file.summary`). Paths have control characters replaced and are bounded to 4096
+  bytes; at most 5000 operations per session are listed, the rest are counted. A packet over 1 MiB ends the channel.
+  File contents are not stored.
+- **Not provided:** HallPass does not restrict paths. The destination account decides what can be read or written;
+  the docs recommend a dedicated account, optionally with `ForceCommand internal-sftp` and `ChrootDirectory`. No
+  digest is recorded for non-sequential transfers (resumed or parallel).
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |
@@ -857,7 +888,7 @@
 | R-03 | **KMS/Vault/HSM backend** in v1 (`KeyWrapper`, `Signer`). | Ship interfaces plus local implementation in v1. Add Vault Transit/AWS KMS wrappers post-1.0 unless required. | — |
 | R-04 | **Litestream** as optional continuous DB replication for backup. | Document as optional and test compatibility (WAL, checkpoints) in WP23. Not a supported HA mode. | — |
 | R-05 | **Default global grant-duration ceiling.** | 24 h (matches the largest preset). Roles default to a 6 h max and a 30 m default. | — |
-| R-06 | **SFTP/SCP subsystem** as a separately authorized capability. | Out of v1. A future design needs a separate capability, recording of file metadata and policy. | — |
+| R-06 | **SFTP/SCP subsystem** as a separately authorized capability. | **Resolved 2026-10-24 (operator request):** the `file-transfer` capability serves SFTP (and scp over SFTP) with per-file metadata recording (ADR-0049, security-relevant). | Resolved |
 | R-07 | **Log schema**: ECS-aligned names vs a custom namespace. | ECS-aligned core fields plus a `hallpass.*` namespace. | WP02 |
 | R-08 | **Trademark/name/domain check** for "HallPass". | Not verified. The operator should check before public release. | Public release |
 | R-09 | **Self-approval default.** | Prohibited by default for agent owners. Configurable. | WP08 |

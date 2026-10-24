@@ -29,14 +29,14 @@ func (s *session) isGitRemote(ctx context.Context, serverID string) bool {
 	return err == nil && srv.Kind == inventory.KindGit
 }
 
-type gitCandidate struct {
+type accessCandidate struct {
 	vr     policy.VisibleRole
 	push   *gitproto.RefPolicy
 	active *access.Grant
 }
 
 // rank orders candidate profiles: one with an active grant first, then auto-approved, then requestable.
-func (c gitCandidate) rank() int {
+func (c accessCandidate) rank() int {
 	switch {
 	case c.active != nil:
 		return 0
@@ -67,7 +67,7 @@ func (s *session) gitOp(ctx context.Context, gc gitproto.Command) int {
 		need = inventory.CapGitWrite
 	}
 	active := s.activeGrants(ctx)
-	var cands []gitCandidate
+	var cands []accessCandidate
 	for _, vr := range vs.Roles {
 		role, err := s.h.Inventory.GetRole(ctx, vr.Role.ID)
 		if err != nil || role.Git == nil || !role.Has(need) {
@@ -81,12 +81,12 @@ func (s *session) gitOp(ctx context.Context, gc gitproto.Command) int {
 		if g == nil && !vr.Decision.Requestable() {
 			continue
 		}
-		cands = append(cands, gitCandidate{vr: vr, push: push, active: g})
+		cands = append(cands, accessCandidate{vr: vr, push: push, active: g})
 	}
 	if len(cands) == 0 {
 		return s.fail(errRepoNotFound())
 	}
-	slices.SortStableFunc(cands, func(a, b gitCandidate) int {
+	slices.SortStableFunc(cands, func(a, b accessCandidate) int {
 		return cmp.Or(cmp.Compare(a.rank(), b.rank()), cmp.Compare(a.vr.Role.Name, b.vr.Role.Name))
 	})
 	c := cands[0]

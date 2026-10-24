@@ -316,13 +316,15 @@ type channelDTO struct {
 	ExitSignal   string     `json:"exit_signal,omitempty"`
 	GitService   string     `json:"git_service,omitempty"`
 	GitRepo      string     `json:"git_repo,omitempty"`
+	Subsystem    string     `json:"subsystem,omitempty"`
 }
 
 func channel(ch db.SshChannel) channelDTO {
 	return channelDTO{ID: ch.ID, SessionID: ch.AccessSessionID, ConnectionID: ch.ConnectionID, GrantID: ch.GrantID, AgentID: ch.AgentID,
 		RoleID: ch.RoleID, Kind: ch.Kind, PTY: ch.Pty == 1, State: ch.State, OpenedAt: micros(ch.OpenedAt), ClosedAt: nullTime(ch.ClosedAt),
 		CloseReason: ch.CloseReason.String, CloseDetail: ch.CloseDetail.String, GatewayCode: nullInt(ch.GatewayExitCode),
-		ExitStatus: nullInt(ch.ExitStatus), ExitSignal: ch.ExitSignal.String, GitService: ch.GitService.String, GitRepo: ch.GitRepo.String}
+		ExitStatus: nullInt(ch.ExitStatus), ExitSignal: ch.ExitSignal.String, GitService: ch.GitService.String, GitRepo: ch.GitRepo.String,
+		Subsystem: ch.Subsystem.String}
 }
 
 type timelineDTO struct {

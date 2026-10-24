@@ -746,6 +746,7 @@ type SshChannel struct {
 	GatewayExitCode sql.NullInt64
 	GitService      sql.NullString
 	GitRepo         sql.NullString
+	Subsystem       sql.NullString
 }
 
 type SshConnection struct {

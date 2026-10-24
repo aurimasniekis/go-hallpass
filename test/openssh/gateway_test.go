@@ -219,7 +219,8 @@ func TestOpenSSHPTY(t *testing.T) {
 	}
 }
 
-// HP-SSH-007: forwarding, agent forwarding and subsystems are refused.
+// HP-SSH-007: forwarding, agent forwarding and subsystems other than sftp are refused; sftp needs a server as the
+// SSH user and a role with the file-transfer capability.
 func TestOpenSSHForwardingDenied(t *testing.T) {
 	g := startGateway(t)
 	_, errOut, code := g.SSH("", "-W", "127.0.0.1:22", "agent@127.0.0.1")
@@ -232,7 +233,15 @@ func TestOpenSSHForwardingDenied(t *testing.T) {
 	}
 	_, _, code = g.SSH("", "-s", "agent@127.0.0.1", "sftp")
 	if code == 0 {
-		t.Fatal("sftp subsystem allowed")
+		t.Fatal("sftp subsystem allowed without a server")
+	}
+	_, _, code = g.SSH("", "-s", "web1@127.0.0.1", "sftp")
+	if code == 0 {
+		t.Fatal("sftp subsystem allowed without the file-transfer capability")
+	}
+	_, _, code = g.SSH("", "-s", "web1@127.0.0.1", "netconf")
+	if code == 0 {
+		t.Fatal("netconf subsystem allowed")
 	}
 }
 

@@ -1663,7 +1663,7 @@ WP25 (2026-10-23): destination-side audit integration (internal/destaudit, cmd/h
 
 R-01 license · R-02 external crypto review of HPREC1/keyring · R-03 KMS/Vault/HSM backend in v1 · R-04 Litestream optional
 streaming backup · R-05 default global grant-duration ceiling (proposed 24h; presets up to 24h) · R-06 SFTP/SCP as separately
-authorized capability (post-v1) · R-07 ECS vs custom log schema · R-08 trademark/name/domain check · R-09 self-approval default
+authorized capability (resolved: ADR-0049) · R-07 ECS vs custom log schema · R-08 trademark/name/domain check · R-09 self-approval default
 (proposed: prohibited) · R-10 chat approvals for privileged roles (proposed: allowed; per-role `web_only` flag) · R-11 CSP for
 CSS-in-JS styles · R-12 offline breached-password list.
 
@@ -1684,7 +1684,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-SSH-004` Algorithm policy — WP10 — evidence: U, O — ✅ tested: sshalg allowlists; agents key tests; e2e SHA-1 ssh-rsa refused
 - [x] `HP-SSH-005` Gateway host key lifecycle — WP10 — evidence: U, O, D — ✅ tested: credentials host-key tests; hostkey CLI test; docs/agent/guide.md pinning
 - [x] `HP-SSH-006` Shell, exec, PTY completeness — WP11 — evidence: O — ✅ tested: shell/exec/PTY/env/signal/eof/exit in internal/app/e2e_test.go and test/openssh/gateway_test.go (real ssh + sshd)
-- [x] `HP-SSH-007` Forwarding and unknown channels denied — WP10 — evidence: O, I — ✅ tested: internal/app/e2e_test.go TestGatewayDeniesForwarding; test/openssh/gateway_test.go (real ssh + sshd) TestOpenSSHForwardingDenied
+- [x] `HP-SSH-007` Forwarding and unknown channels denied — WP10 — evidence: O, I — ✅ tested: internal/app/e2e_test.go TestGatewayDeniesForwarding; test/openssh/gateway_test.go (real ssh + sshd) TestOpenSSHForwardingDenied; SFTP only for `file-transfer` roles (ADR-0049): test/openssh/files_test.go TestOpenSSHFileTransfer
 - [x] `HP-SSH-008` Environment allowlist — WP11 — evidence: U, O — ✅ tested: internal/app/e2e_test.go TestGatewayEnvAllowlist (per-role extension implemented, not separately tested)
 - [x] `HP-SSH-009` Stdout purity — WP10 — evidence: O — ✅ tested: byte-exact stdout in test/openssh/gateway_test.go (real ssh + sshd) TestOpenSSHExec
 - [x] `HP-SSH-010` Exit status and signal propagation — WP11 — evidence: O — ✅ tested: exit-status (test/openssh/gateway_test.go (real ssh + sshd)) and exit-signal (internal/app/e2e_test.go TestGatewayExitSignal)
