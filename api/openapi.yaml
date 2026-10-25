@@ -1980,7 +1980,7 @@ components:
             needs_enroll: {type: boolean}
     APIToken:
       type: object
-      required: [id, name, operator_id, role, hint, created_at, expires_at]
+      required: [id, name, operator_id, role, hint, created_at, never_expires]
       properties:
         id: {type: string}
         name: {type: string}
@@ -1988,19 +1988,27 @@ components:
         role: {type: string, enum: [administrator, approver, auditor, viewer]}
         hint: {type: string, description: Last four characters of the token, to recognize it.}
         created_at: {$ref: "#/components/schemas/Timestamp"}
-        expires_at: {$ref: "#/components/schemas/Timestamp"}
+        expires_at:
+          $ref: "#/components/schemas/Timestamp"
+          description: Absent when the token never expires.
+        never_expires: {type: boolean}
         last_used_at: {$ref: "#/components/schemas/Timestamp"}
         last_used_ip: {type: string}
         revoked_at: {$ref: "#/components/schemas/Timestamp"}
         revoked_by: {type: string}
     APITokenInput:
       type: object
-      required: [name, role, expires_in_days]
+      required: [name, role]
       additionalProperties: false
       properties:
         name: {type: string, minLength: 1, maxLength: 100}
         role: {type: string, enum: [administrator, approver, auditor, viewer]}
-        expires_in_days: {type: integer, minimum: 1, maximum: 366}
+        expires_in_days: {type: integer, minimum: 1, maximum: 366, description: Required unless never_expires is set.}
+        never_expires:
+          type: boolean
+          description: >-
+            Issue a token without expiry, for Terraform and break-glass automation. It still stops when it is revoked or
+            when its operator is disabled or loses the role. Omit expires_in_days.
     APITokenCreated:
       type: object
       required: [token, api_token]

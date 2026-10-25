@@ -2049,7 +2049,9 @@ export interface components {
             /** @description Last four characters of the token */
             hint: string;
             created_at: components["schemas"]["Timestamp"];
-            expires_at: components["schemas"]["Timestamp"];
+            /** @description Absent when the token never expires. */
+            expires_at?: components["schemas"]["Timestamp"];
+            never_expires: boolean;
             last_used_at?: components["schemas"]["Timestamp"];
             last_used_ip?: string;
             revoked_at?: components["schemas"]["Timestamp"];
@@ -2059,7 +2061,10 @@ export interface components {
             name: string;
             /** @enum {string} */
             role: "administrator" | "approver" | "auditor" | "viewer";
-            expires_in_days: number;
+            /** @description Required unless never_expires is set. */
+            expires_in_days?: number;
+            /** @description Issue a token without expiry, for Terraform and break-glass automation. It still stops when it is revoked or when its operator is disabled or loses the role. Omit expires_in_days. */
+            never_expires?: boolean;
         };
         APITokenCreated: {
             /** @description hallpass_at_…; shown only in this response. */

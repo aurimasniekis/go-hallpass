@@ -1,6 +1,6 @@
 import { PlusOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Form, Input, InputNumber, Select } from 'antd';
+import { Alert, App, Button, Form, Input, InputNumber, Select, Switch } from 'antd';
 import { useState } from 'react';
 
 import { api } from '../../api/client';
@@ -22,14 +22,15 @@ import { FormModal } from '../servers/FormModal';
 interface TokenFormValues {
   name: string;
   role: OperatorRole;
-  expires_in_days: number;
+  expires_in_days?: number;
+  never_expires?: boolean;
 }
 
 function TokenState({ token, now }: { token: APIToken; now: number }) {
   if (token.revoked_at) {
     return <StatusBadge tone="neutral">Revoked</StatusBadge>;
   }
-  if (new Date(token.expires_at).getTime() <= now) {
+  if (token.expires_at && new Date(token.expires_at).getTime() <= now) {
     return <StatusBadge tone="warning">Expired</StatusBadge>;
   }
   return <StatusBadge tone="success">Active</StatusBadge>;
@@ -84,12 +85,12 @@ export function ApiTokensPage() {
         title="What a token can do"
         description={
           <>
-            A token acts for you, with one of your roles, until it expires or is revoked. It stops working if
-            you lose that role or your account is disabled. It can read what the role allows and change
-            configuration: agents, servers, git remotes, roles, keys, policy, single sign-on and chat
-            integrations. It can never approve or deny requests, revoke access, read recordings, change
-            operators or tokens, or use lockdown. Its changes are recorded in the audit log under your name,
-            marked with the token.
+            A token acts for you, with one of your roles, until it expires or is revoked, or for good if you
+            choose &quot;Never expires&quot;. It stops working if you lose that role or your account is
+            disabled. It can read what the role allows and change configuration: agents, servers, git remotes,
+            roles, keys, policy, single sign-on and chat integrations. It can never approve or deny requests,
+            revoke access, read recordings, change operators or tokens, or use lockdown. Its changes are
+            recorded in the audit log under your name, marked with the token.
           </>
         }
       />
@@ -113,7 +114,16 @@ export function ApiTokensPage() {
           { key: 'operator', title: 'Acts for', render: (_, t) => <OperatorName id={t.operator_id} /> },
           { key: 'role', title: 'Role', render: (_, t) => roleLabel(t.role) },
           { key: 'state', title: 'Status', render: (_, t) => <TokenState token={t} now={now} /> },
-          { key: 'expires', title: 'Expires', render: (_, t) => formatDateTime(t.expires_at) },
+          {
+            key: 'expires',
+            title: 'Expires',
+            render: (_, t) =>
+              t.never_expires || !t.expires_at ? (
+                <StatusBadge tone="warning">Never</StatusBadge>
+              ) : (
+                formatDateTime(t.expires_at)
+              ),
+          },
           {
             key: 'used',
             title: 'Last used',
@@ -153,12 +163,16 @@ export function ApiTokensPage() {
         initialValues={{
           role: myRoles.includes('administrator') ? 'administrator' : myRoles[0],
           expires_in_days: 90,
+          never_expires: false,
         }}
         onCancel={() => {
           setCreating(false);
         }}
         onSubmit={async (values, { idempotencyKey }) => {
-          const res = await api.call('post', '/api/v1/api-tokens', { body: values, idempotencyKey });
+          const body = values.never_expires
+            ? { name: values.name, role: values.role, never_expires: true }
+            : { name: values.name, role: values.role, expires_in_days: values.expires_in_days };
+          const res = await api.call('post', '/api/v1/api-tokens', { body, idempotencyKey });
           await queryClient.invalidateQueries({ queryKey: qk.apiTokens });
           setCreating(false);
           secret.show({
@@ -182,12 +196,36 @@ export function ApiTokensPage() {
           <Select options={myRoles.map((r) => ({ value: r, label: roleLabel(r) }))} />
         </Form.Item>
         <Form.Item
-          name="expires_in_days"
-          label="Expires after (days)"
-          extra="1 to 366 days. Rotate tokens before they expire."
-          rules={[{ required: true, type: 'integer', min: 1, max: 366 }]}
+          name="never_expires"
+          label="Never expires"
+          valuePropName="checked"
+          extra="For Terraform or break-glass automation that must not stop on a date."
         >
-          <InputNumber min={1} max={366} precision={0} />
+          <Switch aria-label="Never expires" />
+        </Form.Item>
+        <Form.Item
+          noStyle
+          shouldUpdate={(a: TokenFormValues, b: TokenFormValues) => a.never_expires !== b.never_expires}
+        >
+          {({ getFieldValue }) =>
+            getFieldValue('never_expires') ? (
+              <Alert
+                type="warning"
+                showIcon
+                title="A token that never expires"
+                description="Anyone who obtains it can act with this role until you revoke it. Store it like a root password, watch when and where it was last used, and revoke it when it is no longer needed."
+              />
+            ) : (
+              <Form.Item
+                name="expires_in_days"
+                label="Expires after (days)"
+                extra="1 to 366 days. Rotate tokens before they expire."
+                rules={[{ required: true, type: 'integer', min: 1, max: 366 }]}
+              >
+                <InputNumber min={1} max={366} precision={0} />
+              </Form.Item>
+            )
+          }
         </Form.Item>
       </FormModal>
       {secret.dialog}

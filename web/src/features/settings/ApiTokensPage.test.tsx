@@ -15,6 +15,7 @@ const token = {
   hint: 'Wxyz',
   created_at: '2026-10-24T08:00:00Z',
   expires_at: '2099-01-01T00:00:00Z',
+  never_expires: false,
 };
 
 describe('<ApiTokensPage>', () => {
@@ -60,5 +61,31 @@ describe('<ApiTokensPage>', () => {
     await waitFor(() => {
       expect(calls.some((c) => c.method === 'DELETE')).toBe(true);
     });
+  });
+
+  it('issues a token that never expires, with a warning and no expiry', async () => {
+    const user = userEvent.setup();
+    const forever = { ...token, id: 'atk_3', name: 'tf', expires_at: undefined, never_expires: true };
+    const { calls } = mockApi({
+      'GET /api/v1/me': makeMe({ permissions: ['operators.manage'], operator: { roles: ['administrator'] } }),
+      'GET /api/v1/api-tokens': { items: [forever] },
+      'GET /api/v1/operators': { items: [] },
+      'POST /api/v1/api-tokens': () =>
+        jsonResponse(201, { token: 'hallpass_at_forever', api_token: forever }),
+    });
+    renderInRouter(<ApiTokensPage />);
+    // Expires and Last used both read "Never".
+    expect(await screen.findAllByText('Never')).toHaveLength(2);
+
+    await user.click(screen.getByRole('button', { name: /New token/ }));
+    const form = await screen.findByRole('form', { name: 'New API token' });
+    await user.type(within(form).getByLabelText('Name'), 'tf');
+    await user.click(within(form).getByRole('switch', { name: 'Never expires' }));
+    expect(await within(form).findByText('A token that never expires')).toBeInTheDocument();
+    expect(within(form).queryByLabelText('Expires after (days)')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Create token' }));
+    expect(await screen.findByText('hallpass_at_forever')).toBeInTheDocument();
+    const post = calls.find((c) => c.method === 'POST');
+    expect(post?.body).toEqual({ name: 'tf', role: 'administrator', never_expires: true });
   });
 });

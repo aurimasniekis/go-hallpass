@@ -27,25 +27,35 @@ const (
 	apiTokenTouchEvery = time.Minute
 )
 
+// neverExpiresAt is the expires_at stored for tokens without expiry (ADR-0053), so every expiry comparison holds
+// unchanged.
+var neverExpiresAt = time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC)
+
 // APIToken describes an automation token (never the token itself).
 type APIToken struct {
-	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	OperatorID string     `json:"operator_id"`
-	Role       string     `json:"role"`
-	Hint       string     `json:"hint"`
-	CreatedAt  time.Time  `json:"created_at"`
-	ExpiresAt  time.Time  `json:"expires_at"`
-	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
-	LastUsedIP string     `json:"last_used_ip,omitempty"`
-	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
-	RevokedBy  string     `json:"revoked_by,omitempty"`
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	OperatorID string    `json:"operator_id"`
+	Role       string    `json:"role"`
+	Hint       string    `json:"hint"`
+	CreatedAt  time.Time `json:"created_at"`
+	// ExpiresAt is nil when the token never expires.
+	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
+	NeverExpires bool       `json:"never_expires"`
+	LastUsedAt   *time.Time `json:"last_used_at,omitempty"`
+	LastUsedIP   string     `json:"last_used_ip,omitempty"`
+	RevokedAt    *time.Time `json:"revoked_at,omitempty"`
+	RevokedBy    string     `json:"revoked_by,omitempty"`
 }
 
 func apiTokenFromRow(r db.ApiToken) *APIToken {
 	t := &APIToken{ID: r.ID, Name: r.Name, OperatorID: r.OperatorID, Role: r.Role, Hint: r.Hint,
-		CreatedAt: time.UnixMicro(r.CreatedAt).UTC(), ExpiresAt: time.UnixMicro(r.ExpiresAt).UTC(), LastUsedIP: r.LastUsedIp.String,
+		CreatedAt: time.UnixMicro(r.CreatedAt).UTC(), NeverExpires: r.NeverExpires == 1, LastUsedIP: r.LastUsedIp.String,
 		RevokedBy: r.RevokedBy.String}
+	if !t.NeverExpires {
+		v := time.UnixMicro(r.ExpiresAt).UTC()
+		t.ExpiresAt = &v
+	}
 	if r.LastUsedAt.Valid {
 		v := time.UnixMicro(r.LastUsedAt.Int64).UTC()
 		t.LastUsedAt = &v
@@ -57,8 +67,9 @@ func apiTokenFromRow(r db.ApiToken) *APIToken {
 	return t
 }
 
-// CreateAPIToken issues a token for the calling operator with one of their roles. The token is returned once.
-func (svc *Service) CreateAPIToken(ctx context.Context, p *Principal, name, role string, ttl time.Duration) (*APIToken, string, error) {
+// CreateAPIToken issues a token for the calling operator with one of their roles. The token is returned once. A token
+// either expires after ttl or, with neverExpires (and ttl zero), never expires (ADR-0053).
+func (svc *Service) CreateAPIToken(ctx context.Context, p *Principal, name, role string, ttl time.Duration, neverExpires bool) (*APIToken, string, error) {
 	name = strings.TrimSpace(name)
 	v := &apperr.Validation{}
 	if name == "" || utf8.RuneCountInString(name) > 100 {
@@ -67,7 +78,10 @@ func (svc *Service) CreateAPIToken(ctx context.Context, p *Principal, name, role
 	if !slices.Contains(p.Operator.Roles, role) {
 		v.Add("role", "must be one of your own roles")
 	}
-	if ttl < MinAPITokenTTL || ttl > MaxAPITokenTTL {
+	switch {
+	case neverExpires && ttl != 0:
+		v.Add("expires_in_days", "must be omitted for a token that never expires")
+	case !neverExpires && (ttl < MinAPITokenTTL || ttl > MaxAPITokenTTL):
 		v.Add("expires_in_days", "must be between 1 and 366 days")
 	}
 	if p.TokenID != "" {
@@ -87,12 +101,16 @@ func (svc *Service) CreateAPIToken(ctx context.Context, p *Principal, name, role
 	}
 	id := ids.New(ids.APIToken)
 	err = svc.s.W().TxNamed(ctx, "opauth.create_api_token", func(tx *store.Tx) error {
+		expires, details := tx.Now.Add(ttl), map[string]any{"name": name, "role": role, "expires_in": ttl.String()}
+		if neverExpires {
+			expires, details = neverExpiresAt, map[string]any{"name": name, "role": role, "never_expires": true}
+		}
 		if err := tx.Q.InsertAPIToken(ctx, db.InsertAPITokenParams{ID: id, Name: name, OperatorID: p.Operator.ID, Role: role, Mac: mac,
-			Hint: token[len(token)-4:], CreatedAt: tx.NowMicros(), ExpiresAt: tx.Now.Add(ttl).UnixMicro()}); err != nil {
+			Hint: token[len(token)-4:], CreatedAt: tx.NowMicros(), ExpiresAt: expires.UnixMicro(), NeverExpires: b2i(neverExpires)}); err != nil {
 			return err
 		}
 		_, err := svc.audit.Append(ctx, tx, audit.Event{Actor: audit.Actor{Type: audit.ActorOperator, ID: p.Operator.ID}, Action: "api_token.created",
-			Target: audit.Target{Type: "api_token", ID: id}, Details: map[string]any{"name": name, "role": role, "expires_in": ttl.String()}})
+			Target: audit.Target{Type: "api_token", ID: id}, Details: details})
 		return err
 	})
 	if err != nil {

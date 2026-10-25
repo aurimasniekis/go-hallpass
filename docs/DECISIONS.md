@@ -942,6 +942,27 @@
 - **Consequences:** a leaked token can change configuration until it expires or is revoked (THREAT_MODEL T-23), for
   example add an agent key or widen a rule, but cannot approve the resulting requests.
 
+### ADR-0053 — API tokens without expiry (security-relevant change)
+
+- **Status:** accepted (operator request, 2026-10-25). **Security-relevant change, flagged for operator review.**
+- **Context:** ADR-0052 requires every API token to expire within 366 days. For the operator's own Terraform and
+  break-glass automation that is a recurring outage: when the token lapses, automation stops, usually when nobody is
+  watching the date. Porch made the same exception for its installation owners (its ADR-0046).
+- **Decision:**
+  - `createAPIToken` accepts `never_expires: true` instead of `expires_in_days` (sending both is invalid). The console
+    offers it as a **Never expires** switch with a warning.
+  - Such a token stores a far-future `expires_at` (9999-12-31), so every expiry comparison is unchanged, and
+    `never_expires = 1`. The API omits `expires_at` and returns `never_expires: true`; the token list shows "Never".
+  - Everything else from ADR-0052 holds: issuing needs `operators.manage` (administrators), recent authentication and
+    MFA; tokens cannot issue tokens; the token acts for its creator with one role and stops when it is revoked, when the
+    creator is disabled or loses the role; only `x-token` operations; last-used time and address are recorded.
+  - `api_token.created` audits `never_expires: true` instead of `expires_in`.
+- **Alternatives:** longer maximum expiry (still lapses unattended); automatic renewal (needs a credential that can mint
+  tokens, which ADR-0052 rules out).
+- **Consequences:** **security-relevant relaxation of ADR-0052's mandatory expiry.** A leaked token without expiry stays
+  valid until someone revokes it or its creator is disabled or loses the role (THREAT_MODEL T-23). Operators should
+  store it like a root password, watch its last-used time and address, and revoke it when it is no longer needed.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

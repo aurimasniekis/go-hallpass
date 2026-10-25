@@ -1,6 +1,6 @@
 -- name: InsertAPIToken :exec
-INSERT INTO api_tokens (id, name, operator_id, role, mac, hint, created_at, expires_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO api_tokens (id, name, operator_id, role, mac, hint, created_at, expires_at, never_expires)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetAPITokenByMAC :one
 SELECT * FROM api_tokens WHERE mac = ?;

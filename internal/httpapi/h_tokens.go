@@ -20,11 +20,12 @@ func (s *Server) CreateAPIToken(c *gen.Call) (*gen.Result, error) {
 		Name          string `json:"name"`
 		Role          string `json:"role"`
 		ExpiresInDays int    `json:"expires_in_days"`
+		NeverExpires  bool   `json:"never_expires"`
 	}
 	if err := decode(c, &in, false); err != nil {
 		return nil, err
 	}
-	t, token, err := s.d.Auth.CreateAPIToken(c.R.Context(), c.Principal, in.Name, in.Role, time.Duration(in.ExpiresInDays)*24*time.Hour)
+	t, token, err := s.d.Auth.CreateAPIToken(c.R.Context(), c.Principal, in.Name, in.Role, time.Duration(in.ExpiresInDays)*24*time.Hour, in.NeverExpires)
 	if err != nil {
 		return nil, err
 	}

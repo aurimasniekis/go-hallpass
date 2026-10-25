@@ -24,10 +24,14 @@ your account, limited to configuration.
 
 1. **Administration → API tokens → New token**.
 2. Name it after what uses it (`terraform-prod`), pick the role (usually **Administrator** for Terraform, **Viewer** for
-   read-only reports) and an expiry from 1 to 366 days.
+   read-only reports) and an expiry from 1 to 366 days, or **Never expires**.
 3. Copy the token (`hallpass_at_…`). It is shown once; HallPass stores only a keyed hash.
 
 Store it in your secret manager or CI secrets, not in the repository.
+
+**Never expires** is for your own Terraform or break-glass automation, which should not stop working on a date. Such a
+token still stops when you revoke it, when your account is disabled and when you lose its role, but otherwise it works
+for good. Store it like a root password, check **Last used** now and then, and revoke it as soon as nothing needs it.
 
 ## Use a token
 

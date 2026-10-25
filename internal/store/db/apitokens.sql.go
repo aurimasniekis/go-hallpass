@@ -11,7 +11,7 @@ import (
 )
 
 const getAPIToken = `-- name: GetAPIToken :one
-SELECT id, name, operator_id, role, mac, hint, created_at, expires_at, last_used_at, last_used_ip, revoked_at, revoked_by FROM api_tokens WHERE id = ?
+SELECT id, name, operator_id, role, mac, hint, created_at, expires_at, last_used_at, last_used_ip, revoked_at, revoked_by, never_expires FROM api_tokens WHERE id = ?
 `
 
 func (q *Queries) GetAPIToken(ctx context.Context, id string) (ApiToken, error) {
@@ -30,12 +30,13 @@ func (q *Queries) GetAPIToken(ctx context.Context, id string) (ApiToken, error) 
 		&i.LastUsedIp,
 		&i.RevokedAt,
 		&i.RevokedBy,
+		&i.NeverExpires,
 	)
 	return i, err
 }
 
 const getAPITokenByMAC = `-- name: GetAPITokenByMAC :one
-SELECT id, name, operator_id, role, mac, hint, created_at, expires_at, last_used_at, last_used_ip, revoked_at, revoked_by FROM api_tokens WHERE mac = ?
+SELECT id, name, operator_id, role, mac, hint, created_at, expires_at, last_used_at, last_used_ip, revoked_at, revoked_by, never_expires FROM api_tokens WHERE mac = ?
 `
 
 func (q *Queries) GetAPITokenByMAC(ctx context.Context, mac []byte) (ApiToken, error) {
@@ -54,24 +55,26 @@ func (q *Queries) GetAPITokenByMAC(ctx context.Context, mac []byte) (ApiToken, e
 		&i.LastUsedIp,
 		&i.RevokedAt,
 		&i.RevokedBy,
+		&i.NeverExpires,
 	)
 	return i, err
 }
 
 const insertAPIToken = `-- name: InsertAPIToken :exec
-INSERT INTO api_tokens (id, name, operator_id, role, mac, hint, created_at, expires_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO api_tokens (id, name, operator_id, role, mac, hint, created_at, expires_at, never_expires)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertAPITokenParams struct {
-	ID         string
-	Name       string
-	OperatorID string
-	Role       string
-	Mac        []byte
-	Hint       string
-	CreatedAt  int64
-	ExpiresAt  int64
+	ID           string
+	Name         string
+	OperatorID   string
+	Role         string
+	Mac          []byte
+	Hint         string
+	CreatedAt    int64
+	ExpiresAt    int64
+	NeverExpires int64
 }
 
 func (q *Queries) InsertAPIToken(ctx context.Context, arg InsertAPITokenParams) error {
@@ -84,12 +87,13 @@ func (q *Queries) InsertAPIToken(ctx context.Context, arg InsertAPITokenParams) 
 		arg.Hint,
 		arg.CreatedAt,
 		arg.ExpiresAt,
+		arg.NeverExpires,
 	)
 	return err
 }
 
 const listAPITokens = `-- name: ListAPITokens :many
-SELECT id, name, operator_id, role, mac, hint, created_at, expires_at, last_used_at, last_used_ip, revoked_at, revoked_by FROM api_tokens ORDER BY revoked_at IS NOT NULL, created_at DESC
+SELECT id, name, operator_id, role, mac, hint, created_at, expires_at, last_used_at, last_used_ip, revoked_at, revoked_by, never_expires FROM api_tokens ORDER BY revoked_at IS NOT NULL, created_at DESC
 `
 
 func (q *Queries) ListAPITokens(ctx context.Context) ([]ApiToken, error) {
@@ -114,6 +118,7 @@ func (q *Queries) ListAPITokens(ctx context.Context) ([]ApiToken, error) {
 			&i.LastUsedIp,
 			&i.RevokedAt,
 			&i.RevokedBy,
+			&i.NeverExpires,
 		); err != nil {
 			return nil, err
 		}

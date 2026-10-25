@@ -28,12 +28,12 @@ func TestAPITokens(t *testing.T) {
 		"too long":      {"ci", RoleAdministrator, 400 * 24 * time.Hour},
 		"unknown role":  {"ci", "root", 30 * 24 * time.Hour},
 	} {
-		if _, _, err := f.svc.CreateAPIToken(f.ctx, p, tc.name, tc.role, tc.ttl); !errors.Is(err, apperr.ErrInvalid) {
+		if _, _, err := f.svc.CreateAPIToken(f.ctx, p, tc.name, tc.role, tc.ttl, false); !errors.Is(err, apperr.ErrInvalid) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
 
-	tok, raw, err := f.svc.CreateAPIToken(f.ctx, p, "terraform", RoleAdministrator, 30*24*time.Hour)
+	tok, raw, err := f.svc.CreateAPIToken(f.ctx, p, "terraform", RoleAdministrator, 30*24*time.Hour, false)
 	must(t, err)
 	if !strings.HasPrefix(raw, APITokenPrefix) || len(raw) != len(APITokenPrefix)+43 || tok.Hint != raw[len(raw)-4:] {
 		t.Fatalf("token %q %+v", raw, tok)
@@ -46,7 +46,7 @@ func TestAPITokens(t *testing.T) {
 	if again, _ := f.svc.GetAPIToken(f.ctx, tok.ID); again.LastUsedAt == nil || again.LastUsedIP != "198.51.100.9" {
 		t.Fatalf("last use not recorded: %+v", again)
 	}
-	if _, _, err := f.svc.CreateAPIToken(f.ctx, got, "nested", RoleAdministrator, 30*24*time.Hour); !errors.Is(err, apperr.ErrForbidden) {
+	if _, _, err := f.svc.CreateAPIToken(f.ctx, got, "nested", RoleAdministrator, 30*24*time.Hour, false); !errors.Is(err, apperr.ErrForbidden) {
 		t.Fatalf("a token issued a token: %v", err)
 	}
 	for _, bad := range []string{"", raw[:len(raw)-1], "hallpass_at_" + strings.Repeat("A", 43), strings.Replace(raw, APITokenPrefix, "porch_at_", 1)} {
@@ -60,7 +60,7 @@ func TestAPITokens(t *testing.T) {
 	must(t, err)
 	op, err = f.svc.Get(f.ctx, op.ID)
 	must(t, err)
-	_, viewer, err := f.svc.CreateAPIToken(f.ctx, &Principal{Operator: op}, "reports", RoleViewer, 24*time.Hour)
+	_, viewer, err := f.svc.CreateAPIToken(f.ctx, &Principal{Operator: op}, "reports", RoleViewer, 24*time.Hour, false)
 	must(t, err)
 	_, err = f.svc.AuthenticateAPIToken(f.ctx, viewer, "")
 	must(t, err)
@@ -82,7 +82,7 @@ func TestAPITokens(t *testing.T) {
 	if _, err := f.svc.AuthenticateAPIToken(f.ctx, raw, ""); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("revoked token accepted: %v", err)
 	}
-	_, short, err := f.svc.CreateAPIToken(f.ctx, &Principal{Operator: op}, "short", RoleAdministrator, 24*time.Hour)
+	_, short, err := f.svc.CreateAPIToken(f.ctx, &Principal{Operator: op}, "short", RoleAdministrator, 24*time.Hour, false)
 	must(t, err)
 	f.clk.Advance(24 * time.Hour)
 	if _, err := f.svc.AuthenticateAPIToken(f.ctx, short, ""); !errors.Is(err, ErrUnauthorized) {
@@ -92,5 +92,43 @@ func TestAPITokens(t *testing.T) {
 	must(t, err)
 	if len(list) != 3 || list[len(list)-1].ID != tok.ID {
 		t.Fatalf("list (revoked last): %+v", list)
+	}
+}
+
+// ADR-0053: a token issued without expiry keeps working past any expiry, still stops when revoked or when its operator
+// loses the role, and cannot be combined with an expiry.
+func TestAPITokenNeverExpires(t *testing.T) {
+	f := newFx(t)
+	op := f.bootstrap()
+	sys := audit.Actor{Type: audit.ActorOperator, ID: op.ID}
+	p := &Principal{Operator: op}
+	if _, _, err := f.svc.CreateAPIToken(f.ctx, p, "tf", RoleAdministrator, 30*24*time.Hour, true); !errors.Is(err, apperr.ErrInvalid) {
+		t.Fatalf("never-expiring token with an expiry: %v", err)
+	}
+	tok, raw, err := f.svc.CreateAPIToken(f.ctx, p, "terraform", RoleAdministrator, 0, true)
+	must(t, err)
+	if !tok.NeverExpires || tok.ExpiresAt != nil {
+		t.Fatalf("token %+v", tok)
+	}
+	f.clk.Advance(5 * 366 * 24 * time.Hour)
+	_, err = f.svc.AuthenticateAPIToken(f.ctx, raw, "")
+	must(t, err)
+
+	_, err = f.svc.SetRoles(f.ctx, sys, op.ID, []string{RoleAdministrator, RoleViewer})
+	must(t, err)
+	op, err = f.svc.Get(f.ctx, op.ID)
+	must(t, err)
+	_, viewer, err := f.svc.CreateAPIToken(f.ctx, &Principal{Operator: op}, "reports", RoleViewer, 0, true)
+	must(t, err)
+	_, err = f.svc.SetRoles(f.ctx, sys, op.ID, []string{RoleAdministrator})
+	must(t, err)
+	if _, err := f.svc.AuthenticateAPIToken(f.ctx, viewer, ""); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("never-expiring token kept a role its operator lost: %v", err)
+	}
+
+	_, err = f.svc.RevokeAPIToken(f.ctx, sys, tok.ID)
+	must(t, err)
+	if _, err := f.svc.AuthenticateAPIToken(f.ctx, raw, ""); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("revoked never-expiring token accepted: %v", err)
 	}
 }

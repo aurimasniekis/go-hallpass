@@ -7,6 +7,12 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+### Security
+
+- **API tokens that never expire.** Administrators can issue a token without expiry (**Never expires**,
+  `never_expires: true`) for Terraform and break-glass automation. It still stops when revoked or when its operator is
+  disabled or loses the role. This relaxes the mandatory 1–366 day expiry.
+
 ## [0.1.1] - 2026-10-25
 
 > **Recording format and keyring not externally reviewed.** The known limitations of
