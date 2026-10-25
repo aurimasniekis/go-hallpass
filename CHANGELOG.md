@@ -7,6 +7,12 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+### Fixed
+
+- Startup no longer warns "recording key slot repaired from the database copy" for every recording made since the last
+  start. Writing the second key slot of a healthy recording is routine and is now logged once, at info level; the
+  warning stays for slots that actually stopped working.
+
 ## [0.2.0] - 2026-10-25
 
 > **Recording format, backup format and keyring not externally reviewed.** The known limitations of

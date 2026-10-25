@@ -158,10 +158,10 @@ func TestRepairSlot(t *testing.T) {
 	data := readFile(t, path)
 	l := parseLayout(t, data)
 
-	// Slot B is empty and does not unwrap, so repair fills it from the copy.
-	s, err := RepairSlot(path, w, dbCopy.KeyID, dbCopy.Wrapped)
-	if err != nil || s.Index != 1 || s.Gen != 2 {
-		t.Fatalf("%+v %v", s, err)
+	// Slot B is empty and does not unwrap, so repair fills it from the copy: routine, not a restore.
+	s, outcome, err := MaintainSlots(path, w, dbCopy.KeyID, dbCopy.Wrapped)
+	if err != nil || s.Index != 1 || s.Gen != 2 || outcome != RepairFilledEmpty {
+		t.Fatalf("%+v %v %v", s, outcome, err)
 	}
 	// Both slots unwrap now: no write.
 	before := readFile(t, path)
@@ -183,8 +183,8 @@ func TestRepairSlot(t *testing.T) {
 	if _, err := Open(path, w); !errors.Is(err, ErrNoKey) {
 		t.Fatal(err)
 	}
-	if s, err = RepairSlot(path, w, dbCopy.KeyID, dbCopy.Wrapped); err != nil || s.Gen != 1 {
-		t.Fatalf("%+v %v", s, err)
+	if s, outcome, err = MaintainSlots(path, w, dbCopy.KeyID, dbCopy.Wrapped); err != nil || s.Gen != 1 || outcome != RepairRestored {
+		t.Fatalf("%+v %v %v", s, outcome, err)
 	}
 	requireReadable(t, path, w, recs, s.Index, 1)
 

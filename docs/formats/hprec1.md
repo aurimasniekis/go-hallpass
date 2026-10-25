@@ -256,6 +256,8 @@ That chain is outside this format.
 6. **Repair** (`RepairSlot`, `RepairSlotIfNeeded`): if a slot does not unwrap but the database copy of the wrapped DEK
    does (under this segment's AAD), write the copy into a slot that does not unwrap, with `gen` = highest gen + 1. A slot
    that does unwrap MUST yield the same DEK, or the file is reported corrupt. Nothing is written when both slots unwrap.
+   Startup runs this for every segment, so the empty slot B of each new segment receives the copy at the next start.
+   That is routine (counted and logged as filled, not as a repair); a restore is a written slot that no longer unwraps.
 7. Both maintenance operations accept the reader options (`ExpectSegmentID`, `ExpectSessionID`, `ExpectChannelID`,
    `ExpectHeaderSHA256`) and check them against the header before anything is written, so a substituted file at the
    expected path is never modified.

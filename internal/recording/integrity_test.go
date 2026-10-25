@@ -294,10 +294,29 @@ func TestReconcileRepairsKeySlots(t *testing.T) {
 	if _, err := svc.ReadPage(f.ctx, seg.ID, 0, 1<<16); err == nil {
 		t.Fatal("damaged slots still unwrap")
 	}
-	_, err = svc.ReconcileStartup(f.ctx)
+	res, err := svc.ReconcileStartup(f.ctx)
 	must(t, err)
+	if res.SlotsRepaired != 1 || res.SlotsFilled != 0 {
+		t.Fatalf("damaged slots counted as %+v", res)
+	}
 	if recs := f.replay(svc, seg.ID); len(recs) != 1 {
 		t.Fatalf("after repair: %+v", recs)
+	}
+}
+
+// A healthy new segment's empty slot B is filled on the next start; that is counted as routine (SlotsFilled), not
+// as a repair, so an upgrade does not warn about every recent recording.
+func TestReconcileFillsEmptySlotsQuietly(t *testing.T) {
+	f := newFx(t)
+	svc := f.service(Options{})
+	f.finishedSegments(svc, 2)
+	res, err := svc.ReconcileStartup(f.ctx)
+	must(t, err)
+	if res.SlotsFilled != 2 || res.SlotsRepaired != 0 || res.SlotProblems != 0 {
+		t.Fatalf("first start: %+v", res)
+	}
+	if res, err = svc.ReconcileStartup(f.ctx); err != nil || res.SlotsFilled != 0 || res.SlotsRepaired != 0 {
+		t.Fatalf("second start: %+v %v", res, err)
 	}
 }
 

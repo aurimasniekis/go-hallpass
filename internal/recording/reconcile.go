@@ -31,6 +31,9 @@ type ReconcileResult struct {
 	// SlotsRepaired counts segments whose key slots no longer unwrapped and were restored from the database copy
 	// of the wrapped DEK (PLAN §13.4).
 	SlotsRepaired int
+	// SlotsFilled counts healthy segments whose never-written second slot received a copy of the wrapped DEK, as every
+	// new segment does at the next start. Routine, not a repair.
+	SlotsFilled int
 	// SlotProblems counts segments whose slots could not be checked or repaired (logged; verify reports them).
 	SlotProblems int
 }
@@ -187,15 +190,17 @@ func (svc *Service) repairSlots(ctx context.Context, res *ReconcileResult) error
 			if err != nil {
 				continue
 			}
-			_, repaired, err := hprec.RepairSlotIfNeeded(path, svc.wrapper, seg.KeyID, seg.WrappedDek, expectations(seg)...)
+			_, outcome, err := hprec.MaintainSlots(path, svc.wrapper, seg.KeyID, seg.WrappedDek, expectations(seg)...)
 			switch {
 			case errors.Is(err, fs.ErrNotExist):
 			case err != nil:
 				res.SlotProblems++
 				svc.log.Warn("recording key slots could not be checked or repaired", slog.String(obs.FieldSegmentID, seg.ID), obs.Err(err))
-			case repaired:
+			case outcome == hprec.RepairRestored:
 				res.SlotsRepaired++
 				svc.log.Warn("recording key slot repaired from the database copy", slog.String(obs.FieldSegmentID, seg.ID))
+			case outcome == hprec.RepairFilledEmpty:
+				res.SlotsFilled++
 			}
 		}
 		if len(rows) < page {

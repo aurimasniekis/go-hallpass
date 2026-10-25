@@ -221,9 +221,14 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	if err != nil {
 		return nil, fmt.Errorf("recording reconciliation: %w", err)
 	}
+	if filled := rr.SlotsFilled; filled > 0 {
+		log.Info("wrote the second key slot of new recordings from the database copy", slog.Int("segments", filled))
+		rr.SlotsFilled = 0
+	}
 	if *rr != (recording.ReconcileResult{}) {
 		log.Warn("reconciled recordings after restart", slog.Int("finalized", rr.Finalized), slog.Int("interrupted", rr.Interrupted),
-			slog.Int("missing", rr.Missing), slog.Int("failed", rr.Failed), slog.Int("orphans", rr.Orphans))
+			slog.Int("missing", rr.Missing), slog.Int("failed", rr.Failed), slog.Int("orphans", rr.Orphans),
+			slog.Int("slots_repaired", rr.SlotsRepaired), slog.Int("slot_problems", rr.SlotProblems))
 	}
 	ok = true
 	return a, nil

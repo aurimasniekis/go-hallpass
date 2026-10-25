@@ -342,19 +342,40 @@ func RepairSlot(path string, w DEKWrapper, keyID string, wrapped []byte, opts ..
 
 // RepairSlotIfNeeded is RepairSlot that also reports whether a slot was written.
 func RepairSlotIfNeeded(path string, w DEKWrapper, keyID string, wrapped []byte, opts ...Option) (SlotInfo, bool, error) {
+	s, outcome, err := repairSlot(path, w, keyID, wrapped, opts)
+	return s, outcome != RepairNone, err
+}
+
+// RepairOutcome says what MaintainSlots wrote.
+type RepairOutcome int
+
+// Repair outcomes.
+const (
+	// RepairNone: both slots already unwrapped; nothing was written.
+	RepairNone RepairOutcome = iota
+	// RepairFilledEmpty: one slot unwrapped and the other had never been written (slot B of every new segment), so the
+	// database copy was written there as a second copy. Nothing was wrong with the file.
+	RepairFilledEmpty
+	// RepairRestored: a written slot did not unwrap (damaged, or under a retired key) and was restored from the copy.
+	RepairRestored
+)
+
+// MaintainSlots is RepairSlotIfNeeded that also reports whether the write only filled a never-written slot or
+// restored a slot that no longer unwrapped.
+func MaintainSlots(path string, w DEKWrapper, keyID string, wrapped []byte, opts ...Option) (SlotInfo, RepairOutcome, error) {
 	return repairSlot(path, w, keyID, wrapped, opts)
 }
 
-func repairSlot(path string, w DEKWrapper, keyID string, wrapped []byte, opts []Option) (SlotInfo, bool, error) {
+func repairSlot(path string, w DEKWrapper, keyID string, wrapped []byte, opts []Option) (SlotInfo, RepairOutcome, error) {
 	sf, err := openSegmentRW(path, opts)
 	if err != nil {
-		return SlotInfo{}, false, err
+		return SlotInfo{}, RepairNone, err
 	}
 	defer sf.f.Close()
 	aad := DEKAAD(sf.hdr.SegmentID, sf.h)
 	dek, err := unwrapSlot(w, SlotInfo{KeyID: keyID, Wrapped: wrapped}, aad)
 	if err != nil {
-		return SlotInfo{}, false, fmt.Errorf("%w: database copy: %w", ErrNoKey, err)
+		return SlotInfo{}, RepairNone, fmt.Errorf("%w: database copy: %w", ErrNoKey, err)
 	}
 	defer clear(dek)
 	checks := checkSlots(&sf.raw, aad, w, -1)
@@ -365,29 +386,33 @@ func repairSlot(path string, w DEKWrapper, keyID string, wrapped []byte, opts []
 		s, _ := decodeSlot(sf.raw[i][:])
 		cur, err := unwrapSlot(w, s, aad)
 		if err != nil {
-			return SlotInfo{}, false, err
+			return SlotInfo{}, RepairNone, err
 		}
 		same := subtle.ConstantTimeCompare(cur, dek) == 1
 		clear(cur)
 		if !same {
-			return SlotInfo{}, false, fmt.Errorf("%w: key slot %d holds a different DEK than the copy", ErrCorrupt, i)
+			return SlotInfo{}, RepairNone, fmt.Errorf("%w: key slot %d holds a different DEK than the copy", ErrCorrupt, i)
 		}
 	}
 	target := repairTarget(&checks)
 	if target < 0 {
 		_, active, err := selectSlot(&sf.raw, aad, w)
-		return active, false, err
+		return active, RepairNone, err
 	}
 	gen := maxGen(&sf.raw)
 	if gen == math.MaxUint32 {
-		return SlotInfo{}, false, fmt.Errorf("%w: slot generation exhausted", ErrInvalidSlot)
+		return SlotInfo{}, RepairNone, fmt.Errorf("%w: slot generation exhausted", ErrInvalidSlot)
 	}
 	slot, err := encodeSlot(gen+1, keyID, wrapped)
 	if err != nil {
-		return SlotInfo{}, false, err
+		return SlotInfo{}, RepairNone, err
+	}
+	outcome := RepairRestored
+	if !checks[target].Present && checks[1-target].Unwraps {
+		outcome = RepairFilledEmpty
 	}
 	if err := sf.writeSlot(target, slot); err != nil {
-		return SlotInfo{}, false, err
+		return SlotInfo{}, RepairNone, err
 	}
-	return SlotInfo{Index: target, Gen: gen + 1, KeyID: keyID, Wrapped: bytes.Clone(wrapped)}, true, sf.f.Close()
+	return SlotInfo{Index: target, Gen: gen + 1, KeyID: keyID, Wrapped: bytes.Clone(wrapped)}, outcome, sf.f.Close()
 }
