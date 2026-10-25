@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../site/public/logo.svg" alt="" width="72" height="72">
+</p>
+
 # HallPass documentation
 
 The website at <https://aurimasniekis.github.io/go-hallpass/> covers getting started and the main guides. The files
@@ -43,6 +47,21 @@ here are the detailed reference.
 | [formats/hprec1.md](formats/hprec1.md) | HPREC1 encrypted recording segment format. |
 | [VERSIONING.md](VERSIONING.md) | Versioning policy for the binary, API, schemas, recording format and database. |
 | [RELEASING.md](RELEASING.md) | How a release is cut and published. |
+
+## Logo
+
+The HallPass mark is [logo.svg](../site/public/logo.svg) (vector, transparent background). PNG renders with a
+transparent background are in [site/public/logo/](../site/public/logo/):
+[16](../site/public/logo/logo-16.png), [32](../site/public/logo/logo-32.png), [48](../site/public/logo/logo-48.png),
+[64](../site/public/logo/logo-64.png), [128](../site/public/logo/logo-128.png), [256](../site/public/logo/logo-256.png),
+[512](../site/public/logo/logo-512.png) and [1024](../site/public/logo/logo-1024.png) pixels square. Regenerate them after
+changing the SVG:
+
+```sh
+for s in 16 32 48 64 128 256 512 1024; do
+  rsvg-convert -w "$s" -h "$s" site/public/logo.svg -o "site/public/logo/logo-$s.png"
+done
+```
 
 ## Project planning (internal)
 

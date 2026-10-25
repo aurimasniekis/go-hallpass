@@ -14,6 +14,8 @@ export default defineConfig({
   srcExclude: ['README.md'],
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/go-hallpass/logo.svg' }],
+    ['link', { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/go-hallpass/logo/logo-32.png' }],
+    ['link', { rel: 'apple-touch-icon', href: '/go-hallpass/logo/logo-256.png' }],
     ['meta', { name: 'theme-color', content: '#2251b5' }],
   ],
   markdown: {
