@@ -341,8 +341,7 @@ func (s *Server) wrap(op *gen.Operation, h gen.Handler) http.Handler {
 		}
 		res, err := h(c)
 		if err != nil {
-			s.problem(w, r, err)
-			s.logOp(op, r, c, http.StatusBadRequest, start, err)
+			s.logOp(op, r, c, s.problem(w, r, err), start, err)
 			return
 		}
 		status := s.writeResult(c, res) //nolint:contextcheck // uses the request context carried by c
@@ -355,7 +354,7 @@ func (s *Server) logOp(op *gen.Operation, r *http.Request, c *gen.Call, status i
 	if c.Principal != nil {
 		attrs = append(attrs, slog.String("operator_id", c.Principal.Operator.ID))
 	}
-	if err != nil && apperr.CodeOf(err) == "" {
+	if err != nil && apperr.CodeOf(err) == "" && status != statusClientClosed {
 		s.log.Error("api operation failed", append(attrs, obs.Err(err))...)
 		return
 	}
@@ -449,8 +448,12 @@ type ProblemField struct {
 	Message string `json:"message"`
 }
 
-// problem writes an error. Unknown errors become a generic 500 without internals (HP-API-003).
-func (s *Server) problem(w http.ResponseWriter, r *http.Request, err error) {
+// statusClientClosed is logged (never seen by the client) for a request the client abandoned mid-flight, such as a
+// page navigating away while its fetches run.
+const statusClientClosed = 499
+
+// problem writes an error and returns its status. Unknown errors become a generic 500 without internals (HP-API-003).
+func (s *Server) problem(w http.ResponseWriter, r *http.Request, err error) int {
 	p := Problem{Type: "about:blank", Instance: r.URL.Path}
 	var ae *apperr.Error
 	var mbe *http.MaxBytesError
@@ -464,6 +467,9 @@ func (s *Server) problem(w http.ResponseWriter, r *http.Request, err error) {
 		for _, f := range ae.Fields {
 			p.Errors = append(p.Errors, ProblemField{Field: f.Field, Message: f.Message})
 		}
+	case errors.Is(err, context.Canceled) && r.Context().Err() != nil:
+		// The client went away; nobody reads this response and it is not a server fault.
+		p.Code, p.Status, p.Title = "client_closed_request", statusClientClosed, "client closed the request"
 	default:
 		p.Code, p.Status, p.Title = "internal", http.StatusInternalServerError, "internal error"
 		s.log.Error("unhandled api error", slog.String("path", r.URL.Path), obs.Err(err))
@@ -472,6 +478,7 @@ func (s *Server) problem(w http.ResponseWriter, r *http.Request, err error) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(p.Status)
 	_ = json.NewEncoder(w).Encode(p)
+	return p.Status
 }
 
 // decode reads a JSON body strictly (unknown fields rejected). An empty body decodes to the zero value when optional.
