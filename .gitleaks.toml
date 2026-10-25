@@ -16,4 +16,6 @@ regexes = [
   '''xoxb-123456789012-SECRETSECRETSECRET''',
   '''8f742231b10e8888abcd99yyyzzz85a5''',
   '''test-signing-secret-0123456789abcdef''',
+  # An algorithm name after the word "key" in docs (generic-api-key false positive in THREAT_MODEL T-24), not a secret.
+  '''^ChaCha20-Poly1305$''',
 ]
