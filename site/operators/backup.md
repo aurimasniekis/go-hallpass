@@ -8,7 +8,44 @@ A backup contains the database (with keys **wrapped** by the KEK) and the encryp
 KEK. Without the matching KEK a backup cannot be restored. Keep KEK copies offline, separately from backups.
 :::
 
-## Create a backup
+## Backups to object storage
+
+HallPass can back itself up to any S3-compatible bucket (AWS S3, Cloudflare R2, MinIO, Backblaze B2, Wasabi and others)
+on a schedule. Set it up under **Administration → Backups** (or with the Terraform `hallpass_backup_target` resource):
+
+- **Endpoint, region, bucket, prefix** and an **access key** that may list, read, write and delete below the prefix. Use
+  a bucket and a key for HallPass alone. The secret is stored encrypted and never shown again.
+- **Schedule**, every 15 minutes to once a week (default hourly). A failed backup is retried within 15 minutes.
+- **Retention**: the newest backups (default 48) plus the newest of each past day (default 30 days).
+
+Each backup is a database snapshot plus the recordings it refers to. The snapshot and its file list are encrypted on
+the server before upload, with a key protected by the KEK. Recordings are already encrypted and are uploaded once,
+then shared by later backups. The bucket only ever holds ciphertext, but object names and sizes show how many
+recordings there are and when they were made.
+
+The page shows every run, its size and any error, and has **Test connection** and **Back up now**. Watch
+`hallpass_backup_remote_last_success_timestamp_seconds` in your monitoring.
+
+Turn on versioning or object lock in the bucket if you can: then a stolen access key cannot delete your backups for
+good.
+
+### Restore from object storage
+
+On a new host with HallPass installed, its configuration and the **KEK**:
+
+```sh
+export AWS_ACCESS_KEY_ID=… AWS_SECRET_ACCESS_KEY=…   # a key that may read the bucket
+FLAGS="--s3-endpoint https://s3.eu-central-1.amazonaws.com --s3-region eu-central-1 --s3-bucket acme-backups --s3-prefix hallpass/"
+hallpass backup remote-list $FLAGS
+hallpass backup remote-download --config /etc/hallpass/hallpass.yaml --out /var/tmp/hp-restore $FLAGS   # newest by default
+hallpass backup verify /var/tmp/hp-restore
+hallpass restore --config /etc/hallpass/hallpass.yaml /var/tmp/hp-restore
+```
+
+Add `--backup <id>` to pick an older backup, `--s3-path-style` for MinIO, and `--s3-allow-private-network` for a
+bucket on your own network. The download checks every file, so a tampered or truncated object is refused.
+
+## Create a backup on disk
 
 ```sh
 hallpass backup create --config /etc/hallpass/hallpass.yaml --out /backup/hallpass/$(date -u +%Y%m%dT%H%M%SZ)
@@ -24,7 +61,8 @@ A backup still holds plaintext metadata (aliases, addresses, policy, identities)
 
 ## Schedule
 
-- Hourly `hallpass backup create` to a separate volume, then an off-host copy.
+- Backups to object storage (above) run on their own. Without them: hourly `hallpass backup create` to a separate
+  volume, then an off-host copy.
 - `hallpass backup verify` on the newest backup after each run, and on the off-host copy daily.
 - Back up again after `hallpass keys rotate-kek` and before every upgrade.
 - Expire old backups deliberately: recordings deleted by retention remain in older backups.

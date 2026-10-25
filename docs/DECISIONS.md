@@ -963,12 +963,47 @@
   valid until someone revokes it or its creator is disabled or loses the role (THREAT_MODEL T-23). Operators should
   store it like a root password, watch its last-used time and address, and revoke it when it is no longer needed.
 
+### ADR-0054 — Scheduled backups to S3-compatible object storage (security-relevant change)
+
+- **Status:** accepted (operator request, 2026-10-25). **Security-relevant change, flagged for operator review:** a new
+  outbound channel carries every backup off the host, and a new sealed format (HPBAK1) has not been externally
+  reviewed (R-02).
+- **Context:** backups were a CLI command the operator had to schedule and ship elsewhere. Operators asked for built-in
+  backups to object storage.
+- **Decision:**
+  - One target (`backup_target`), configured in the console, the API (`/api/v1/system/backups/*`, `system.settings`
+    with recent authentication and MFA, usable by API tokens) and Terraform. The secret access key is sealed with the
+    credential key (resealed by the keyring job) and write-only.
+  - A small S3 client in `internal/s3client` (Signature Version 4 with the standard library's HMAC-SHA256; verified
+    against the AWS documentation examples and against a real S3 server) instead of an SDK dependency. TLS is always
+    verified, there is no proxy and no redirect following, and private networks are refused at connect time unless
+    `allow_private_network` is set, like OIDC. `http://` endpoints only in development mode.
+  - Each run is the consistent backup of `hallpass backup create`: the database snapshot and the manifest are sealed as
+    HPBAK1 objects (docs/formats/hpbak1.md) with a fresh data key wrapped by the KEK, because keyring purpose keys
+    live inside the database being protected. Segments are uploaded as stored (HPREC1 ciphertext), once, and reused
+    until their data key is rewrapped. The manifest is uploaded last and marks a complete backup.
+  - Retention keeps the newest `keep_last` backups plus the newest of each of `keep_daily_days` days. A segment object
+    is deleted only when no kept backup was taken while the segment existed (`backup_remote_segments` records the
+    first backup that included it and the first that no longer did).
+  - Restore on a new host: `hallpass backup remote-list` / `remote-download` with the bucket details as flags, the
+    standard `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` variables and the KEK, producing an ordinary backup
+    directory for `backup verify` and `restore`.
+  - Runs, results and errors are kept in `backup_runs`. Failures and configuration changes are audited; successful
+    scheduled runs are not, so the audit chain does not grow by one entry per hour.
+- **Alternatives:** the AWS SDK or minio-go (large dependency trees for five requests); age encryption (a new crypto
+  dependency, and a second key the operator must keep); encrypting the snapshot with a keyring purpose key (stored
+  inside the snapshot itself); uploading full copies of every recording each run (cost grows with retention).
+- **Consequences:** the bucket holds only ciphertext, but object keys and sizes reveal session and segment IDs, counts
+  and timing (THREAT_MODEL T-24). Someone with the access key can delete or withhold backups (availability) or make an
+  older backup look like the newest (rollback); they cannot read or forge one without the KEK. Losing the KEK still
+  loses every backup. The database snapshot must stay under 5 GiB (single-request upload).
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |
 |---|---|---|---|
 | R-01 | **License** for the open-source release. | **Resolved 2026-10-24 (operator decision): Apache-2.0.** LICENSE (canonical text) and NOTICE added; history rewritten so LICENSE exists from the first commit (ADR-0045). | Resolved |
-| R-02 | **External cryptographic review** of HPREC1, the keyring and field encryption. | **Operator decision 2026-10-24:** no external review for now; releases use the RG-9 alternative and are labeled "recording format and keyring not externally reviewed" in CHANGELOG and release notes. A review remains recommended before 1.0. | RG-9 |
+| R-02 | **External cryptographic review** of HPREC1, HPBAK1 (ADR-0054), the keyring and field encryption. | **Operator decision 2026-10-24:** no external review for now; releases use the RG-9 alternative and are labeled "recording format and keyring not externally reviewed" in CHANGELOG and release notes. A review remains recommended before 1.0. | RG-9 |
 | R-03 | **KMS/Vault/HSM backend** in v1 (`KeyWrapper`, `Signer`). | Ship interfaces plus local implementation in v1. Add Vault Transit/AWS KMS wrappers post-1.0 unless required. | — |
 | R-04 | **Litestream** as optional continuous DB replication for backup. | Document as optional and test compatibility (WAL, checkpoints) in WP23. Not a supported HA mode. | — |
 | R-05 | **Default global grant-duration ceiling.** | 24 h (matches the largest preset). Roles default to a 6 h max and a 30 m default. | — |

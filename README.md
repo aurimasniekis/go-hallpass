@@ -68,8 +68,8 @@ flowchart LR
   viewer roles.
 - **Configuration as code** with the [Terraform provider](https://github.com/aurimasniekis/terraform-provider-hallpass)
   and API tokens: agents, servers, git remotes, roles, keys, policy, single sign-on and chat approvals.
-- **One Go binary** with the web UI embedded and SQLite storage. Backup and restore, integrity anchors, Prometheus
-  metrics, health checks and optional OpenTelemetry tracing.
+- **One Go binary** with the web UI embedded and SQLite storage. Encrypted, scheduled backups to S3-compatible storage
+  (or to disk), restore, integrity anchors, Prometheus metrics, health checks and optional OpenTelemetry tracing.
 
 HallPass is **not a sandbox**: an approved shell can do what its remote account can do. Pair it with
 [destination hardening](https://aurimasniekis.github.io/go-hallpass/destinations/hardening), and run it like a bastion host, because it sees every session

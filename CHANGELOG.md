@@ -7,6 +7,15 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+### Added
+
+- **Backups to object storage.** HallPass backs itself up on a schedule to an S3-compatible bucket (AWS S3,
+  Cloudflare R2, MinIO and others): **Administration → Backups**, `/api/v1/system/backups`, or the Terraform
+  `hallpass_backup_target` resource. The database snapshot is encrypted before upload; recordings, already encrypted,
+  are uploaded once and shared by later backups. Retention keeps the newest backups plus one per day. Every run is
+  listed with its result, and `hallpass_backup_remote_*` metrics track them. `hallpass backup remote-list` and
+  `remote-download` restore a backup on a new host with the KEK.
+
 ### Security
 
 - **API tokens that never expire.** Administrators can issue a token without expiry (**Never expires**,

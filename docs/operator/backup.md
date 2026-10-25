@@ -61,8 +61,8 @@ Exit codes: `0` ok, `1` error, `2` usage, `3` written with problems (create) or 
 
 ### Schedule
 
-- **Hourly** `hallpass backup create` to a separate volume, plus an **off-host copy** (rsync/object storage) after each run.
-  The host-loss RPO equals this interval.
+- **Remote backups** (below) do this on their own. Otherwise: **hourly** `hallpass backup create` to a separate volume,
+  plus an **off-host copy** (rsync/object storage) after each run. The host-loss RPO equals this interval.
 - Optionally **sync finalized segments continuously** (`rsync` of `recordings/**/*.hprec`, excluding `*.partial`). Finalized
   files never change, apart from rare key-slot rewraps after purpose-key rotation, which a later backup picks up. This keeps
   recording loss well below the backup interval. The database snapshot is still what makes a set restorable.
@@ -70,6 +70,88 @@ Exit codes: `0` ok, `1` error, `2` usage, `3` written with problems (create) or 
 - Expire old backups deliberately. Recordings deleted by retention remain in older backups until those expire.
   Keep backups no longer than your recording retention requires, and keep a KEK as long as any backup made with it.
 - Back up again right after `hallpass keys rotate-kek`, and before every upgrade.
+
+## Remote backups (object storage)
+
+The server can back itself up on a schedule to an S3-compatible bucket (AWS S3, Cloudflare R2, MinIO, Backblaze B2,
+Wasabi and others). Configure it under **Administration → Backups**, with `PUT /api/v1/system/backups/target`, or with
+the Terraform `hallpass_backup_target` resource (ADR-0054). Changing it needs `system.settings`, recent authentication
+and MFA.
+
+| Setting | Default | Notes |
+|---|---|---|
+| `endpoint` | — | Service origin, `https://` only (`http://` is accepted in development mode). No proxy, no redirects; TLS is always verified. |
+| `region` | `us-east-1` | `auto` for Cloudflare R2. |
+| `bucket`, `prefix` | —, empty | Objects go below the prefix (empty or ending in `/`). |
+| `path_style` | off | `endpoint/bucket/key` instead of `bucket.endpoint/key` (MinIO). |
+| `access_key_id`, `secret_access_key` | — | The secret is sealed with the credential key and write-only. |
+| `ca_bundle_pem`, `allow_private_network` | empty, off | For an endpoint with a private CA, or one resolving to a private, loopback or link-local address. |
+| `interval` | `1h` | 15 minutes to 168 hours. After a failure the next attempt follows within 15 minutes. |
+| `keep_last`, `keep_daily_days` | 48, 30 | Retention, below. |
+
+Each run is the same consistent backup as `hallpass backup create` (a `VACUUM INTO` snapshot and the segments it
+refers to), uploaded as:
+
+```
+<prefix>snapshots/<backup_id>/db.hpbak          database snapshot, sealed (docs/formats/hpbak1.md)
+<prefix>snapshots/<backup_id>/recordings/…      segments open at snapshot time (.partial), as stored
+<prefix>snapshots/<backup_id>/manifest.hpbak    manifest, sealed; uploaded last, so it marks a complete backup
+<prefix>recordings/<shard>/<session>/<seg>.hprec finalized and interrupted segments, as stored, shared by backups
+```
+
+- **Encryption.** The snapshot and the manifest are sealed with a fresh data key per object, wrapped by the KEK
+  (HPBAK1). The database cannot hold that key, because it is the database copy being protected; opening a backup
+  needs only the KEK, like a restore. Segments are already HPREC1 ciphertext. The bucket never sees plaintext, but
+  object keys and sizes reveal session and segment IDs, counts and times.
+- **Uploads.** A segment is uploaded once and reused by later backups unless its data key was rewrapped (its key ID
+  changed), and is then uploaded again. A run uploads the database snapshot and changed segments only.
+- **Retention**, after each successful run: keep the newest `keep_last` successful backups and the newest backup of
+  each of the last `keep_daily_days` days (UTC); delete every other backup of the current target, including objects
+  left by failed runs. A segment object is deleted once no kept backup was taken while the segment existed (between
+  the first backup that included it and the first that no longer did, because recording retention deleted it).
+- **Changing the location** (endpoint, bucket, prefix or addressing) starts over: the next run uploads everything
+  to the new location. Objects in the old location are left alone; delete them there yourself.
+- **History.** Every run is listed with its result, size, uploaded bytes and error. Failed runs and configuration
+  changes are in the audit log (`backup.run_failed`, `backup.target_*`); successful scheduled runs are not, to keep the
+  chain small.
+- **Staging.** A run writes the snapshot and its sealed copy to `<data_dir>/backups/remote-staging/` and removes them
+  afterwards: keep free space for about twice the database size.
+- **Limits.** One object is at most 5 GiB (a single S3 upload), so the database snapshot must stay below that.
+
+A minimal AWS IAM policy for the key (replace the bucket and prefix):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {"Effect": "Allow", "Action": "s3:ListBucket", "Resource": "arn:aws:s3:::acme-backups",
+     "Condition": {"StringLike": {"s3:prefix": "hallpass/*"}}},
+    {"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+     "Resource": "arn:aws:s3:::acme-backups/hallpass/*"}
+  ]
+}
+```
+
+Enable bucket versioning or object lock with a retention period where the provider supports it, so a leaked key cannot
+destroy the backups. With versioning, add a lifecycle rule that expires noncurrent versions after your retention.
+
+### Restoring a remote backup
+
+On the replacement host, with HallPass installed, its configuration and the KEK:
+
+```sh
+export AWS_ACCESS_KEY_ID=… AWS_SECRET_ACCESS_KEY=…
+FLAGS="--s3-endpoint https://s3.eu-central-1.amazonaws.com --s3-region eu-central-1 --s3-bucket acme-backups --s3-prefix hallpass/"
+hallpass backup remote-list $FLAGS                       # newest first; incomplete backups are marked
+hallpass backup remote-download --config /etc/hallpass/hallpass.yaml --out /var/tmp/hp-restore $FLAGS [--backup <id>]
+hallpass backup verify /var/tmp/hp-restore
+hallpass restore --config /etc/hallpass/hallpass.yaml /var/tmp/hp-restore
+```
+
+`remote-download` opens the sealed manifest and snapshot with the KEK (refusing another KEK), checks the size and
+SHA-256 of every file against the manifest, and writes an ordinary backup directory. Then compare the restored chain
+head with your external anchors: an attacker with write access to the bucket cannot forge a backup, but could delete
+newer ones so that an older one is restored.
 
 ## Verifying a backup
 

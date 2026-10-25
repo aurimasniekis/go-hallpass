@@ -129,6 +129,9 @@ End reasons: `expired`, `operator`, `agent`, `policy_changed`, `agent_disabled`,
 | `hallpass_outbox_dead` | gauge | – | Dead-lettered messages (exhausted 8 attempts). |
 | `hallpass_notification_deliveries_total` | counter | `provider` = `slack`, `telegram`, `smtp`, `web`, `webhook`, `other`; `outcome` = `delivered`, `retry`, `dead`, `other` | Delivery attempts. |
 | `hallpass_job_runs_total` | counter | `job` (code-defined job name, at most 64 values); `result` = `ok`, `error` | Background job runs (retention, checkpoints, integrity checks, …). |
+| `hallpass_backup_remote_runs_total` | counter | `result` = `succeeded`, `failed` | Backups to object storage. |
+| `hallpass_backup_remote_last_success_timestamp_seconds` | gauge | – | Start of the last successful backup to object storage (Unix seconds; 0 if none). |
+| `hallpass_backup_remote_duration_seconds` | histogram | – | Duration of backups to object storage. |
 | `hallpass_http_requests_total` | counter | `route` (route template, at most 128 values; `unmatched` if no route matched); `method` (standard methods, else `other`); `code` = `1xx`–`5xx` | HTTP requests. |
 | `hallpass_http_request_duration_seconds` | histogram | `route`, `method` | HTTP latency. Long-lived SSE streams land in the top buckets. |
 | `hallpass_http_requests_in_flight` | gauge | – | Requests being served. |
@@ -257,6 +260,11 @@ groups:
       - alert: HallpassJobFailures
         expr: increase(hallpass_job_runs_total{result="error"}[1h]) > 3
         labels: {severity: warning}
+      - alert: HallpassRemoteBackupStale
+        # Only when backups to object storage are configured; adjust 3h to about three times the interval.
+        expr: hallpass_backup_remote_last_success_timestamp_seconds > 0 and time() - hallpass_backup_remote_last_success_timestamp_seconds > 3 * 3600
+        labels: {severity: critical}
+        annotations: {summary: "No successful backup to object storage in 3 hours"}
 ```
 
 The 80% and 90% disk alerts use the `storage.alert_percent` thresholds. The free-space reserve

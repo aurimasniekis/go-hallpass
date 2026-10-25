@@ -34,6 +34,7 @@ unauthenticated). Labels never contain IP addresses, agent or request IDs, paths
 | `hallpass_recording_failures_total` | Any increase: mandatory-recording sessions are being refused or ended. |
 | `hallpass_enforcer_latency_seconds` | Time from access ending to the session being cut; should stay well under 5 s. |
 | `hallpass_outbox_dead` | Chat notifications that could not be delivered. |
+| `hallpass_backup_remote_last_success_timestamp_seconds` | Backups to object storage that stopped succeeding. |
 | `hallpass_ssh_auth_failures_total` | Spikes in failed logins. |
 | `hallpass_storage_filesystem_avail_bytes` | Disk running out. |
 
