@@ -68,6 +68,7 @@ export function AuthSettingsPage({
           <TestLoginPreview providerId={testLoginProviderId} onClose={onClearTestLogin} />
         ) : null}
         <LocalLoginCard />
+        <DefaultSignInCard />
         <ProvidersCard navigate={navigate} />
         <Card title="Not configurable here" size="small">
           <p style={{ margin: 0 }}>
@@ -141,6 +142,93 @@ function LocalLoginCard() {
           />
         </Space>
       )}
+    </Card>
+  );
+}
+
+function DefaultSignInCard() {
+  const queryClient = useQueryClient();
+  const settings = useQuery(authSettingsQueryOptions());
+  const providers = useQuery(oidcProvidersQueryOptions());
+  const [choice, setChoice] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  if (settings.isPending || providers.isPending) {
+    return (
+      <Card title="Default sign-in" size="small">
+        <LoadingState />
+      </Card>
+    );
+  }
+  if (settings.isError || providers.isError) {
+    return (
+      <Card title="Default sign-in" size="small">
+        <ErrorState
+          error={settings.error ?? providers.error}
+          onRetry={() => {
+            void settings.refetch();
+            void providers.refetch();
+          }}
+        />
+      </Card>
+    );
+  }
+  const current = settings.data.direct_provider ?? '';
+  const value = choice ?? current;
+  const enabled = providers.data.items.filter((p) => p.enabled);
+  const save = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      await api.call('put', '/api/v1/settings/auth', {
+        body: { local_login_disabled: settings.data.local_login_disabled, direct_provider: value },
+      });
+      setChoice(null);
+      void queryClient.invalidateQueries({ queryKey: qk.authSettings });
+      void queryClient.invalidateQueries({ queryKey: qk.authConfig });
+    } catch (e) {
+      setError(e);
+    } finally {
+      setPending(false);
+    }
+  };
+  return (
+    <Card title="Default sign-in" size="small">
+      <Space orientation="vertical" style={{ width: '100%' }}>
+        <p style={{ margin: 0 }}>
+          Send the sign-in page straight to one SSO provider instead of showing the sign-in options. It still
+          shows them after a failed SSO sign-in and right after signing out.
+        </p>
+        <Form layout="vertical" style={{ maxWidth: 'min(420px, 100%)' }}>
+          <Form.Item label="Sign-in page" style={{ marginBottom: 8 }}>
+            <Select
+              aria-label="Sign-in page"
+              value={value}
+              onChange={(v: string) => {
+                setChoice(v);
+              }}
+              options={[
+                { value: '', label: 'Show the sign-in options' },
+                ...enabled.map((p) => ({ value: p.slug, label: `Continue to ${p.display_name}` })),
+              ]}
+            />
+          </Form.Item>
+          <Button type="primary" onClick={() => void save()} loading={pending} disabled={value === current}>
+            Save
+          </Button>
+        </Form>
+        {error !== null ? <Alert type="error" showIcon title={errorMessage(error)} /> : null}
+        {current !== '' ? (
+          <CopyField
+            label={
+              settings.data.local_login_disabled
+                ? 'Every sign-in option'
+                : 'Email and password sign-in (fallback)'
+            }
+            value={`${window.location.origin}/login/password`}
+          />
+        ) : null}
+      </Space>
     </Card>
   );
 }

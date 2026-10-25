@@ -830,3 +830,44 @@ func tableContains(ctx context.Context, d *sql.DB, table string, needles map[str
 	}
 	return found, rows.Err()
 }
+
+// The sign-in page can go straight to one enabled provider; a disabled, renamed or deleted provider is handled.
+func TestDirectProvider(t *testing.T) {
+	f := newFx(t)
+	direct := func() string {
+		t.Helper()
+		slug, err := f.svc.DirectProvider(f.ctx)
+		must(t, err)
+		return slug
+	}
+	if got := direct(); got != "" {
+		t.Fatalf("direct provider before any setting: %q", got)
+	}
+	if err := f.svc.SetDirectProvider(f.ctx, admin, "nope"); !isCode(err, apperr.CodeInvalid) {
+		t.Fatalf("unknown provider: %v", err)
+	}
+	must(t, f.svc.SetDirectProvider(f.ctx, admin, "corp"))
+	if got := direct(); got != "corp" {
+		t.Fatalf("direct provider = %q, want corp", got)
+	}
+	// Stored by ID: a renamed provider stays the direct one.
+	p, err := f.svc.UpdateProvider(f.ctx, admin, f.prov.ID, ProviderInput{Version: f.prov.Version, Slug: ptr("corp2")})
+	must(t, err)
+	if got := direct(); got != "corp2" {
+		t.Fatalf("after rename: %q, want corp2", got)
+	}
+	// A disabled provider is not used, and cannot be chosen.
+	p, err = f.svc.UpdateProvider(f.ctx, admin, p.ID, ProviderInput{Version: p.Version, Enabled: ptr(false)})
+	must(t, err)
+	if got := direct(); got != "" {
+		t.Fatalf("disabled provider still direct: %q", got)
+	}
+	if err := f.svc.SetDirectProvider(f.ctx, admin, "corp2"); !isCode(err, apperr.CodeInvalid) {
+		t.Fatalf("choosing a disabled provider: %v", err)
+	}
+	must(t, f.svc.DeleteProvider(f.ctx, admin, p.ID))
+	if got := direct(); got != "" {
+		t.Fatalf("deleted provider still direct: %q", got)
+	}
+	must(t, f.svc.SetDirectProvider(f.ctx, admin, ""))
+}

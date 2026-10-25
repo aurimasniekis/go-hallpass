@@ -1030,6 +1030,30 @@
   server role without a second person. It is recorded and audited, and `console.terminal: false` removes the
   capability. Approvers are not notified (THREAT_MODEL T-25).
 
+### ADR-0056 — Default sign-in provider
+
+- **Status:** accepted (operator request, 2026-10-25). Not a security-relevant change: it changes which page the
+  browser sees first, not who can sign in or how.
+- **Context:** installations that sign in through one identity provider asked for the sign-in page to go there
+  directly, as Porch does, with a separate URL for email and password.
+- **Decision:**
+  - The setting `auth.direct_provider` holds a provider ID (so renaming the slug keeps it). The API exposes it as the
+    slug `direct_provider` on `GET/PUT /api/v1/settings/auth` (same permission, recent authentication and MFA as the
+    other sign-in settings; audited as `auth.direct_provider.changed`) and on the public `GET /api/v1/auth/config`. A
+    `PUT` without the field leaves it unchanged, so older Terraform providers do not clear it. Only an enabled provider
+    can be chosen; a disabled or deleted one stops being the default.
+  - `/login` starts the normal OIDC login flow (`purpose=login`, same state, nonce, PKCE and binding cookie) for that
+    provider. `/login/password` shows every sign-in method and never redirects.
+  - The page does not redirect after an SSO error (`sso_error`), while a limited session is pending, before bootstrap,
+    or after a sign-out in that tab (a sessionStorage marker set on sign-out and cleared once a session is back). This
+    prevents a sign-out from signing straight back in through the provider session.
+- **Alternatives:** a `?all=1` query parameter on `/login` (the operator asked for a separate URL); a server-side
+  redirect of `/login` (the page needs the error and signed-out state that only the browser has); changing the
+  post-logout redirect URI to carry a flag (registered URIs at providers would break).
+- **Consequences:** password login and the other providers are unchanged and stay reachable at `/login/password`. A
+  session that expires sends the browser through the provider again, which signs in silently while the provider
+  session lasts.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

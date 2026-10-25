@@ -9,7 +9,7 @@ import { authConfigQueryOptions } from '../../api/queries';
 import type { AuthConfig, AuthProviderSummary, LoginRequest, Me } from '../../api/types';
 import { ErrorState, LoadingState } from '../../ds/states';
 import { AuthLayout } from './AuthLayout';
-import { oidcStartUrl, ssoErrorMessage, takeStepUpReturn } from './sso';
+import { oidcStartUrl, ssoErrorMessage, takeStepUpReturn, wasSignedOut } from './sso';
 import { TotpEnrollment } from './TotpEnrollment';
 
 /**
@@ -19,6 +19,9 @@ import { TotpEnrollment } from './TotpEnrollment';
  * (SR-03): the code step follows, with a later code from the new authenticator. An existing limited session (for
  * example after a reload) resumes at the right step. SSO errors arrive as `?sso_error=<code>`; for
  * `mfa_required` after an SSO step-up the TOTP fallback (`POST /auth/reauth/totp`) is offered.
+ *
+ * With a default provider (`direct_provider`), `/login` continues to it at once; `/login/password` always shows every
+ * sign-in method. The page stays put after an SSO error and after signing out, so it never loops through the provider.
  *
  * Public auth endpoints carry no CSRF token (the server checks Origin); after login the session's token
  * comes from `me.csrf_token`.
@@ -332,16 +335,58 @@ export function resumeStep(me: Me | undefined, ssoError: string | undefined): St
   return ssoError ? null : 'done';
 }
 
+/** Where the browser is sent for the default provider (overridable in tests). */
+const defaultRedirect = (url: string) => {
+  window.location.replace(url);
+};
+
+/** Shown while the browser continues to the default provider, with a way out if the redirect stalls. */
+function DirectSignIn({
+  provider,
+  next,
+  localLogin,
+  redirect,
+}: {
+  provider: AuthProviderSummary;
+  next: string;
+  localLogin: boolean;
+  redirect: (url: string) => void;
+}) {
+  const href = oidcStartUrl(provider.slug, 'login', next);
+  useEffect(() => {
+    redirect(href);
+  }, [href, redirect]);
+  const fallback = next === '/' ? '/login/password' : `/login/password?next=${encodeURIComponent(next)}`;
+  return (
+    <div style={{ display: 'grid', gap: 12 }}>
+      <p role="status" style={{ margin: 0 }}>
+        Continuing to {provider.display_name}…
+      </p>
+      <Button block href={href}>
+        Continue with {provider.display_name}
+      </Button>
+      <Button type="link" block href={fallback}>
+        {localLogin ? 'Sign in with email and password' : 'Other sign-in options'}
+      </Button>
+    </div>
+  );
+}
+
 export function LoginPage({
   next,
   ssoError,
   onSignedIn,
   client = defaultClient,
+  direct = false,
+  redirect = defaultRedirect,
 }: {
   next: string;
   ssoError?: string | undefined;
   onSignedIn: (target?: string) => void;
   client?: ApiClient;
+  /** Continue straight to the default SSO provider when one is set (`/login`; not `/login/password`). */
+  direct?: boolean;
+  redirect?: (url: string) => void;
 }) {
   const config = useQuery(authConfigQueryOptions());
   // An existing session (limited, or a full one after an SSO step-up fallback) decides the first step.
@@ -353,6 +398,16 @@ export function LoginPage({
     gcTime: 0,
   });
   const resume = session.isSuccess ? resumeStep(session.data, ssoError) : null;
+  const [signedOut] = useState(wasSignedOut);
+  const directProvider =
+    direct &&
+    config.isSuccess &&
+    !config.data.bootstrap_required &&
+    !ssoError &&
+    !signedOut &&
+    resume === null
+      ? config.data.providers.find((p) => p.slug === config.data.direct_provider)
+      : undefined;
 
   useEffect(() => {
     if (resume === 'done') {
@@ -374,15 +429,27 @@ export function LoginPage({
         />
       ) : resume === 'done' ? (
         <LoadingState label="Signing in…" />
-      ) : (
-        <LoginForms
-          config={config.data}
+      ) : directProvider ? (
+        <DirectSignIn
+          provider={directProvider}
           next={next}
-          onSignedIn={onSignedIn}
-          client={client}
-          ssoError={ssoError}
-          {...(resume ? { initialStep: resume } : {})}
+          localLogin={config.data.local_login}
+          redirect={redirect}
         />
+      ) : (
+        <>
+          {direct && signedOut && config.data.direct_provider && !ssoError && resume === null ? (
+            <Alert type="info" showIcon title="You are signed out." style={{ marginBottom: 16 }} />
+          ) : null}
+          <LoginForms
+            config={config.data}
+            next={next}
+            onSignedIn={onSignedIn}
+            client={client}
+            ssoError={ssoError}
+            {...(resume ? { initialStep: resume } : {})}
+          />
+        </>
       )}
     </AuthLayout>
   );

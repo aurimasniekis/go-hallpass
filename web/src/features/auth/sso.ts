@@ -73,3 +73,33 @@ export function takeStepUpReturn(): string {
     return '/';
   }
 }
+
+const SIGNED_OUT_KEY = 'hallpass.signedOut';
+
+/**
+ * Marks this tab as signed out on purpose, so the sign-in page does not send it straight back to the default SSO
+ * provider (which would sign it in again while the provider session lasts). Cleared once a session is back.
+ */
+export function markSignedOut(): void {
+  try {
+    window.sessionStorage.setItem(SIGNED_OUT_KEY, '1');
+  } catch {
+    // Not persisted: the sign-in page may continue to the provider.
+  }
+}
+
+export function clearSignedOut(): void {
+  try {
+    window.sessionStorage.removeItem(SIGNED_OUT_KEY);
+  } catch {
+    // Nothing stored.
+  }
+}
+
+export function wasSignedOut(): boolean {
+  try {
+    return window.sessionStorage.getItem(SIGNED_OUT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}

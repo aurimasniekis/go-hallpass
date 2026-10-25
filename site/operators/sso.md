@@ -57,6 +57,15 @@ When the provider is down, SSO logins fail and existing sessions continue until 
 [break-glass procedure](/operators/incidents#locked-out-of-administration) in mind.
 :::
 
+## Default sign-in provider
+
+To skip the sign-in options, pick a provider under **Administration → Authentication → Default sign-in** (Terraform:
+`direct_provider` on `hallpass_auth_settings`). The sign-in page then goes straight to that provider.
+
+- `/login/password` always shows every sign-in method, including email and password. Keep it as the fallback for when
+  the provider is down.
+- After a failed SSO sign-in, or right after you sign out, the page shows the options instead of going to the provider.
+
 ## Tested providers
 
 Besides an in-process mock covering algorithm confusion, wrong claims, expiry and outages, the integration is tested

@@ -1017,6 +1017,19 @@ func TestOIDCBrowserFlow(t *testing.T) {
 	if strings.Contains(string(r.body), idp.ClientSecret) || prov.RedirectURI != idp.RedirectURI {
 		t.Fatalf("provider DTO: %s", r.body)
 	}
+	// The sign-in page can go straight to the provider; a PUT without direct_provider (older clients) keeps it.
+	admin.ok("putAuthSettings", 200, "PUT", "/api/v1/settings/auth", map[string]any{"local_login_disabled": false, "direct_provider": "corp"})
+	admin.ok("putAuthSettings", 200, "PUT", "/api/v1/settings/auth", map[string]any{"local_login_disabled": false})
+	if r := h.client().ok("getAuthConfig", 200, "GET", "/api/v1/auth/config", nil); !strings.Contains(string(r.body), `"direct_provider":"corp"`) {
+		t.Fatalf("auth config without the direct provider: %s", r.body)
+	}
+	if r := admin.do("PUT", "/api/v1/settings/auth", map[string]any{"local_login_disabled": false, "direct_provider": "nope"}); r.status != 422 {
+		t.Fatalf("unknown direct provider: %d %s", r.status, r.body)
+	}
+	admin.ok("putAuthSettings", 200, "PUT", "/api/v1/settings/auth", map[string]any{"local_login_disabled": false, "direct_provider": ""})
+	if r := h.client().ok("getAuthConfig", 200, "GET", "/api/v1/auth/config", nil); strings.Contains(string(r.body), "direct_provider") {
+		t.Fatalf("auth config still names a direct provider: %s", r.body)
+	}
 	op, err := h.a.Auth.Create(h.ctx, sysActor, opauth.CreateInput{Email: "sso@example.com", DisplayName: "SSO", Roles: []string{"viewer"}})
 	must(t, err)
 	must(t, h.a.OIDC.LinkIdentity(h.ctx, sysActor, op.ID, prov.ID, "user-1"))

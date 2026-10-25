@@ -21,6 +21,7 @@ import { Route as AppGroupsRouteImport } from './routes/_app/groups'
 import { Route as AppMeRouteImport } from './routes/_app/me'
 import { Route as AppPolicyRouteImport } from './routes/_app/policy'
 import { Route as InviteTokenRouteImport } from './routes/invite/$token'
+import { Route as LoginPasswordRouteImport } from './routes/login_.password'
 import { Route as ResetTokenRouteImport } from './routes/reset/$token'
 import { Route as AppAgentsIndexRouteImport } from './routes/_app/agents/index'
 import { Route as AppAgentsIdRouteImport } from './routes/_app/agents/$id'
@@ -100,6 +101,11 @@ const AppPolicyRoute = AppPolicyRouteImport.update({
 const InviteTokenRoute = InviteTokenRouteImport.update({
   id: '/invite/$token',
   path: '/invite/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginPasswordRoute = LoginPasswordRouteImport.update({
+  id: '/login_/password',
+  path: '/login/password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetTokenRoute = ResetTokenRouteImport.update({
@@ -220,6 +226,7 @@ export interface FileRoutesByFullPath {
   '/me': typeof AppMeRoute
   '/policy': typeof AppPolicyRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/login/password': typeof LoginPasswordRoute
   '/reset/$token': typeof ResetTokenRoute
   '/agents/$id': typeof AppAgentsIdRoute
   '/git/$id': typeof AppGitIdRoute
@@ -253,6 +260,7 @@ export interface FileRoutesByTo {
   '/me': typeof AppMeRoute
   '/policy': typeof AppPolicyRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/login/password': typeof LoginPasswordRoute
   '/reset/$token': typeof ResetTokenRoute
   '/': typeof AppIndexRoute
   '/agents/$id': typeof AppAgentsIdRoute
@@ -289,6 +297,7 @@ export interface FileRoutesById {
   '/_app/me': typeof AppMeRoute
   '/_app/policy': typeof AppPolicyRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/login_/password': typeof LoginPasswordRoute
   '/reset/$token': typeof ResetTokenRoute
   '/_app/': typeof AppIndexRoute
   '/_app/agents/$id': typeof AppAgentsIdRoute
@@ -326,6 +335,7 @@ export interface FileRouteTypes {
     | '/me'
     | '/policy'
     | '/invite/$token'
+    | '/login/password'
     | '/reset/$token'
     | '/agents/$id'
     | '/git/$id'
@@ -359,6 +369,7 @@ export interface FileRouteTypes {
     | '/me'
     | '/policy'
     | '/invite/$token'
+    | '/login/password'
     | '/reset/$token'
     | '/'
     | '/agents/$id'
@@ -394,6 +405,7 @@ export interface FileRouteTypes {
     | '/_app/me'
     | '/_app/policy'
     | '/invite/$token'
+    | '/login_/password'
     | '/reset/$token'
     | '/_app/'
     | '/_app/agents/$id'
@@ -425,6 +437,7 @@ export interface RootRouteChildren {
   RecoverRoute: typeof RecoverRoute
   SetupRoute: typeof SetupRoute
   InviteTokenRoute: typeof InviteTokenRoute
+  LoginPasswordRoute: typeof LoginPasswordRoute
   ResetTokenRoute: typeof ResetTokenRoute
 }
 
@@ -512,6 +525,13 @@ declare module '@tanstack/react-router' {
       path: '/invite/$token'
       fullPath: '/invite/$token'
       preLoaderRoute: typeof InviteTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login_/password': {
+      id: '/login_/password'
+      path: '/login/password'
+      fullPath: '/login/password'
+      preLoaderRoute: typeof LoginPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset/$token': {
@@ -731,6 +751,7 @@ const rootRouteChildren: RootRouteChildren = {
   RecoverRoute: RecoverRoute,
   SetupRoute: SetupRoute,
   InviteTokenRoute: InviteTokenRoute,
+  LoginPasswordRoute: LoginPasswordRoute,
   ResetTokenRoute: ResetTokenRoute,
 }
 export const routeTree = rootRouteImport

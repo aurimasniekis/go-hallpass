@@ -82,6 +82,20 @@ While SSO-only mode is on, HallPass refuses changes that would break that path: 
 provider, or unlinking the last SSO administrator. The break-glass recovery login (`hallpass admin recover`) always
 keeps working.
 
+## Default sign-in provider
+
+**Administration → Authentication → Default sign-in** (or `direct_provider` in `PUT /api/v1/settings/auth`, or the
+Terraform `hallpass_auth_settings` resource) makes the sign-in page go straight to one enabled provider instead of
+showing the sign-in options. Only the page changes; password login and the other providers keep working.
+
+- `/login` continues to the default provider. `/login/password` always shows every sign-in method, including email and
+  password while password login is enabled. Bookmark it as the fallback for when the provider is down.
+- The page does not continue to the provider after a failed SSO sign-in (the error is shown instead) or right after
+  signing out in that browser tab, so signing out does not sign you straight back in.
+- A disabled or deleted provider stops being the default; the sign-in page then shows the options again. Choosing a
+  disabled provider is refused.
+- Omitting `direct_provider` in a `PUT` leaves it unchanged; `""` turns it off.
+
 ## Outages
 
 If discovery, JWKS or the token endpoint is unreachable, SSO login fails with "identity provider unavailable". Existing

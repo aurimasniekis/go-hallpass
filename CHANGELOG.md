@@ -7,6 +7,13 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+### Added
+
+- **Default sign-in provider.** The sign-in page can go straight to one SSO provider instead of showing the sign-in
+  options (**Administration → Authentication → Default sign-in**, `direct_provider` in `/api/v1/settings/auth`).
+  `/login/password` always shows every sign-in method, including email and password, as the fallback. The page still
+  shows the options after a failed SSO sign-in and right after signing out.
+
 ## [0.2.1] - 2026-10-25
 
 > **Recording format, backup format and keyring not externally reviewed.** The known limitations of

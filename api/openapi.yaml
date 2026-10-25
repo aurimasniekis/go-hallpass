@@ -2018,6 +2018,7 @@ components:
       properties:
         local_login: {type: boolean}
         bootstrap_required: {type: boolean}
+        direct_provider: {type: string, description: "Slug of the provider the sign-in page goes to directly, when set."}
         providers:
           type: array
           items: {type: object, required: [slug, display_name], properties: {slug: {type: string}, display_name: {type: string}}}
@@ -3054,7 +3055,13 @@ components:
     AuthSettings:
       type: object
       required: [local_login_disabled]
-      properties: {local_login_disabled: {type: boolean}}
+      properties:
+        local_login_disabled: {type: boolean}
+        direct_provider:
+          type: string
+          description: >-
+            Slug of the enabled SSO provider the sign-in page goes to directly; "" turns it off. Omitted in a PUT, it
+            is left unchanged. Email and password sign-in stays at /login/password while password login is enabled.
     SystemStatus:
       type: object
       required: [lockdown, version, boot_id, pending_requests, active_grants, live_channels, storage_ok]

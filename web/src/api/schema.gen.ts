@@ -2061,6 +2061,8 @@ export interface components {
         AuthConfig: {
             local_login: boolean;
             bootstrap_required: boolean;
+            /** @description Slug of the provider the sign-in page goes to directly, when set. */
+            direct_provider?: string;
             providers: {
                 slug: string;
                 display_name: string;
@@ -3041,6 +3043,8 @@ export interface components {
         };
         AuthSettings: {
             local_login_disabled: boolean;
+            /** @description Slug of the enabled SSO provider the sign-in page goes to directly; "" turns it off. Omitted in a PUT, it is left unchanged. Email and password sign-in stays at /login/password while password login is enabled. */
+            direct_provider?: string;
         };
         SystemStatus: {
             lockdown: boolean;

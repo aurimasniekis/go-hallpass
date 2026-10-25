@@ -115,15 +115,27 @@ func (s *Server) GetAuthSettings(c *gen.Call) (*gen.Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ok(map[string]bool{"local_login_disabled": off})
+	direct, err := s.d.OIDC.DirectProvider(c.R.Context())
+	if err != nil {
+		return nil, err
+	}
+	return ok(map[string]any{"local_login_disabled": off, "direct_provider": direct})
 }
 
 func (s *Server) PutAuthSettings(c *gen.Call) (*gen.Result, error) {
 	var in struct {
 		LocalLoginDisabled bool `json:"local_login_disabled"`
+		// Omitted: unchanged (clients that predate the setting keep it).
+		DirectProvider *string `json:"direct_provider"`
 	}
 	if err := decode(c, &in, false); err != nil {
 		return nil, err
+	}
+	// The direct provider first: an unknown or disabled slug then fails before anything changes.
+	if in.DirectProvider != nil {
+		if err := s.d.OIDC.SetDirectProvider(c.R.Context(), actor(c), *in.DirectProvider); err != nil {
+			return nil, err
+		}
 	}
 	if err := s.d.OIDC.SetLocalLoginDisabled(c.R.Context(), actor(c), in.LocalLoginDisabled); err != nil {
 		return nil, err

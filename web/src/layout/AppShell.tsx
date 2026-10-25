@@ -10,6 +10,7 @@ import type { Me } from '../api/types';
 import { ConnectionBanner } from '../ds/ConnectionBanner';
 import { Logo } from '../ds/Logo';
 import { watchScrollableRegions } from '../ds/scrollableRegions';
+import { clearSignedOut, markSignedOut } from '../features/auth/sso';
 import { LockdownBanner } from '../features/dashboard/LockdownControls';
 import { COMPACT_SHELL_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import { SseManager } from '../sse/manager';
@@ -50,6 +51,10 @@ export function AppShell({ me }: { me: Me }) {
   const { message } = App.useApp();
   const sse = useLiveEvents();
   useEffect(() => watchScrollableRegions(), []);
+  // Signed in again: the sign-in page may continue to the default SSO provider next time.
+  useEffect(() => {
+    clearSignedOut();
+  }, []);
 
   const items = useMemo<MenuProps['items']>(
     () =>
@@ -83,6 +88,8 @@ export function AppShell({ me }: { me: Me }) {
     }
     api.clearSession();
     queryClient.clear();
+    // Stay on the sign-in page instead of continuing to the default SSO provider, which would sign straight back in.
+    markSignedOut();
     await navigate({ to: '/login' });
     const idpLogout = safeExternalUrl(providerLogoutUrl);
     if (idpLogout) {

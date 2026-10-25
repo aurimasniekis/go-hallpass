@@ -29,7 +29,15 @@ func (s *Server) GetAuthConfig(c *gen.Call) (*gen.Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ok(map[string]any{"local_login": !off, "providers": providers, "bootstrap_required": n == 0})
+	direct, err := s.d.OIDC.DirectProvider(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]any{"local_login": !off, "providers": providers, "bootstrap_required": n == 0}
+	if direct != "" {
+		out["direct_provider"] = direct
+	}
+	return ok(out)
 }
 
 func (s *Server) Login(c *gen.Call) (*gen.Result, error) {

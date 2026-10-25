@@ -200,6 +200,56 @@ func (svc *Service) SetLocalLoginDisabled(ctx context.Context, actor audit.Actor
 	})
 }
 
+// SettingDirectProvider is the settings key naming (by ID) the provider the sign-in page goes to directly.
+const SettingDirectProvider = "auth.direct_provider"
+
+// DirectProvider returns the slug of the provider the sign-in page goes to directly, or "" when none is set or the
+// provider is gone or disabled.
+func (svc *Service) DirectProvider(ctx context.Context) (string, error) {
+	v, err := svc.s.R().GetSetting(ctx, SettingDirectProvider)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && v.Value == "") {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	p, err := svc.s.R().GetOIDCProvider(ctx, v.Value)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && p.Enabled != 1) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return p.Slug, nil
+}
+
+// SetDirectProvider makes the sign-in page go straight to the enabled provider with this slug ("" turns it off).
+// Password sign-in, while enabled, stays reachable at /login/password.
+func (svc *Service) SetDirectProvider(ctx context.Context, actor audit.Actor, slug string) error {
+	return svc.s.W().TxNamed(ctx, "oidc.direct_provider", func(tx *store.Tx) error {
+		id := ""
+		if slug != "" {
+			p, err := tx.Q.GetOIDCProviderBySlug(ctx, slug)
+			if errors.Is(err, sql.ErrNoRows) {
+				return invalid("no SSO provider %q", slug)
+			}
+			if err != nil {
+				return err
+			}
+			if p.Enabled != 1 {
+				return invalid("enable the provider %q before signing in with it directly", slug)
+			}
+			id = p.ID
+		}
+		if err := tx.Q.UpsertSetting(ctx, db.UpsertSettingParams{Key: SettingDirectProvider, Value: id, UpdatedAt: tx.NowMicros(),
+			UpdatedBy: sql.NullString{String: actor.ID, Valid: actor.ID != ""}}); err != nil {
+			return err
+		}
+		_, err := svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "auth.direct_provider.changed", Details: map[string]any{"provider": slug}})
+		return err
+	})
+}
+
 // checkSSOOnlyStillSafe refuses changes (disabling or deleting providers, unlinking) that would leave SSO-only
 // enforcement on without a working SSO administrator path (HP-AUTH-015).
 func (svc *Service) checkSSOOnlyStillSafe(ctx context.Context, tx *store.Tx) error {
