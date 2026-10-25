@@ -1,4 +1,4 @@
-import { PlusOutlined } from '@ant-design/icons';
+import { CodeOutlined, PlusOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Button, Card, Space, Tag } from 'antd';
@@ -10,9 +10,11 @@ import { qk } from '../../api/queryKeys';
 import type { Role } from '../../api/types';
 import { DataTable } from '../../ds/DataTable';
 import { formatDuration, formatDurationLong } from '../../lib/format';
+import { usePermissions } from '../../lib/usePermissions';
 import { EnabledBadge, TagList } from '../agents/AgentsPage';
 import { RoleFormFields } from '../roles/RoleFormFields';
 import { ROLE_DEFAULTS, toRoleInput, type RoleFormValues } from '../roles/roleForm';
+import { WebTerminal } from '../terminal/WebTerminal';
 import { FormModal } from './FormModal';
 
 export function DurationText({ seconds }: { seconds: number | null | undefined }) {
@@ -24,6 +26,13 @@ export function ServerRoles({ serverId, canWrite }: { serverId: string; canWrite
   const queryClient = useQueryClient();
   const query = useQuery(serverRolesQueryOptions(serverId));
   const [creating, setCreating] = useState(false);
+  const [terminal, setTerminal] = useState<Role | null>(null);
+  const { can } = usePermissions();
+  const terminalAllowed = (r: Role) =>
+    can('terminal.open') &&
+    r.enabled &&
+    (r.capabilities ?? []).includes('shell') &&
+    (r.capabilities ?? []).includes('pty');
   return (
     <Card
       size="small"
@@ -86,8 +95,40 @@ export function ServerRoles({ serverId, canWrite }: { serverId: string; canWrite
           },
           { key: 'channels', title: 'Approval', render: (_, r) => <TagList values={r.approval_channels} /> },
           { key: 'enabled', title: 'Status', render: (_, r) => <EnabledBadge enabled={r.enabled} /> },
+          ...(can('terminal.open')
+            ? [
+                {
+                  key: 'terminal',
+                  title: <span className="hp-visually-hidden">Terminal</span>,
+                  align: 'right' as const,
+                  render: (_: unknown, r: Role) =>
+                    terminalAllowed(r) ? (
+                      <Button
+                        size="small"
+                        icon={<CodeOutlined />}
+                        aria-label={`Open a terminal as ${r.alias}`}
+                        onClick={() => {
+                          setTerminal(r);
+                        }}
+                      >
+                        Terminal
+                      </Button>
+                    ) : null,
+                },
+              ]
+            : []),
         ]}
       />
+      {terminal ? (
+        <WebTerminal
+          serverId={serverId}
+          roleId={terminal.id}
+          title={`${terminal.alias} (${terminal.remote_user})`}
+          onClose={() => {
+            setTerminal(null);
+          }}
+        />
+      ) : null}
       <FormModal<RoleFormValues>
         open={creating}
         title="New role"
