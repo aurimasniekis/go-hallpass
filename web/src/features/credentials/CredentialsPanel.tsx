@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Card, Form, Input, Space, Table } from 'antd';
+import { Alert, App, Button, Card, Form, Input, Space } from 'antd';
 import { useState } from 'react';
 
 import { api } from '../../api/client';
@@ -18,6 +18,7 @@ import { StateBadge } from '../../shared/StateBadge';
 import { FormModal } from '../servers/FormModal';
 import { credentialActions, credentialNextStep } from './credentialActions';
 import { KeyLineOptionsHint } from './KeyLineOptionsHint';
+import { ResponsiveTable } from '../../ds/DataTable';
 
 /** The bare public key with its `hallpass:<remote>/<profile>` comment, as git hosts accept it. */
 function gitPublicKey(c: LoginCredential): string {
@@ -208,7 +209,7 @@ export function CredentialsPanel({ roleId, gitRemote = false }: { roleId: string
           />
         ) : (
           <>
-            <Table<LoginCredential>
+            <ResponsiveTable<LoginCredential>
               size="small"
               pagination={false}
               rowKey="id"

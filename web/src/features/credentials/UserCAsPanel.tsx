@@ -1,6 +1,6 @@
 import { PlusOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Card, Form, Input, Table } from 'antd';
+import { Button, Card, Form, Input } from 'antd';
 import { useState } from 'react';
 
 import { api } from '../../api/client';
@@ -13,6 +13,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../ds/states';
 import { StateBadge } from '../../shared/StateBadge';
 import { FormModal } from '../servers/FormModal';
 import { UserCASetupTip } from '../servers/SetupTips';
+import { ResponsiveTable } from '../../ds/DataTable';
 
 /**
  * User certificate authorities (PLAN §11.3): HallPass can log in to destinations with short-lived
@@ -52,7 +53,7 @@ export function UserCAsPanel() {
         />
       ) : (
         <>
-          <Table<UserCA>
+          <ResponsiveTable<UserCA>
             size="small"
             pagination={false}
             rowKey="id"

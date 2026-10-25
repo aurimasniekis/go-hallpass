@@ -1,8 +1,9 @@
-import { Button, Card, Table } from 'antd';
+import { Button, Card } from 'antd';
 import type { EChartsCoreOption } from 'echarts/core';
 import { lazy, Suspense, useId, useState, type ReactNode } from 'react';
 
 import { EmptyState, ErrorState, LoadingState } from './states';
+import { ResponsiveTable } from './DataTable';
 
 const EChart = lazy(() => import('./EChart').then((m) => ({ default: m.EChart })));
 
@@ -58,7 +59,7 @@ export function ChartCard({
     body = <EmptyState title="No data for this period" />;
   } else if (asTable) {
     body = (
-      <Table
+      <ResponsiveTable
         size="small"
         pagination={false}
         rowKey={(_row, index) => String(index)}

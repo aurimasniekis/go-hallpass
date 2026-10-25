@@ -49,7 +49,7 @@ export function WebSessionsTable({
             style={{
               display: 'inline-block',
               verticalAlign: 'middle',
-              maxWidth: 280,
+              maxWidth: 'min(280px, 100%)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',

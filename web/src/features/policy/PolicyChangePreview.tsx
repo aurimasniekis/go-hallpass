@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Card, Radio, Select, Space, Table } from 'antd';
+import { Alert, Button, Card, Radio, Select, Space } from 'antd';
 import { useState } from 'react';
 
 import { api } from '../../api/client';
@@ -8,6 +8,7 @@ import { agentsQueryOptions, serversQueryOptions } from '../../api/queries';
 import type { EffectiveAccessItem } from '../../api/types';
 import { LevelBadge } from './EffectiveAccessPreview';
 import type { RuleBody } from './ruleForm';
+import { ResponsiveTable } from '../../ds/DataTable';
 
 interface Change {
   key: string;
@@ -127,7 +128,7 @@ export function PolicyChangePreview({
         <Alert type="info" showIcon title="This change does not alter effective access here." />
       ) : null}
       {changes !== null && changes.length > 0 ? (
-        <Table<Change>
+        <ResponsiveTable<Change>
           size="small"
           pagination={false}
           rowKey="key"

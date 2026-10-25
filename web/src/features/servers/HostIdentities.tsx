@@ -1,6 +1,6 @@
 import { PlusOutlined, ScanOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Card, Form, Input, Space, Table, Tag } from 'antd';
+import { Alert, Button, Card, Form, Input, Space, Tag } from 'antd';
 import { useState } from 'react';
 
 import { api } from '../../api/client';
@@ -15,6 +15,7 @@ import { formatDateTime } from '../../lib/format';
 import { OperatorName } from '../../shared/names';
 import { StateBadge } from '../../shared/StateBadge';
 import { FormModal } from './FormModal';
+import { ResponsiveTable } from '../../ds/DataTable';
 
 function ConfirmIdentity({ serverId, identity }: { serverId: string; identity: HostIdentity }) {
   const queryClient = useQueryClient();
@@ -179,7 +180,7 @@ export function HostIdentities({
             description="The gateway refuses to connect until a host key is confirmed. Scan or paste the destination's key."
           />
         ) : (
-          <Table<HostIdentity>
+          <ResponsiveTable<HostIdentity>
             size="small"
             pagination={false}
             rowKey="id"

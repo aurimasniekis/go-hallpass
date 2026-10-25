@@ -1,6 +1,6 @@
 import { PlusOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Card, Form, Input, Space, Table } from 'antd';
+import { Alert, Button, Card, Form, Input, Space } from 'antd';
 import { useState } from 'react';
 
 import { api } from '../../api/client';
@@ -15,6 +15,7 @@ import { formatDateTime } from '../../lib/format';
 import { OperatorName } from '../../shared/names';
 import { StateBadge } from '../../shared/StateBadge';
 import { FormModal } from './FormModal';
+import { ResponsiveTable } from '../../ds/DataTable';
 
 function RevokeCollector({ collector, serverId }: { collector: DestinationCollector; serverId: string }) {
   const queryClient = useQueryClient();
@@ -108,7 +109,7 @@ export function DestinationCollectors({ serverId, canManage }: { serverId: strin
             description="Register a collector's public key to accept its reports."
           />
         ) : (
-          <Table<DestinationCollector>
+          <ResponsiveTable<DestinationCollector>
             size="small"
             pagination={false}
             rowKey="id"

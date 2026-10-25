@@ -1,6 +1,6 @@
 import { PlusOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Card, Form, Input, Select, Space, Table, Tag } from 'antd';
+import { Alert, Button, Card, Form, Input, Select, Space, Tag } from 'antd';
 import { useState } from 'react';
 
 import { api } from '../../api/client';
@@ -25,6 +25,7 @@ import { formatDateTime } from '../../lib/format';
 import { usePermissions } from '../../lib/usePermissions';
 import { oidcStartUrl } from '../auth/sso';
 import { ProviderFormDrawer } from './ProviderForm';
+import { ResponsiveTable } from '../../ds/DataTable';
 
 const OPERATOR_ROLES = ['administrator', 'approver', 'auditor', 'viewer'] as const;
 
@@ -388,7 +389,7 @@ function MappingsCard({ provider }: { provider: OIDCProvider }) {
       ) : mappings.data.items.length === 0 ? (
         <EmptyState title="No mappings" description="Without mappings, SSO operators receive no roles." />
       ) : (
-        <Table
+        <ResponsiveTable
           size="small"
           pagination={false}
           rowKey="id"

@@ -1,6 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ThemeProvider } from './ds/theme/ThemeProvider';
@@ -94,6 +95,45 @@ describe('routing', () => {
     });
     // Pages outside the operator's permissions are not offered.
     expect(screen.queryByRole('link', { name: 'Operators' })).not.toBeInTheDocument();
+  });
+
+  it('puts the navigation in a drawer on phones', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query.startsWith('(max-width'),
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(() => false),
+      })),
+    );
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = input instanceof Request ? input.url : input.toString();
+      if (url.startsWith('/api/v1/me')) {
+        return Promise.resolve(
+          json(
+            200,
+            makeMe({
+              operator: { display_name: 'Ada Operator' },
+              permissions: ['system.read', 'requests.read'],
+            }),
+          ),
+        );
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    renderAt('/settings/storage');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Storage & keys' })).toBeInTheDocument();
+    // No sidebar squeezing the page: the navigation opens from the header.
+    expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Account: Ada Operator' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Open navigation' }));
+    expect(await screen.findByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Requests' })).toHaveAttribute('href', '/requests');
   });
 
   it('sends a limited (MFA pending) session back to /login', async () => {

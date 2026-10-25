@@ -388,15 +388,100 @@
   gap: 12px;
   border-bottom: 1px solid var(--hp-color-border-secondary);
 }
-/* Narrow screens: the collapsed sidebar's menu button sits in the header instead of over the page title */
-.ant-layout-sider-zero-width-trigger.ant-layout-sider-zero-width-trigger {
-  top: 4px;
-  z-index: 20;
+.hp-shell-header__start {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 600;
+}
+.hp-shell-header__end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 .hp-shell-content {
   padding: 16px 24px 32px;
   max-width: 1600px;
   width: 100%;
+  min-width: 0;
+}
+.hp-shell-drawer .ant-drawer-body {
+  padding: 0;
+}
+/* No drawer is wider than the screen (forms use size="large", 736 px). */
+.ant-drawer-content-wrapper {
+  max-width: 100vw;
+}
+
+/* Phones and small tablets: compact header and page padding (the sidebar is a drawer) */
+@media (max-width: 991.98px) {
+  .hp-shell-header.hp-shell-header {
+    padding: 0 8px 0 4px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  .hp-shell-content {
+    padding: 12px 12px 24px;
+  }
+}
+
+/* Tables as cards on phones (DataTable) */
+.hp-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.hp-cards__loading {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0;
+}
+.hp-card-row {
+  border: 1px solid var(--hp-color-border-secondary);
+  border-radius: var(--hp-radius);
+  padding: 10px 12px;
+  background: var(--hp-color-bg-container);
+  min-width: 0;
+}
+.hp-card-row dl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hp-card-row__field {
+  display: grid;
+  grid-template-columns: minmax(84px, 34%) minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+}
+.hp-card-row__field dt {
+  color: var(--hp-color-text-secondary);
+  font-size: 12px;
+}
+.hp-card-row__field dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.hp-card-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hp-color-border-secondary);
+}
+.hp-card-row__details {
+  margin-top: 8px;
 }
 .hp-skip-link {
   position: absolute;

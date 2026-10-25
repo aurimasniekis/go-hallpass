@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Card, Radio, Select, Space, Table, Tag, type TableColumnsType } from 'antd';
+import { Alert, Card, Radio, Select, Space, Tag, type TableColumnsType } from 'antd';
 import { useState } from 'react';
 
 import {
@@ -14,6 +14,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../ds/states';
 import { StatusBadge, type StatusTone } from '../../ds/StatusBadge';
 import { formatDuration } from '../../lib/format';
 import { AgentName, RoleName, ServerName } from '../../shared/names';
+import { ResponsiveTable } from '../../ds/DataTable';
 
 const LEVEL_DISPLAY: Record<string, [StatusTone, string]> = {
   denied: ['error', 'Denied'],
@@ -156,7 +157,7 @@ export function EffectiveAccessPreview() {
         ) : (
           <>
             <Alert type="info" showIcon title={`Policy version ${String(access.data.policy_version)}`} />
-            <Table<EffectiveAccessItem>
+            <ResponsiveTable<EffectiveAccessItem>
               size="small"
               rowKey={(r) => `${r.agent_id}|${r.server_id}|${r.role_id}`}
               columns={columns(by, ruleNames)}

@@ -1,8 +1,9 @@
-import { LeftOutlined, RightOutlined } from '@ant-design/icons';
-import { Alert, Button, Select, Table, type TableColumnsType, type TableProps } from 'antd';
+import { DownOutlined, LeftOutlined, RightOutlined, UpOutlined } from '@ant-design/icons';
+import { Alert, Button, Select, Spin, Table, type TableColumnsType, type TableProps } from 'antd';
 import type { SorterResult } from 'antd/es/table/interface';
-import { useMemo, type Key, type ReactNode } from 'react';
+import { isValidElement, useMemo, useState, type Key, type ReactNode } from 'react';
 
+import { NARROW_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import { useDensity } from '../stores/density';
 import { EmptyState, ErrorState } from './states';
 
@@ -91,6 +92,151 @@ function columnKey<T>(column: TableColumnsType<T>[number]): string | undefined {
   return undefined;
 }
 
+type Column<T> = TableColumnsType<T>[number];
+
+/** An actions column: a visually hidden title (icon buttons, menus) or the conventional `actions` key. */
+function isActionsColumn<T>(column: Column<T>): boolean {
+  if (column.key === 'actions') {
+    return true;
+  }
+  const t = column.title;
+  if (isValidElement<{ className?: string }>(t)) {
+    return (t.props.className ?? '').includes('hp-visually-hidden');
+  }
+  return t === undefined || t === null || t === '';
+}
+
+function cellValue<T extends object>(column: Column<T>, row: T, index: number): ReactNode {
+  const dataIndex = 'dataIndex' in column ? column.dataIndex : undefined;
+  let value: unknown;
+  if (typeof dataIndex === 'string' || typeof dataIndex === 'number') {
+    value = (row as Record<string | number, unknown>)[dataIndex];
+  } else if (Array.isArray(dataIndex)) {
+    value = dataIndex.reduce<unknown>((v, k) => (v as Record<string, unknown> | undefined)?.[String(k)], row);
+  }
+  if (column.render) {
+    const out: unknown = column.render(value, row, index);
+    // A render may return {children, props} to set cell props; only the content matters here.
+    if (out !== null && typeof out === 'object' && !isValidElement(out) && 'children' in out) {
+      return (out as { children: ReactNode }).children;
+    }
+    return out as ReactNode;
+  }
+  return value === undefined || value === null ? null : (value as ReactNode);
+}
+
+function CardRow<T extends object>({
+  row,
+  index,
+  columns,
+  onRowClick,
+  expandable,
+}: {
+  row: T;
+  index: number;
+  columns: TableColumnsType<T>;
+  onRowClick?: (row: T) => void;
+  expandable?: TableProps<T>['expandable'];
+}) {
+  const [open, setOpen] = useState(false);
+  const fields = columns.filter((c) => !isActionsColumn(c));
+  const actions = columns.filter((c) => isActionsColumn(c));
+  const details = expandable?.expandedRowRender && (expandable.rowExpandable?.(row) ?? true);
+  return (
+    <li
+      className="hp-card-row"
+      {...(onRowClick
+        ? {
+            onClick: () => {
+              onRowClick(row);
+            },
+            style: { cursor: 'pointer' },
+          }
+        : {})}
+    >
+      <dl>
+        {fields.map((c, i) => (
+          <div key={String(c.key ?? i)} className="hp-card-row__field">
+            <dt>{typeof c.title === 'function' ? null : c.title}</dt>
+            <dd>{cellValue(c, row, index)}</dd>
+          </div>
+        ))}
+      </dl>
+      {actions.length > 0 || details ? (
+        <div className="hp-card-row__actions">
+          {details ? (
+            <Button
+              size="small"
+              type="link"
+              icon={open ? <UpOutlined /> : <DownOutlined />}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen((v) => !v);
+              }}
+            >
+              {open ? 'Hide details' : 'Details'}
+            </Button>
+          ) : null}
+          {actions.map((c, i) => (
+            <span key={String(c.key ?? i)}>{cellValue(c, row, index)}</span>
+          ))}
+        </div>
+      ) : null}
+      {details && open && expandable.expandedRowRender ? (
+        <div className="hp-card-row__details">{expandable.expandedRowRender(row, index, 0, true)}</div>
+      ) : null}
+    </li>
+  );
+}
+
+/**
+ * Drop-in for antd's Table on small, local tables (keys, previews, settings): the same props, rendered as one card
+ * per row on phones. Use DataTable for server-driven lists.
+ */
+export function ResponsiveTable<T extends object>(props: TableProps<T>) {
+  const narrow = useMediaQuery(NARROW_QUERY);
+  if (!narrow) {
+    return <Table<T> {...props} />;
+  }
+  const rows = props.dataSource ?? [];
+  const columns = props.columns ?? [];
+  const keyOf = (row: T, index: number): string => {
+    const rk = props.rowKey;
+    if (typeof rk === 'function') {
+      return String(rk(row, index));
+    }
+    if (rk !== undefined) {
+      return String((row as Record<string, unknown>)[rk as string]);
+    }
+    const k = (row as { key?: string | number }).key;
+    return k === undefined ? String(index) : String(k);
+  };
+  if (props.loading && rows.length === 0) {
+    return (
+      <div className="hp-cards__loading">
+        <Spin />
+      </div>
+    );
+  }
+  if (rows.length === 0) {
+    const empty = props.locale?.emptyText;
+    return <>{typeof empty === 'function' ? empty() : (empty ?? <EmptyState title="No results" />)}</>;
+  }
+  return (
+    <ul className="hp-cards">
+      {rows.map((row, index) => (
+        <CardRow<T>
+          key={keyOf(row, index)}
+          row={row}
+          index={index}
+          columns={columns}
+          {...(props.expandable ? { expandable: props.expandable } : {})}
+        />
+      ))}
+    </ul>
+  );
+}
+
 export function DataTable<T extends object>({
   caption,
   columns,
@@ -113,6 +259,8 @@ export function DataTable<T extends object>({
   expandable,
 }: DataTableProps<T>) {
   const density = useDensity();
+  // Phones get one card per row instead of a table that must be scrolled sideways.
+  const narrow = useMediaQuery(NARROW_QUERY);
 
   const controlledColumns = useMemo(
     () =>
@@ -175,32 +323,55 @@ export function DataTable<T extends object>({
           }
         />
       ) : null}
-      <Table<T>
-        {...(expandable ? { expandable } : {})}
-        columns={controlledColumns}
-        dataSource={rows}
-        rowKey={rowKey}
-        loading={loading}
-        size={density === 'compact' ? 'small' : 'middle'}
-        pagination={false}
-        onChange={handleChange}
-        sortDirections={['ascend', 'descend']}
-        showSorterTooltip={false}
-        scroll={{ x: 'max-content' }}
-        locale={{
-          emptyText: loading ? ' ' : <EmptyState title={emptyTitle} description={emptyDescription} />,
-        }}
-        {...(onRowClick
-          ? {
-              onRow: (row: T) => ({
-                onClick: () => {
-                  onRowClick(row);
-                },
-                style: { cursor: 'pointer' },
-              }),
-            }
-          : {})}
-      />
+      {narrow ? (
+        loading && rows === undefined ? (
+          <div className="hp-cards__loading">
+            <Spin />
+          </div>
+        ) : rows && rows.length > 0 ? (
+          <ul className="hp-cards" aria-label={caption}>
+            {rows.map((row, index) => (
+              <CardRow<T>
+                key={typeof rowKey === 'function' ? rowKey(row) : String(row[rowKey])}
+                row={row}
+                index={index}
+                columns={columns}
+                {...(onRowClick ? { onRowClick } : {})}
+                {...(expandable ? { expandable } : {})}
+              />
+            ))}
+          </ul>
+        ) : (
+          <EmptyState title={emptyTitle} description={emptyDescription} />
+        )
+      ) : (
+        <Table<T>
+          {...(expandable ? { expandable } : {})}
+          columns={controlledColumns}
+          dataSource={rows}
+          rowKey={rowKey}
+          loading={loading}
+          size={density === 'compact' ? 'small' : 'middle'}
+          pagination={false}
+          onChange={handleChange}
+          sortDirections={['ascend', 'descend']}
+          showSorterTooltip={false}
+          scroll={{ x: 'max-content' }}
+          locale={{
+            emptyText: loading ? ' ' : <EmptyState title={emptyTitle} description={emptyDescription} />,
+          }}
+          {...(onRowClick
+            ? {
+                onRow: (row: T) => ({
+                  onClick: () => {
+                    onRowClick(row);
+                  },
+                  style: { cursor: 'pointer' },
+                }),
+              }
+            : {})}
+        />
+      )}
       {footer ? <div className="hp-table-note">{footer}</div> : null}
       {pagination ? (
         <nav className="hp-table-footer" aria-label={`${caption} pagination`}>

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Card, Space, Table, Tag } from 'antd';
+import { Card, Space, Tag } from 'antd';
 
 import {
   agentEffectiveAccessQueryOptions,
@@ -11,6 +11,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../ds/states';
 import { StatusBadge, type StatusTone } from '../../ds/StatusBadge';
 import { formatDuration } from '../../lib/format';
 import { AgentName, RoleName, ServerName } from '../../shared/names';
+import { ResponsiveTable } from '../../ds/DataTable';
 
 const LEVELS: Record<string, [StatusTone, string]> = {
   visible: ['info', 'Visible'],
@@ -114,7 +115,7 @@ export function EffectiveAccessCard({ kind, id }: { kind: 'agent' | 'server'; id
           description="No policy rule makes any role visible for this combination."
         />
       ) : (
-        <Table<EffectiveAccessItem>
+        <ResponsiveTable<EffectiveAccessItem>
           size="small"
           pagination={false}
           rowKey={(r) => `${r.agent_id}|${r.server_id}|${r.role_id}`}

@@ -1,6 +1,6 @@
 import { PlusOutlined } from '@ant-design/icons';
 import { useQueryClient } from '@tanstack/react-query';
-import { Button, Card, Form, Input, Table } from 'antd';
+import { Button, Card, Form, Input } from 'antd';
 import { useState } from 'react';
 
 import { api } from '../../api/client';
@@ -13,6 +13,7 @@ import { UntrustedText } from '../../ds/UntrustedText';
 import { formatDateTime } from '../../lib/format';
 import { StateBadge } from '../../shared/StateBadge';
 import { FormModal } from '../servers/FormModal';
+import { ResponsiveTable } from '../../ds/DataTable';
 
 function RevokeKey({ agentId, keyItem }: { agentId: string; keyItem: AgentKey }) {
   const queryClient = useQueryClient();
@@ -88,7 +89,7 @@ export function AgentKeys({
       {keys.length === 0 ? (
         <EmptyState title="No keys" description="The agent cannot connect until a public key is added." />
       ) : (
-        <Table<AgentKey>
+        <ResponsiveTable<AgentKey>
           size="small"
           pagination={false}
           rowKey="id"

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Card, Space, Table } from 'antd';
+import { Card, Space } from 'antd';
 
 import { gatewayHostKeysQueryOptions, systemStatusQueryOptions } from '../../api/queries';
 import { CopyField } from '../../ds/CopyField';
@@ -12,6 +12,7 @@ import { formatDateTime } from '../../lib/format';
 import { usePermissions } from '../../lib/usePermissions';
 import { SshBansCard } from './SshBans';
 import { SystemControls } from './SystemControls';
+import { ResponsiveTable } from '../../ds/DataTable';
 
 /** Settings → System: health, version, lockdown controls and gateway host keys (PLAN §14.3, §18.17). */
 export function SystemPage() {
@@ -102,7 +103,7 @@ export function SystemPage() {
           ) : keys.isError ? (
             <ErrorState error={keys.error} onRetry={() => void keys.refetch()} />
           ) : (
-            <Table
+            <ResponsiveTable
               size="small"
               pagination={false}
               rowKey="id"
@@ -117,7 +118,7 @@ export function SystemPage() {
                   key: 'key',
                   title: 'Public key',
                   render: (_v, k) => (
-                    <div style={{ minWidth: 280 }}>
+                    <div style={{ minWidth: 'min(280px, 100%)' }}>
                       <CopyField label={`${k.algorithm} public key`} value={k.public_key} hideLabel />
                     </div>
                   ),

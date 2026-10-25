@@ -1,7 +1,7 @@
-import { LogoutOutlined, UserOutlined } from '@ant-design/icons';
+import { LogoutOutlined, MenuOutlined, UserOutlined } from '@ant-design/icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
-import { App, Button, Dropdown, Layout, Menu, type MenuProps } from 'antd';
+import { App, Button, Drawer, Dropdown, Layout, Menu, type MenuProps } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../api/client';
@@ -11,6 +11,7 @@ import { ConnectionBanner } from '../ds/ConnectionBanner';
 import { Logo } from '../ds/Logo';
 import { watchScrollableRegions } from '../ds/scrollableRegions';
 import { LockdownBanner } from '../features/dashboard/LockdownControls';
+import { COMPACT_SHELL_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import { SseManager } from '../sse/manager';
 import { activeNavPath, visibleNavSections } from './nav';
 import { ThemeToggle } from './ThemeToggle';
@@ -64,6 +65,10 @@ export function AppShell({ me }: { me: Me }) {
     [me.permissions],
   );
   const selected = activeNavPath(pathname);
+  // Phones and small tablets: the navigation is a drawer opened from the header instead of a sidebar that squeezes
+  // the page.
+  const compact = useMediaQuery(COMPACT_SHELL_QUERY);
+  const [navOpen, setNavOpen] = useState(false);
 
   const { modal } = App.useApp();
   const signOut = async () => {
@@ -94,35 +99,73 @@ export function AppShell({ me }: { me: Me }) {
     }
   };
 
+  const brand = (
+    <>
+      <Logo size={22} />
+      HallPass
+    </>
+  );
+  const navigation = (
+    <nav aria-label="Main">
+      <Menu
+        mode="inline"
+        items={items}
+        selectedKeys={selected ? [selected] : []}
+        style={{ borderInlineEnd: 0, padding: '8px 4px' }}
+        onClick={() => {
+          setNavOpen(false);
+        }}
+      />
+    </nav>
+  );
+
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <a className="hp-skip-link" href="#main">
         Skip to content
       </a>
-      <Sider
-        width={224}
-        breakpoint="lg"
-        collapsedWidth={0}
-        theme="light"
-        style={{ borderRight: '1px solid var(--hp-color-border-secondary)' }}
-      >
-        <div className="hp-shell-brand">
-          <Logo size={22} />
-          HallPass
-        </div>
-        <nav aria-label="Main">
-          <Menu
-            mode="inline"
-            items={items}
-            selectedKeys={selected ? [selected] : []}
-            style={{ borderInlineEnd: 0, padding: '8px 4px' }}
-          />
-        </nav>
-      </Sider>
-      <Layout>
+      {compact ? (
+        <Drawer
+          placement="left"
+          open={navOpen}
+          size={280}
+          className="hp-shell-drawer"
+          title={<span className="hp-shell-header__start">{brand}</span>}
+          onClose={() => {
+            setNavOpen(false);
+          }}
+        >
+          {navigation}
+        </Drawer>
+      ) : (
+        <Sider
+          width={224}
+          theme="light"
+          style={{ borderRight: '1px solid var(--hp-color-border-secondary)' }}
+        >
+          <div className="hp-shell-brand">{brand}</div>
+          {navigation}
+        </Sider>
+      )}
+      <Layout style={{ minWidth: 0 }}>
         <Header className="hp-shell-header">
-          <span />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="hp-shell-header__start">
+            {compact ? (
+              <>
+                <Button
+                  type="text"
+                  icon={<MenuOutlined />}
+                  aria-label="Open navigation"
+                  aria-expanded={navOpen}
+                  onClick={() => {
+                    setNavOpen(true);
+                  }}
+                />
+                {brand}
+              </>
+            ) : null}
+          </div>
+          <div className="hp-shell-header__end">
             <ThemeToggle />
             <Dropdown
               trigger={['click']}
@@ -141,8 +184,8 @@ export function AppShell({ me }: { me: Me }) {
                 ],
               }}
             >
-              <Button type="text" icon={<UserOutlined />}>
-                {me.operator.display_name}
+              <Button type="text" icon={<UserOutlined />} aria-label={`Account: ${me.operator.display_name}`}>
+                {compact ? null : me.operator.display_name}
               </Button>
             </Dropdown>
           </div>

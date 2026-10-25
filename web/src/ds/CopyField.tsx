@@ -27,7 +27,13 @@ export function CopyField({ label, value, monospace = true, hideLabel = false }:
         {label}
       </label>
       <Space.Compact style={{ width: '100%' }}>
-        <Input id={id} readOnly value={value} className={monospace ? 'hp-mono' : undefined} />
+        <Input
+          id={id}
+          readOnly
+          value={value}
+          className={monospace ? 'hp-mono' : undefined}
+          style={{ minWidth: 0 }}
+        />
         <Tooltip title={`Copy ${label.toLowerCase()}`}>
           <Button
             icon={<CopyOutlined />}
