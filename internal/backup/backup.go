@@ -97,6 +97,8 @@ type File struct {
 	// Problem records a mismatch between the segment file and the snapshot found while creating the backup. The file
 	// is kept so that the restored system reports the same problem.
 	Problem string `json:"problem,omitempty"`
+	// Object is the object key (below the target prefix) holding this file in a remote backup; empty locally.
+	Object string `json:"object,omitempty"`
 }
 
 // SegmentSummary counts segments by how the backup treated them.
@@ -239,9 +241,9 @@ func Create(ctx context.Context, src Snapshotter, dest string, opts Options) (*R
 
 // segmentRow is the part of a recording_segments row a backup needs.
 type segmentRow struct {
-	id, sessionID, channelID, path, state string
-	header, ciphertext                    []byte
-	bytes                                 sql.NullInt64
+	id, sessionID, channelID, path, state, keyID string
+	header, ciphertext                           []byte
+	bytes                                        sql.NullInt64
 }
 
 type snapshotInfo struct {
@@ -308,7 +310,7 @@ func chainHead(ctx context.Context, d *sql.DB) (Anchor, error) {
 }
 
 func segmentRows(ctx context.Context, d *sql.DB) ([]segmentRow, error) {
-	rows, err := d.QueryContext(ctx, `SELECT id, access_session_id, channel_id, path, state, header_sha256, ciphertext_sha256, bytes
+	rows, err := d.QueryContext(ctx, `SELECT id, access_session_id, channel_id, path, state, key_id, header_sha256, ciphertext_sha256, bytes
 		FROM recording_segments ORDER BY opened_at, id`)
 	if err != nil {
 		return nil, fmt.Errorf("read segments: %w", err)
@@ -317,7 +319,7 @@ func segmentRows(ctx context.Context, d *sql.DB) ([]segmentRow, error) {
 	var out []segmentRow
 	for rows.Next() {
 		var s segmentRow
-		if err := rows.Scan(&s.id, &s.sessionID, &s.channelID, &s.path, &s.state, &s.header, &s.ciphertext, &s.bytes); err != nil {
+		if err := rows.Scan(&s.id, &s.sessionID, &s.channelID, &s.path, &s.state, &s.keyID, &s.header, &s.ciphertext, &s.bytes); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
@@ -330,30 +332,15 @@ func segmentRows(ctx context.Context, d *sql.DB) ([]segmentRow, error) {
 // Only the segment's canonical location (derived from its IDs) is read; a row whose stored path does not name that
 // location is refused, because restore and verify would refuse it too (SR-16).
 func copySegment(seg segmentRow, recDir, tmp string) (*File, string, error) {
-	final, err := layout.Path(recDir, seg.sessionID, seg.id)
-	if err != nil {
-		return nil, "", fmt.Errorf("segment %s: %w", seg.id, err)
-	}
-	if !layout.Matches(seg.path, seg.sessionID, seg.id) {
-		return nil, "", fmt.Errorf("segment %s: stored path %s is not its location under a recordings directory (%s)", seg.id, seg.path, final)
-	}
-	var candidates []string
-	switch seg.state {
-	case "finalized", "interrupted":
-		candidates = []string{final}
-	case "open":
-		// Prefer the partial file; if the segment was finalized after the snapshot, its final file is copied and
-		// reconciliation after restore finalizes the row.
-		candidates = []string{final + hprec.PartialSuffix, final}
-	default: // deleted, failed, missing
-		return nil, "", nil
+	candidates, err := segmentCandidates(seg, recDir)
+	if err != nil || candidates == nil {
+		return nil, "", err
 	}
 	for _, src := range candidates {
-		rel, err := filepath.Rel(recDir, src)
-		if err != nil || !filepath.IsLocal(rel) {
-			return nil, "", fmt.Errorf("segment %s: path %s is outside the recordings directory %s", seg.id, src, recDir)
+		relSlash, err := segmentRelPath(seg, recDir, src)
+		if err != nil {
+			return nil, "", err
 		}
-		relSlash := path.Join(store.RecordingsDir, filepath.ToSlash(rel))
 		var h *segHasher
 		var extra io.Writer // stays a nil interface for open segments
 		if seg.state != "open" {
@@ -375,6 +362,38 @@ func copySegment(seg segmentRow, recDir, tmp string) (*File, string, error) {
 		return f, "", nil
 	}
 	return nil, fmt.Sprintf("segment %s (%s): file %s missing at backup time", seg.id, seg.state, seg.path), nil
+}
+
+// segmentCandidates lists the files that may hold seg, preferred first, or nil for a segment without a file by design.
+// Only the segment's canonical location (derived from its IDs) is used; a row whose stored path does not name that
+// location is refused, because restore and verify would refuse it too (SR-16).
+func segmentCandidates(seg segmentRow, recDir string) ([]string, error) {
+	final, err := layout.Path(recDir, seg.sessionID, seg.id)
+	if err != nil {
+		return nil, fmt.Errorf("segment %s: %w", seg.id, err)
+	}
+	if !layout.Matches(seg.path, seg.sessionID, seg.id) {
+		return nil, fmt.Errorf("segment %s: stored path %s is not its location under a recordings directory (%s)", seg.id, seg.path, final)
+	}
+	switch seg.state {
+	case "finalized", "interrupted":
+		return []string{final}, nil
+	case "open":
+		// Prefer the partial file; if the segment was finalized after the snapshot, its final file is copied and
+		// reconciliation after restore finalizes the row.
+		return []string{final + hprec.PartialSuffix, final}, nil
+	default: // deleted, failed, missing
+		return nil, nil
+	}
+}
+
+// segmentRelPath returns the slash-separated backup path of the segment file src ("recordings/…").
+func segmentRelPath(seg segmentRow, recDir, src string) (string, error) {
+	rel, err := filepath.Rel(recDir, src)
+	if err != nil || !filepath.IsLocal(rel) {
+		return "", fmt.Errorf("segment %s: path %s is outside the recordings directory %s", seg.id, src, recDir)
+	}
+	return path.Join(store.RecordingsDir, filepath.ToSlash(rel)), nil
 }
 
 func writeManifest(dir string, m *Manifest) error {

@@ -415,6 +415,9 @@ func (kr *Keyring) ActiveVersion(p Purpose) uint32 {
 // KEKID returns the identifier of the KEK wrapping this keyring.
 func (kr *Keyring) KEKID() string { return kr.wrapper.ID() }
 
+// Wrapper returns the KEK wrapper, for objects that must open without the database (remote backups, ADR-0054).
+func (kr *Keyring) Wrapper() KeyWrapper { return kr.wrapper }
+
 // PurposeStatus describes the keys of one purpose.
 type PurposeStatus struct {
 	Purpose       Purpose  `json:"purpose"`
