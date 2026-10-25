@@ -73,6 +73,23 @@ AuthorizedPrincipalsFile /etc/ssh/principals/%u
 Put the principal shown on the role page in `/etc/ssh/principals/<account>`. Certificates are valid for about two
 minutes. They also make destination-side audit correlation exact; see [destination-side audit](/destinations/audit).
 
+## Web terminal
+
+Administrators can open a shell on a server straight from the console: **Servers → a server → Roles → Terminal**, on any
+enabled role with the `shell` and `pty` capabilities. HallPass logs in with the role's credential, exactly as for an
+agent, so the remote user is the role's.
+
+- It needs a recent sign-in with two-factor authentication, and opens immediately: no request or approver.
+- It is **recorded** like an agent's session (replay it under **Sessions**), audited under your name, and named in the
+  session as *web terminal*.
+- It lasts the role's default duration (at most its maximum), and ends when you close the window, when it expires, on
+  lockdown, when the server or role is disabled, and within seconds when you are disabled or lose the administrator
+  role.
+- Agent policy rules do not apply to it; an administrator can already change those rules.
+
+To turn web terminals off, set `console.terminal: false` in the configuration and restart: nobody, not even an
+administrator, can open one then.
+
 ## Disabling and deleting
 
 **Disable** (on the server page, or on a role's page) when access should stop for now. Agents no longer see the

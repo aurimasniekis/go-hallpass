@@ -998,6 +998,38 @@
   older backup look like the newest (rollback); they cannot read or forge one without the KEK. Losing the KEK still
   loses every backup. The database snapshot must stay under 5 GiB (single-request upload).
 
+### ADR-0055 — Web terminals for administrators (security-relevant change)
+
+- **Status:** accepted (operator request, 2026-10-25). **Security-relevant change, flagged for operator review:**
+  administrators open shells without a request or approver.
+- **Context:** operators asked to reach a server from the console instead of an SSH client of their own. The operator
+  chose direct access for administrators (no approval), on by default with a configuration switch, and the audit log as
+  the only record besides the recording (no chat notification).
+- **Decision:**
+  - `POST /api/v1/terminals` (permission `terminal.open`: administrators, only while `console.terminal` is true;
+    recent authentication and MFA; no API tokens) creates an ordinary request → decision → grant → access session in
+    one transaction: the operator's own approval in the web channel, `terminal.opened` audited. The role must be
+    enabled with `shell` and `pty`; the duration is a preset up to the role maximum and the global ceiling; lockdown
+    and disabled servers or roles refuse it.
+  - The grant's agent is a built-in agent (`agt_00000000000000000000000000`) created disabled and already deleted with
+    its only key revoked, so it never authenticates over SSH and appears in no list or policy. `operator_id` on the
+    request, the grant and the connection names the administrator. Agent policy rules do not apply
+    (`Snapshot.EvaluateConsole`); policy reconciliation leaves these grants alone.
+  - The browser connects to `GET /api/v1/terminals/{id}/stream` (a WebSocket over the same origin and web session,
+    with a single-use ticket valid for one minute). The socket is adapted to an SSH channel and run through the same
+    data plane as agent sessions: mandatory recording before forwarding, destination host-key pinning, the role's
+    login credential, enforcer termination on expiry or revocation, idle timeout. Closing the socket revokes the
+    grant (`terminal_closed`).
+  - Every channel open re-reads the operator; a sweep every 2 s revokes terminals of operators who were disabled or
+    lost the administrator role (`operator_ineligible`). At most 8 live terminals per operator.
+  - The terminal renders destination output with the replay hardening (no links, OSC 52/8/0–2 swallowed).
+- **Alternatives:** web terminals through the normal request and approval flow (the operator preferred direct
+  access); a separate session model for operators (duplicates recording, replay and enforcement); a per-operator hidden
+  agent (more rows to hide everywhere).
+- **Consequences:** an administrator session (or a stolen one that passes step-up) can open a shell on any enabled
+  server role without a second person. It is recorded and audited, and `console.terminal: false` removes the
+  capability. Approvers are not notified (THREAT_MODEL T-25).
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

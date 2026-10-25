@@ -21,6 +21,10 @@ agent JSON schemas, the recording format and the database schema).
 
 ### Security
 
+- **Web terminals.** Administrators can open a recorded shell on a server role from the console (**Servers → Roles →
+  Terminal**) without a request or approver, after a recent sign-in with two-factor authentication. It runs through
+  the same recording and enforcement as agent sessions and ends on close, expiry, lockdown or a disabled target, or
+  when the administrator loses the role. On by default; `console.terminal: false` turns it off.
 - **API tokens that never expire.** Administrators can issue a token without expiry (**Never expires**,
   `never_expires: true`) for Terraform and break-glass automation. It still stops when revoked or when its operator is
   disabled or loses the role. This relaxes the mandatory 1–366 day expiry.

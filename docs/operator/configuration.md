@@ -75,6 +75,7 @@ Example: [`deploy/examples/hallpass.example.yaml`](../../deploy/examples/hallpas
 | `telemetry.otlp_endpoint` | — | Optional OTLP/HTTP endpoint for traces. Metrics are exported only through Prometheus `/metrics`. |
 | `telemetry.prometheus` | `true` | Expose Prometheus `/metrics`. |
 | `shutdown.drain_timeout` | `30s` | Graceful drain before channels are closed. |
+| `console.terminal` | `true` | Administrators may open recorded web terminals on server roles from the console. `false` turns them off for everyone. |
 | `rbac.auditor_address_read` | `false` | Auditors may read destination addresses. |
 | `rbac.approver_recording_play` | `false` | Approvers may replay recordings. |
 | `rbac.auditor_recording_export` | `false` | Auditors may export recordings. |
