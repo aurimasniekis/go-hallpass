@@ -1792,6 +1792,86 @@ paths:
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/SystemStatus"}}}}
         default: {$ref: "#/components/responses/Problem"}
+  /api/v1/system/backups:
+    get:
+      operationId: getBackupStatus
+      tags: [system]
+      x-permission: system.read
+      x-token: true
+      summary: Remote (object storage) backup status - whether a target is configured, the last runs and the next run.
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/BackupStatus"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/system/backups/target:
+    get:
+      operationId: getBackupTarget
+      tags: [system]
+      x-permission: system.read
+      x-token: true
+      summary: The object storage target. 404 when none is configured. The secret access key is never returned.
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/BackupTarget"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    put:
+      operationId: putBackupTarget
+      tags: [system]
+      x-permission: system.settings
+      x-token: true
+      x-reauth: true
+      x-mfa: true
+      summary: >-
+        Create the target, or change it with If-Match (or version in the body). Omitted fields keep their value; the secret
+        access key is required on create and kept when omitted. Changing the endpoint, bucket, prefix or addressing
+        starts over in the new location; objects already stored elsewhere are left alone.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/BackupTargetInput"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/BackupTarget"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: deleteBackupTarget
+      tags: [system]
+      x-permission: system.settings
+      x-token: true
+      x-reauth: true
+      x-mfa: true
+      summary: Stop remote backups. Objects already in the bucket are left there.
+      responses:
+        "204": {description: deleted}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/system/backups/target/test:
+    post:
+      operationId: testBackupTarget
+      tags: [system]
+      x-permission: system.settings
+      x-token: true
+      summary: Lists the bucket below the prefix and writes and deletes a probe object.
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/BackupTestResult"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/system/backups/runs:
+    get:
+      operationId: listBackupRuns
+      tags: [system]
+      x-permission: system.read
+      x-token: true
+      parameters:
+        - {$ref: "#/components/parameters/Limit"}
+        - {$ref: "#/components/parameters/Cursor"}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/BackupRunPage"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      operationId: startBackupRun
+      tags: [system]
+      x-permission: system.settings
+      x-token: true
+      x-idempotency-key: true
+      summary: Start a backup now. It runs in the background; 409 while another backup is running.
+      responses:
+        "202": {description: started, content: {application/json: {schema: {$ref: "#/components/schemas/BackupRun"}}}}
+        default: {$ref: "#/components/responses/Problem"}
   /api/v1/system/breakglass-ack:
     post:
       operationId: acknowledgeBreakGlass
@@ -1978,6 +2058,82 @@ components:
             expires_at: {$ref: "#/components/schemas/Timestamp"}
             limited: {type: boolean}
             needs_enroll: {type: boolean}
+    BackupTarget:
+      type: object
+      required: [enabled, endpoint, region, bucket, prefix, path_style, access_key_id, allow_private_network, interval, keep_last, keep_daily_days, version, created_at, updated_at]
+      properties:
+        enabled: {type: boolean}
+        endpoint: {type: string, description: "Service origin, e.g. https://s3.eu-central-1.amazonaws.com or https://<account>.r2.cloudflarestorage.com."}
+        region: {type: string, description: "e.g. eu-central-1; auto for Cloudflare R2."}
+        bucket: {type: string}
+        prefix: {type: string, description: Key prefix, empty or ending with a slash.}
+        path_style: {type: boolean, description: Address the bucket as endpoint/bucket (MinIO and some providers).}
+        access_key_id: {type: string}
+        ca_bundle_pem: {type: string}
+        allow_private_network: {type: boolean}
+        interval: {type: string, description: "Time between backups, 15m to 168h."}
+        keep_last: {type: integer, description: Newest successful backups kept.}
+        keep_daily_days: {type: integer, description: Also keep the newest backup of each of this many past days.}
+        version: {type: integer}
+        created_at: {$ref: "#/components/schemas/Timestamp"}
+        updated_at: {$ref: "#/components/schemas/Timestamp"}
+    BackupTargetInput:
+      type: object
+      additionalProperties: false
+      properties:
+        enabled: {type: boolean}
+        endpoint: {type: string, maxLength: 512}
+        region: {type: string, maxLength: 32}
+        bucket: {type: string, maxLength: 63}
+        prefix: {type: string, maxLength: 256}
+        path_style: {type: boolean}
+        access_key_id: {type: string, maxLength: 128}
+        secret_access_key: {type: string, maxLength: 256, description: Write-only. Required on create; kept when omitted.}
+        ca_bundle_pem: {type: string, maxLength: 65536}
+        allow_private_network: {type: boolean}
+        interval: {type: string}
+        keep_last: {type: integer, minimum: 1, maximum: 1000}
+        keep_daily_days: {type: integer, minimum: 0, maximum: 3650}
+        version: {type: integer, description: Current version when changing an existing target (or If-Match).}
+    BackupRun:
+      type: object
+      required: [id, trigger, state, started_at, stored]
+      properties:
+        id: {type: string}
+        trigger: {type: string, enum: [schedule, manual]}
+        requested_by: {type: string, description: The operator who started a manual backup.}
+        state: {type: string, enum: [running, succeeded, failed, interrupted]}
+        started_at: {$ref: "#/components/schemas/Timestamp"}
+        finished_at: {$ref: "#/components/schemas/Timestamp"}
+        db_bytes: {type: integer}
+        segments: {type: integer, description: Recording segments the backup references.}
+        segments_uploaded: {type: integer, description: Segments uploaded by this run (the rest were stored before).}
+        uploaded_bytes: {type: integer}
+        error: {type: string}
+        stored: {type: boolean, description: The backup is still in the bucket (not yet removed by retention).}
+    BackupRunPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/BackupRun"}}
+        next_cursor: {type: [string, "null"]}
+    BackupStatus:
+      type: object
+      required: [configured, enabled, running]
+      properties:
+        configured: {type: boolean}
+        enabled: {type: boolean}
+        running: {type: boolean}
+        last_run: {$ref: "#/components/schemas/BackupRun"}
+        last_success: {$ref: "#/components/schemas/BackupRun"}
+        next_run_at: {$ref: "#/components/schemas/Timestamp"}
+    BackupTestResult:
+      type: object
+      required: [ok, backups]
+      properties:
+        ok: {type: boolean}
+        backups: {type: integer, description: Backups found below the prefix.}
+        error: {type: string}
     APIToken:
       type: object
       required: [id, name, operator_id, role, hint, created_at, never_expires]

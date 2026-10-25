@@ -152,6 +152,13 @@ var Operations = []Operation{
 	{ID: "listSSHBans", Method: "GET", Path: "/api/v1/ssh-bans", Permission: "system.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"system"}},
 	{ID: "liftSSHBan", Method: "DELETE", Path: "/api/v1/ssh-bans/{id}", Permission: "system.settings", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"system"}},
 	{ID: "getStatsOverview", Method: "GET", Path: "/api/v1/stats/overview", Permission: "dashboard.view", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"system"}},
+	{ID: "getBackupStatus", Method: "GET", Path: "/api/v1/system/backups", Permission: "system.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"system"}},
+	{ID: "listBackupRuns", Method: "GET", Path: "/api/v1/system/backups/runs", Permission: "system.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"system"}},
+	{ID: "startBackupRun", Method: "POST", Path: "/api/v1/system/backups/runs", Permission: "system.settings", Reauth: false, MFA: false, Idempotent: true, Stream: false, Redirect: false, Token: true, Tags: []string{"system"}},
+	{ID: "getBackupTarget", Method: "GET", Path: "/api/v1/system/backups/target", Permission: "system.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"system"}},
+	{ID: "putBackupTarget", Method: "PUT", Path: "/api/v1/system/backups/target", Permission: "system.settings", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"system"}},
+	{ID: "deleteBackupTarget", Method: "DELETE", Path: "/api/v1/system/backups/target", Permission: "system.settings", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"system"}},
+	{ID: "testBackupTarget", Method: "POST", Path: "/api/v1/system/backups/target/test", Permission: "system.settings", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"system"}},
 	{ID: "acknowledgeBreakGlass", Method: "POST", Path: "/api/v1/system/breakglass-ack", Permission: "system.settings", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"system"}},
 	{ID: "listGatewayHostKeys", Method: "GET", Path: "/api/v1/system/gateway-host-keys", Permission: "dashboard.view", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"system"}},
 	{ID: "enableLockdown", Method: "POST", Path: "/api/v1/system/lockdown", Permission: "system.lockdown.enable", Reauth: true, MFA: false, Idempotent: true, Stream: false, Redirect: false, Token: false, Tags: []string{"system"}},
@@ -461,6 +468,20 @@ type Server interface {
 	LiftSSHBan(c *Call) (*Result, error)
 	// GetStatsOverview GET /api/v1/stats/overview (permission dashboard.view)
 	GetStatsOverview(c *Call) (*Result, error)
+	// GetBackupStatus GET /api/v1/system/backups (permission system.read)
+	GetBackupStatus(c *Call) (*Result, error)
+	// ListBackupRuns GET /api/v1/system/backups/runs (permission system.read)
+	ListBackupRuns(c *Call) (*Result, error)
+	// StartBackupRun POST /api/v1/system/backups/runs (permission system.settings)
+	StartBackupRun(c *Call) (*Result, error)
+	// GetBackupTarget GET /api/v1/system/backups/target (permission system.read)
+	GetBackupTarget(c *Call) (*Result, error)
+	// PutBackupTarget PUT /api/v1/system/backups/target (permission system.settings)
+	PutBackupTarget(c *Call) (*Result, error)
+	// DeleteBackupTarget DELETE /api/v1/system/backups/target (permission system.settings)
+	DeleteBackupTarget(c *Call) (*Result, error)
+	// TestBackupTarget POST /api/v1/system/backups/target/test (permission system.settings)
+	TestBackupTarget(c *Call) (*Result, error)
 	// AcknowledgeBreakGlass POST /api/v1/system/breakglass-ack (permission system.settings)
 	AcknowledgeBreakGlass(c *Call) (*Result, error)
 	// ListGatewayHostKeys GET /api/v1/system/gateway-host-keys (permission dashboard.view)
@@ -632,6 +653,13 @@ func Handlers(s Server) map[string]Handler {
 		"listSSHBans":                   s.ListSSHBans,
 		"liftSSHBan":                    s.LiftSSHBan,
 		"getStatsOverview":              s.GetStatsOverview,
+		"getBackupStatus":               s.GetBackupStatus,
+		"listBackupRuns":                s.ListBackupRuns,
+		"startBackupRun":                s.StartBackupRun,
+		"getBackupTarget":               s.GetBackupTarget,
+		"putBackupTarget":               s.PutBackupTarget,
+		"deleteBackupTarget":            s.DeleteBackupTarget,
+		"testBackupTarget":              s.TestBackupTarget,
 		"acknowledgeBreakGlass":         s.AcknowledgeBreakGlass,
 		"listGatewayHostKeys":           s.ListGatewayHostKeys,
 		"enableLockdown":                s.EnableLockdown,

@@ -99,7 +99,7 @@ type TargetInput struct {
 	KeepLast            *int64  `json:"keep_last"`
 	KeepDailyDays       *int64  `json:"keep_daily_days"`
 	// Version is the current version for an update (If-Match); 0 creates.
-	Version int64 `json:"-"`
+	Version int64 `json:"version"`
 }
 
 // Run is one backup run.

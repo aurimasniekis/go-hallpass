@@ -1828,6 +1828,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/system/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Remote (object storage) backup status - whether a target is configured, the last runs and the next run. */
+        get: operations["getBackupStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/backups/target": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The object storage target. 404 when none is configured. The secret access key is never returned. */
+        get: operations["getBackupTarget"];
+        /** Create the target, or change it with If-Match (or version in the body). Omitted fields keep their value; the secret access key is required on create and kept when omitted. Changing the endpoint, bucket, prefix or addressing starts over in the new location; objects already stored elsewhere are left alone. */
+        put: operations["putBackupTarget"];
+        post?: never;
+        /** Stop remote backups. Objects already in the bucket are left there. */
+        delete: operations["deleteBackupTarget"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/backups/target/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Lists the bucket below the prefix and writes and deletes a probe object. */
+        post: operations["testBackupTarget"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/backups/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listBackupRuns"];
+        put?: never;
+        /** Start a backup now. It runs in the background; 409 while another backup is running. */
+        post: operations["startBackupRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/system/breakglass-ack": {
         parameters: {
             query?: never;
@@ -2038,6 +2108,86 @@ export interface components {
                 limited: boolean;
                 needs_enroll: boolean;
             };
+        };
+        BackupTarget: {
+            enabled: boolean;
+            /** @description Service origin, e.g. https://s3.eu-central-1.amazonaws.com or https://<account>.r2.cloudflarestorage.com. */
+            endpoint: string;
+            /** @description e.g. eu-central-1; auto for Cloudflare R2. */
+            region: string;
+            bucket: string;
+            /** @description Key prefix */
+            prefix: string;
+            /** @description Address the bucket as endpoint/bucket (MinIO and some providers). */
+            path_style: boolean;
+            access_key_id: string;
+            ca_bundle_pem?: string;
+            allow_private_network: boolean;
+            /** @description Time between backups, 15m to 168h. */
+            interval: string;
+            /** @description Newest successful backups kept. */
+            keep_last: number;
+            /** @description Also keep the newest backup of each of this many past days. */
+            keep_daily_days: number;
+            version: number;
+            created_at: components["schemas"]["Timestamp"];
+            updated_at: components["schemas"]["Timestamp"];
+        };
+        BackupTargetInput: {
+            enabled?: boolean;
+            endpoint?: string;
+            region?: string;
+            bucket?: string;
+            prefix?: string;
+            path_style?: boolean;
+            access_key_id?: string;
+            /** @description Write-only. Required on create; kept when omitted. */
+            secret_access_key?: string;
+            ca_bundle_pem?: string;
+            allow_private_network?: boolean;
+            interval?: string;
+            keep_last?: number;
+            keep_daily_days?: number;
+            /** @description Current version when changing an existing target (or If-Match). */
+            version?: number;
+        };
+        BackupRun: {
+            id: string;
+            /** @enum {string} */
+            trigger: "schedule" | "manual";
+            /** @description The operator who started a manual backup. */
+            requested_by?: string;
+            /** @enum {string} */
+            state: "running" | "succeeded" | "failed" | "interrupted";
+            started_at: components["schemas"]["Timestamp"];
+            finished_at?: components["schemas"]["Timestamp"];
+            db_bytes?: number;
+            /** @description Recording segments the backup references. */
+            segments?: number;
+            /** @description Segments uploaded by this run (the rest were stored before). */
+            segments_uploaded?: number;
+            uploaded_bytes?: number;
+            error?: string;
+            /** @description The backup is still in the bucket (not yet removed by retention). */
+            stored: boolean;
+        };
+        BackupRunPage: {
+            items: components["schemas"]["BackupRun"][];
+            next_cursor: string | null;
+        };
+        BackupStatus: {
+            configured: boolean;
+            enabled: boolean;
+            running: boolean;
+            last_run?: components["schemas"]["BackupRun"];
+            last_success?: components["schemas"]["BackupRun"];
+            next_run_at?: components["schemas"]["Timestamp"];
+        };
+        BackupTestResult: {
+            ok: boolean;
+            /** @description Backups found below the prefix. */
+            backups: number;
+            error?: string;
         };
         APIToken: {
             id: string;
@@ -6569,6 +6719,158 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SystemStatus"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getBackupStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupStatus"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getBackupTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupTarget"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    putBackupTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackupTargetInput"];
+            };
+        };
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupTarget"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteBackupTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    testBackupTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupTestResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listBackupRuns: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupRunPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    startBackupRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description started */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupRun"];
                 };
             };
             default: components["responses"]["Problem"];

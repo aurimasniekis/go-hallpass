@@ -301,7 +301,7 @@ func TestAdminRecoverNeedsKEK(t *testing.T) {
 // The WP23 command constructors dispatch to their subcommands (registered in rootCommands separately).
 func TestOpsCommandTree(t *testing.T) {
 	cmds := []*command{backupCommands(), restoreCommand(), anchorsCommands(), adminCommands()}
-	want := map[string][]string{"backup": {"create", "verify"}, "restore": nil, "anchors": {"export", "verify"}, "admin": {"bootstrap", "recover"}}
+	want := map[string][]string{"backup": {"create", "verify", "remote-list", "remote-download"}, "restore": nil, "anchors": {"export", "verify"}, "admin": {"bootstrap", "recover"}}
 	for _, c := range cmds {
 		subs, ok := want[c.name]
 		if !ok || c.summary == "" {

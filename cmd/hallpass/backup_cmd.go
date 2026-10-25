@@ -23,6 +23,8 @@ func backupCommands() *command {
 		sub: []*command{
 			{name: "create", summary: "write a backup (database snapshot, recording segments, manifest) to a new directory", run: runBackupCreate},
 			{name: "verify", summary: "check a backup directory (hashes, database integrity, segments) without restoring it", run: runBackupVerify},
+			{name: "remote-list", summary: "list the backups the server stored in object storage", run: runBackupRemoteList},
+			{name: "remote-download", summary: "download a remote backup into a backup directory for verify and restore (needs the KEK)", run: runBackupRemoteDownload},
 		},
 	}
 }

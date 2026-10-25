@@ -35,6 +35,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/policy"
 	"github.com/aurimasniekis/go-hallpass/internal/rbac"
 	"github.com/aurimasniekis/go-hallpass/internal/recording"
+	"github.com/aurimasniekis/go-hallpass/internal/remotebackup"
 	"github.com/aurimasniekis/go-hallpass/internal/sshban"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 )
@@ -57,10 +58,12 @@ type Deps struct {
 	Notify      *notify.Service
 	Destaudit   *destaudit.Service
 	Bans        *sshban.Service
-	Matrix      *rbac.Matrix
-	Metrics     *metrics.Metrics
-	BootID      string
-	Version     string
+	// RemoteBackup manages backups to object storage.
+	RemoteBackup *remotebackup.Service
+	Matrix       *rbac.Matrix
+	Metrics      *metrics.Metrics
+	BootID       string
+	Version      string
 }
 
 // Options configure the HTTP layer.
