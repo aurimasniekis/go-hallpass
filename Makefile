@@ -99,6 +99,11 @@ test-openssh:
 test-oidc-interop:
 	go test -tags oidcinterop -count=1 -timeout 20m -v ./test/oidcinterop/
 
+.PHONY: test-s3-interop
+# The object storage client against a real S3-compatible server (SeaweedFS container; requires Docker; nightly CI).
+test-s3-interop:
+	./scripts/s3-interop.sh
+
 .PHONY: test-netfs
 # Verify network/FUSE filesystem refusal on Linux (Docker bind mounts are FUSE on Docker Desktop).
 test-netfs:
