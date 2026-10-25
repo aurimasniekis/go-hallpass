@@ -5,6 +5,8 @@ All notable changes to HallPass are documented in this file. The format follows
 [docs/VERSIONING.md](docs/VERSIONING.md) (Semantic Versioning for the binary, with separate versioning for the REST API,
 agent JSON schemas, the recording format and the database schema).
 
+## [Unreleased]
+
 ## [0.1.0] - 2026-10-25
 
 First release. HallPass is a terminating SSH gateway for AI agents: agents use plain `ssh` with their own key,
