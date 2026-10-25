@@ -21,7 +21,7 @@ Under **Administration → Authentication**, add a provider:
 | Issuer | `https://…`, exactly as in the provider's discovery document. |
 | Client ID, client secret | The secret is optional (public clients with PKCE work). It is encrypted and write-only. |
 | Scopes | Default `openid profile email`. |
-| Groups claim | The claim that carries groups, for example `groups`. |
+| Groups claim | The claim that carries groups, for example `groups`. Use dots for a nested claim, for example `porch.groups`. |
 | Provisioning | `preprovisioned` (default; unknown identities are refused) or `jit` with at least one restriction (email domains, tenants, hosted domains or groups). |
 | Step-up fallback | `none` or `local_totp`, for providers that do not send `auth_time`. |
 

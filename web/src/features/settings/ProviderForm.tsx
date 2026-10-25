@@ -137,7 +137,7 @@ export function ProviderFormDrawer({
         <Form.Item
           label="Groups claim"
           name="groups_claim"
-          extra="Claim holding group values for role mappings."
+          extra="Claim holding group values for role mappings. Use dots for a nested claim, e.g. porch.groups."
         >
           <Input spellCheck={false} />
         </Form.Item>

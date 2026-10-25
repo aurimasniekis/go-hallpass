@@ -415,7 +415,7 @@ func (svc *Service) verifyIDToken(ctx context.Context, p *Provider, r *remote, r
 		c.Groups = nil
 		var all map[string]json.RawMessage
 		if err := t.Claims(&all); err == nil {
-			c.Groups = parseGroups(all[p.GroupsClaim])
+			c.Groups = parseGroups(claimAt(all, p.GroupsClaim))
 		}
 	}
 	if c.Subject == "" || len(c.Subject) > 255 {
@@ -423,6 +423,27 @@ func (svc *Service) verifyIDToken(ctx context.Context, p *Provider, r *remote, r
 	}
 	c.Email = strings.ToLower(strings.TrimSpace(c.Email))
 	return &c, nil
+}
+
+// claimAt returns the claim named path. A top-level claim with exactly that name wins, so names containing dots
+// (`https://example.com/groups`) keep working; otherwise a dotted path walks nested objects (`porch.groups`).
+func claimAt(all map[string]json.RawMessage, path string) json.RawMessage {
+	if raw, ok := all[path]; ok {
+		return raw
+	}
+	parts := strings.Split(path, ".")
+	if len(parts) < 2 {
+		return nil
+	}
+	cur := all
+	for _, part := range parts[:len(parts)-1] {
+		var next map[string]json.RawMessage
+		if json.Unmarshal(cur[part], &next) != nil {
+			return nil
+		}
+		cur = next
+	}
+	return cur[parts[len(parts)-1]]
 }
 
 // parseGroups accepts a string array or a single string; anything else yields no groups.

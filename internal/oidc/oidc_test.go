@@ -194,6 +194,65 @@ func TestJITAndGroupSync(t *testing.T) {
 	}
 }
 
+// HP-OIDC-011: groups_claim reads a nested claim by dotted path (Porch sends porch.groups), while a top-level claim
+// whose name contains dots still wins.
+func TestGroupsClaimPath(t *testing.T) {
+	f := newFx(t, func(in *ProviderInput) {
+		in.GroupsClaim = ptr("porch.groups")
+		in.Provisioning = ptr(JIT)
+		in.JIT = &JITRules{Groups: []string{"hallpass-users"}}
+	})
+	f.operator("root@corp.example", opauth.RoleAdministrator)
+	_, err := f.svc.AddMapping(f.ctx, admin, f.prov.ID, "hallpass-approvers", opauth.RoleApprover, "")
+	must(t, err)
+	f.idp.Set(func(i *oidctest.IdP) {
+		i.User.Claims["porch"] = map[string]any{"v": 1, "groups": []string{"hallpass-users", "hallpass-approvers"}}
+	})
+	res, err := f.flow(PurposeLogin, nil)
+	must(t, err)
+	if p := f.principal(res.SessionToken); !p.HasRole(opauth.RoleApprover) {
+		t.Fatalf("nested groups not mapped: %v", p.Operator.Roles)
+	}
+	f.idp.Set(func(i *oidctest.IdP) {
+		i.User.Claims["porch"] = map[string]any{"v": 1, "groups": []string{"hallpass-users"}}
+	})
+	res, err = f.flow(PurposeLogin, nil)
+	must(t, err)
+	if p := f.principal(res.SessionToken); p.HasRole(opauth.RoleApprover) {
+		t.Fatalf("role kept after the nested group was removed: %v", p.Operator.Roles)
+	}
+}
+
+func TestClaimAt(t *testing.T) {
+	all := map[string]json.RawMessage{
+		"groups":                     json.RawMessage(`["top"]`),
+		"https://example.com/groups": json.RawMessage(`["url"]`),
+		"porch.groups":               json.RawMessage(`["dotted-name"]`),
+		"porch":                      json.RawMessage(`{"groups":["nested"],"tenant":{"slug":"acme"}}`),
+		"flat":                       json.RawMessage(`"x"`),
+		"nul":                        json.RawMessage(`null`),
+	}
+	for path, want := range map[string]string{
+		"groups":                     `["top"]`,
+		"https://example.com/groups": `["url"]`,
+		"porch.groups":               `["dotted-name"]`, // an exact top-level name wins over the path
+		"porch.tenant.slug":          `"acme"`,
+		"porch.missing":              ``,
+		"flat.groups":                ``,
+		"nul.groups":                 ``,
+		"absent":                     ``,
+		"":                           ``,
+	} {
+		if got := string(claimAt(all, path)); got != want {
+			t.Errorf("claimAt(%q) = %q, want %q", path, got, want)
+		}
+	}
+	delete(all, "porch.groups")
+	if got := string(claimAt(all, "porch.groups")); got != `["nested"]` {
+		t.Errorf("nested path = %q", got)
+	}
+}
+
 // HP-AUTH-015: SSO sync never removes the last enabled administrator.
 func TestSyncKeepsLastAdmin(t *testing.T) {
 	f := newFx(t)

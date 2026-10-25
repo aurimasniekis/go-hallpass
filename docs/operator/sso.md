@@ -28,7 +28,7 @@ Agents never use SSO; they authenticate with SSH keys.
 | `issuer` | Must be `https://` and exactly equal to the `issuer` in the discovery document. `http://localhost` is allowed only in development mode. |
 | `client_id`, `client_secret` | The secret is optional (public clients with PKCE work). It is encrypted at rest and write-only: the API never returns it. |
 | `scopes` | Default `openid profile email`. `openid` is required. |
-| `groups_claim` | The claim that carries group values (a string array or a single string), e.g. `groups`. |
+| `groups_claim` | The claim that carries group values (a string array or a single string), e.g. `groups`. A dotted path reads a nested claim, e.g. `porch.groups`; a top-level claim with exactly that name is used first. |
 | `provisioning` | `preprovisioned` (default): unknown identities are refused. `jit`: unknown identities are created when every configured restriction matches. |
 | `jit` restrictions | `email_domains` (needs `email_verified=true`), `tenants` (`tid`), `hosted_domains` (`hd`), `groups`. At least one is required. JIT users get no roles except through group mappings. |
 | `ca_bundle_pem` | Extra trust roots for a private CA. TLS verification is never disabled. |
@@ -123,4 +123,7 @@ Provider notes:
 - **Dex** honours `post_logout_redirect_uri` only together with `id_token_hint`. HallPass does not keep ID tokens
  , so after RP-initiated logout the user stays on Dex's "logged out" page. The Dex session does end.
 - **Keycloak** asks the user to confirm RP-initiated logout, then redirects back to HallPass.
+- **Porch** sends groups inside its `porch` claim, only when the `groups` scope is requested and the app may disclose
+  groups. Set `scopes: [openid, profile, email, groups]` and `groups_claim: porch.groups`. Porch honours
+  `prompt=login` and `max_age=0` and always sends `auth_time`, so step-up needs no fallback.
 - Logout offers the end-session endpoint of the provider that created the session (`web_sessions.auth_provider`).

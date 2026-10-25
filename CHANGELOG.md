@@ -7,6 +7,12 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+### Added
+
+- The single sign-on groups claim can name a nested claim with a dotted path, such as `porch.groups` for Porch. A
+  top-level claim with exactly that name still takes precedence, so names like `https://example.com/groups` keep
+  working.
+
 ## [0.1.0] - 2026-10-25
 
 First release. HallPass is a terminating SSH gateway for AI agents: agents use plain `ssh` with their own key,
