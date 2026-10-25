@@ -27,6 +27,7 @@ Example: [`deploy/examples/hallpass.example.yaml`](../../deploy/examples/hallpas
 | `kek.source` | `file` | `file`, or `env` (base64 in `HALLPASS_KEK`; discouraged because environments leak into process listings and crash reports). |
 | `kek.file` | `/etc/hallpass/kek` | Master key file (`0400`, outside `data_dir`). See `docs/operator/keys.md`. |
 | `ssh.listen` | `:2222` | Agent-facing SSH listener. |
+| `ssh.public_address` | — | Where agents connect, `host` or `host:port` (port 22 when omitted), e.g. `ssh.example.com` behind a 22 → 2222 redirect. Shown in the console's agent setup and `known_hosts` lines. Default: the `public_url` host with the `ssh.listen` port. |
 | `ssh.max_unauthenticated` | `256` | Concurrent unauthenticated connections. |
 | `ssh.max_unauthenticated_per_ip` | `16` | Concurrent unauthenticated connections per source IP. |
 | `ssh.handshake_timeout` | `10s` | Deadline for handshake plus authentication. |

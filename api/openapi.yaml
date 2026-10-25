@@ -1910,9 +1910,21 @@ paths:
       tags: [system]
       x-permission: dashboard.view
       x-token: true
-      summary: Public gateway host keys for agent known_hosts pinning (not secret).
+      summary: >-
+        Public gateway host keys for agent known_hosts pinning (not secret), and the address agents connect to
+        (ssh.public_address, or the public URL host with the SSH listen port).
       responses:
-        "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/GatewayHostKey"}}}}}}}
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, ssh_host, ssh_port]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/GatewayHostKey"}}
+                  ssh_host: {type: string}
+                  ssh_port: {type: integer}
   /api/v1/stats/overview:
     get:
       operationId: getStatsOverview

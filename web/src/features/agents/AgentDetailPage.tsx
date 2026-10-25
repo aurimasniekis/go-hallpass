@@ -18,6 +18,7 @@ import { EffectiveAccessCard } from '../servers/EffectiveAccessTable';
 import { FormModal } from '../servers/FormModal';
 import { AgentFormFields } from './AgentFormFields';
 import { agentFormValues, toAgentPatch, type AgentFormValues } from './agentForm';
+import { AgentConnect } from './AgentConnect';
 import { AgentKeys } from './AgentKeys';
 import { AgentOwners } from './AgentOwners';
 import { EnabledBadge, TagList } from './AgentsPage';
@@ -196,6 +197,7 @@ export function AgentDetailPage({ id }: { id: string }) {
           />
         </Card>
         <AgentKeys agentId={id} keys={agent.keys} canWrite={canWrite} />
+        {agent.deleted_at ? null : <AgentConnect agentName={agent.name} />}
         {can('policy.read') ? <AgentOwners agentId={id} /> : null}
         {can('policy.read') ? <EffectiveAccessCard kind="agent" id={id} /> : null}
       </Space>

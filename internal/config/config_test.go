@@ -164,3 +164,30 @@ func TestIsWithin(t *testing.T) {
 		t.Fatal("isWithin broken")
 	}
 }
+
+func TestAgentSSHAddress(t *testing.T) {
+	for _, tc := range []struct {
+		public, listen, addr string
+		host                 string
+		port                 int
+	}{
+		{"https://hallpass.example.com", ":2222", "", "hallpass.example.com", 2222},
+		{"https://hallpass.example.com:8443", "0.0.0.0:22", "", "hallpass.example.com", 22},
+		{"https://hallpass.example.com", ":2222", "ssh.example.com", "ssh.example.com", 22},
+		{"https://hallpass.example.com", ":2222", "ssh.example.com:2200", "ssh.example.com", 2200},
+		{"https://hallpass.example.com", ":2222", "[2001:db8::1]:22", "2001:db8::1", 22},
+	} {
+		c := Default()
+		c.PublicURL, c.SSH.Listen, c.SSH.PublicAddress = tc.public, tc.listen, tc.addr
+		if h, p := c.AgentSSHAddress(); h != tc.host || p != tc.port {
+			t.Errorf("%+v: got %s %d", tc, h, p)
+		}
+	}
+	for _, bad := range []string{"host:0", "host:99999", "user@host", ":22", "a/b"} {
+		c := Default()
+		c.Mode, c.PublicURL, c.KEK.File, c.SSH.PublicAddress = ModeDevelopment, "http://localhost:8080", "", bad
+		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "ssh.public_address") {
+			t.Errorf("%q accepted: %v", bad, err)
+		}
+	}
+}

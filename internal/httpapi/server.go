@@ -71,6 +71,9 @@ type Deps struct {
 
 // Options configure the HTTP layer.
 type Options struct {
+	// AgentSSHHost and AgentSSHPort are where agents connect over SSH (shown in the console's SSH setup).
+	AgentSSHHost string
+	AgentSSHPort int
 	// PublicURL is the external origin; mutations must carry a matching Origin header.
 	PublicURL string
 	// Secure selects __Host- cookies with the Secure flag and HSTS (production / https).

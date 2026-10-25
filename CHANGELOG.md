@@ -9,6 +9,9 @@ agent JSON schemas, the recording format and the database schema).
 
 ### Added
 
+- The agent page shows how to set up the agent's machine: the key command, the gateway's `known_hosts` lines and a
+  `~/.ssh/config` block with the gateway address. `ssh.public_address` sets that address when agents connect to
+  another name or port than the public URL host and the SSH listener.
 - **Backups to object storage.** HallPass backs itself up on a schedule to an S3-compatible bucket (AWS S3,
   Cloudflare R2, MinIO and others): **Administration → Backups**, `/api/v1/system/backups`, or the Terraform
   `hallpass_backup_target` resource. The database snapshot is encrypted before upload; recordings, already encrypted,

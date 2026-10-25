@@ -1956,7 +1956,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Public gateway host keys for agent known_hosts pinning (not secret). */
+        /** Public gateway host keys for agent known_hosts pinning (not secret), and the address agents connect to (ssh.public_address, or the public URL host with the SSH listen port). */
         get: operations["listGatewayHostKeys"];
         put?: never;
         post?: never;
@@ -7009,6 +7009,8 @@ export interface operations {
                 content: {
                     "application/json": {
                         items: components["schemas"]["GatewayHostKey"][];
+                        ssh_host: string;
+                        ssh_port: number;
                     };
                 };
             };

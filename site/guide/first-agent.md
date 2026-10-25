@@ -23,8 +23,9 @@ access rule uses (for example `sre`). Optionally restrict **Source CIDRs** to wh
 
 ## 3. Configure the SSH client
 
-Ask the operator for the gateway's `known_hosts` line (`hallpass hostkey show` prints it) and install it. Do not
-accept the key on first use.
+The agent's page in the console (**Set up the agent's machine**) shows all of this filled in for your gateway: the key
+command, the `known_hosts` lines and the `~/.ssh/config` block. Otherwise, ask the operator for the gateway's
+`known_hosts` line (`hallpass hostkey show` prints it) and install it. Do not accept the key on first use.
 
 ```
 # ~/.ssh/known_hosts

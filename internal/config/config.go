@@ -10,7 +10,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -79,7 +82,10 @@ type KEKConfig struct {
 
 // SSHConfig configures the agent-facing SSH listener and both SSH legs (HP-SSH-012, HP-SSH-013).
 type SSHConfig struct {
-	Listen                  string       `yaml:"listen"`
+	Listen string `yaml:"listen"`
+	// PublicAddress is where agents connect ("host" or "host:port"), shown in the console's SSH setup. Empty: the
+	// public_url host with the ssh.listen port.
+	PublicAddress           string       `yaml:"public_address"`
 	MaxUnauthenticated      int          `yaml:"max_unauthenticated"`
 	MaxUnauthenticatedPerIP int          `yaml:"max_unauthenticated_per_ip"`
 	HandshakeTimeout        Duration     `yaml:"handshake_timeout"`
@@ -272,4 +278,28 @@ func (r RecordingConfig) RetentionFor(class string) time.Duration {
 		}
 	}
 	return r.DefaultRetention.D()
+}
+
+// AgentSSHAddress returns the host and port agents connect to: ssh.public_address, or the public_url host with the
+// ssh.listen port. The port defaults to 22 when public_address names only a host.
+func (c *Config) AgentSSHAddress() (string, int) {
+	if a := strings.TrimSpace(c.SSH.PublicAddress); a != "" {
+		if h, p, err := net.SplitHostPort(a); err == nil {
+			if n, err := strconv.Atoi(p); err == nil {
+				return h, n
+			}
+		}
+		return strings.Trim(a, "[]"), 22
+	}
+	host := ""
+	if u, err := url.Parse(c.PublicURL); err == nil {
+		host = u.Hostname()
+	}
+	port := 22
+	if _, p, err := net.SplitHostPort(c.SSH.Listen); err == nil {
+		if n, err := strconv.Atoi(p); err == nil {
+			port = n
+		}
+	}
+	return host, port
 }

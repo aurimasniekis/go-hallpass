@@ -141,6 +141,7 @@ func (a *App) NewAPI() *httpapi.Server {
 		}
 	}
 	rc := a.Cfg.RBAC
+	sshHost, sshPort := a.Cfg.AgentSSHAddress()
 	return httpapi.New(httpapi.Deps{Store: a.Store, Audit: a.Audit, Bus: a.Bus, Agents: a.Agents, Inventory: a.Inventory, Credentials: a.Credentials,
 		Engine: a.Engine, Policy: a.Policy, Access: a.Access, Enforcer: a.Enforcer, Recording: a.Recording, Auth: a.Auth, OIDC: a.OIDC,
 		Matrix: rbac.New(rbac.Options{AuditorAddressRead: rc.AuditorAddressRead, ApproverRecordingPlay: rc.ApproverRecordingPlay,
@@ -148,7 +149,7 @@ func (a *App) NewAPI() *httpapi.Server {
 		Metrics: a.Metrics,
 		Notify:  a.Notify, Destaudit: a.Destaudit, Bans: a.Bans, RemoteBackup: a.RemoteBackup, Proxy: a.Proxy, BootID: a.BootID, Version: buildinfo.Get().Version},
 		httpapi.Options{PublicURL: a.Cfg.PublicURL, Secure: strings.HasPrefix(a.Cfg.PublicURL, "https://"), TrustedProxies: proxies, UI: a.UI,
-			Clock: a.Clock, Logger: a.Log})
+			Clock: a.Clock, Logger: a.Log, AgentSSHHost: sshHost, AgentSSHPort: sshPort})
 }
 
 // rootHandler adds the infrastructure endpoints (HP-OPS-001) and HTTP metrics/tracing (HP-OBS-003/004) around the API.

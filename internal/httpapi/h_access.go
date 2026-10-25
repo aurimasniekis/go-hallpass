@@ -614,7 +614,11 @@ func (s *Server) ListGatewayHostKeys(c *gen.Call) (*gen.Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ok(list(v))
+	return ok(struct {
+		Items   any    `json:"items"`
+		SSHHost string `json:"ssh_host"`
+		SSHPort int    `json:"ssh_port"`
+	}{list(v).Items, s.o.AgentSSHHost, s.o.AgentSSHPort})
 }
 
 type point struct {

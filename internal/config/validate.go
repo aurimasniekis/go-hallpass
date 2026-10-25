@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -35,6 +36,18 @@ func (c *Config) Validate() error {
 	c.validateKEK(v, prod)
 
 	v.listen("ssh.listen", c.SSH.Listen)
+	if a := strings.TrimSpace(c.SSH.PublicAddress); a != "" {
+		h, p := a, "22"
+		if strings.Contains(a, ":") {
+			var err error
+			if h, p, err = net.SplitHostPort(a); err != nil {
+				v.add("ssh.public_address must be host or host:port, got %q", a)
+			}
+		}
+		if n, err := strconv.Atoi(p); h == "" || strings.ContainsAny(h, "/ @") || err != nil || n < 1 || n > 65535 {
+			v.add("ssh.public_address must be host or host:port, got %q", a)
+		}
+	}
 	v.listen("http.listen", c.HTTP.Listen)
 	if c.HTTP.MetricsListen != "" {
 		v.listen("http.metrics_listen", c.HTTP.MetricsListen)
