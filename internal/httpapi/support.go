@@ -235,6 +235,11 @@ func decodeCursor(raw string) (*cursor, error) {
 	if err := json.Unmarshal(b, &c); err != nil {
 		return nil, apperr.New(apperr.CodeInvalid, "invalid cursor")
 	}
+	// Only cursors this server issued are accepted: decoding replaces invalid UTF-8 and re-encoding escapes <>&, so a
+	// non-canonical cursor could otherwise re-encode differently (and past the size bound).
+	if *encodeCursor(c) != raw {
+		return nil, apperr.New(apperr.CodeInvalid, "invalid cursor")
+	}
 	return &c, nil
 }
 

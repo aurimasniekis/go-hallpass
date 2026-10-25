@@ -22,6 +22,10 @@ func FuzzDecodeCursor(f *testing.F) {
 	f.Add("not base64!")
 	f.Add(base64.RawURLEncoding.EncodeToString([]byte(`{"t":1,"i":"x","s":-1,"extra":true}`)))
 	f.Add(base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte("a"), 300)))
+	// Non-canonical JSON: invalid UTF-8 grows to U+FFFD and <>& grow to < on re-encoding.
+	f.Add(base64.RawURLEncoding.EncodeToString([]byte(`{"t":0,"i":"` + strings.Repeat("\xffM4", 60) + `"}`)))
+	f.Add(base64.RawURLEncoding.EncodeToString([]byte(`{"t":0,"i":"` + strings.Repeat("<", 40) + `"}`)))
+	f.Add(base64.RawURLEncoding.EncodeToString([]byte(`{"i":"x","t":1}`)))
 	f.Fuzz(func(t *testing.T, raw string) {
 		c, err := decodeCursor(raw)
 		if err != nil {
