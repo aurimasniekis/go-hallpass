@@ -47,6 +47,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
       { to: '/settings/auth', label: 'Authentication', permission: 'auth.settings' },
       { to: '/settings/integrations', label: 'Integrations', permission: 'integrations.manage' },
       { to: '/settings/api-tokens', label: 'API tokens', permission: 'operators.manage' },
+      { to: '/settings/backups', label: 'Backups', permission: 'system.read' },
       { to: '/settings/storage', label: 'Storage & keys', permission: ['system.read', 'retention.manage'] },
       { to: '/settings/system', label: 'System', permission: 'dashboard.view' },
     ],

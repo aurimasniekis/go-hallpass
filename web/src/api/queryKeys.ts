@@ -93,6 +93,10 @@ export const qk = {
   system: ['system'] as const,
   systemStatus: ['system', 'status'] as const,
   gatewayHostKeys: ['system', 'gateway-host-keys'] as const,
+  backups: ['system', 'backups'] as const,
+  backupStatus: ['system', 'backups', 'status'] as const,
+  backupTarget: ['system', 'backups', 'target'] as const,
+  backupRuns: ['system', 'backups', 'runs'] as const,
 
   stats: ['stats'] as const,
   statsOverview: (range: string) => ['stats', 'overview', range] as const,

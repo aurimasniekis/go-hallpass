@@ -37,6 +37,13 @@ export type OperatorPatch = S['OperatorPatch'];
 export type InvitationCreate = S['InvitationCreate'];
 export type APIToken = S['APIToken'];
 
+// remote backups
+export type BackupTarget = S['BackupTarget'];
+export type BackupTargetInput = S['BackupTargetInput'];
+export type BackupRun = S['BackupRun'];
+export type BackupStatus = S['BackupStatus'];
+export type BackupTestResult = S['BackupTestResult'];
+
 // inventory
 export type Agent = S['Agent'];
 export type AgentDetail = S['AgentDetail'];

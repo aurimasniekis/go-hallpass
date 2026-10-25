@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 
 import { api } from './client';
+import { ApiError } from './errors';
 import type { Operation, QueryOf } from './endpoints';
 import { qk } from './queryKeys';
 
@@ -328,6 +329,37 @@ export const systemStatusQueryOptions = () =>
   queryOptions({
     queryKey: qk.systemStatus,
     queryFn: ({ signal }) => api.call('get', '/api/v1/system/status', { signal }),
+  });
+
+/** Remote (object storage) backup status: configured, last runs, next run (system.read). */
+export const backupStatusQueryOptions = () =>
+  queryOptions({
+    queryKey: qk.backupStatus,
+    queryFn: ({ signal }) => api.call('get', '/api/v1/system/backups', { signal }),
+  });
+
+/** The backup target, or null when none is configured. */
+export const backupTargetQueryOptions = () =>
+  queryOptions({
+    queryKey: qk.backupTarget,
+    queryFn: async ({ signal }) => {
+      try {
+        return await api.call('get', '/api/v1/system/backups/target', { signal });
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 404) {
+          return null;
+        }
+        throw e;
+      }
+    },
+  });
+
+/** The newest backup runs. */
+export const backupRunsQueryOptions = () =>
+  queryOptions({
+    queryKey: qk.backupRuns,
+    queryFn: async ({ signal }) =>
+      (await api.call('get', '/api/v1/system/backups/runs', { query: { limit: 50 }, signal })).items,
   });
 
 /** fail2ban-style bans of agent SSH sources (system.read). */

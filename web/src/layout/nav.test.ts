@@ -17,6 +17,7 @@ const PLAN_LIST_ROUTES = [
   '/settings/auth',
   '/settings/integrations',
   '/settings/api-tokens',
+  '/settings/backups',
   '/settings/storage',
   '/settings/system',
   '/audit',
