@@ -133,7 +133,22 @@ export function ReauthGate({
   const stepUp = (slug: string) => {
     const here = currentPath();
     rememberStepUpReturn(here);
-    finish(false);
+    // The page is leaving for the identity provider: keep the original request pending instead of failing it, so
+    // its form does not flash a "recent authentication required" error during the redirect. If the browser comes
+    // back to this page from its back-forward cache, the request fails then, as on cancel.
+    const settle = resolver.current;
+    resolver.current = null;
+    setOpen(false);
+    form.resetFields();
+    window.addEventListener(
+      'pageshow',
+      (event) => {
+        if (event.persisted) {
+          settle?.(false);
+        }
+      },
+      { once: true },
+    );
     navigate(oidcStartUrl(slug, 'stepup', here));
   };
 

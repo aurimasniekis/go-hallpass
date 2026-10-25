@@ -94,11 +94,22 @@ describe('<ReauthGate>', () => {
     renderWithProviders(
       <ReauthGate client={client} navigate={navigate} currentPath={() => '/servers/s1?tab=roles'} />,
     );
-    const outcome = client.post('/credentials/c1/activate').catch((e: unknown) => e);
+    let settled = false;
+    const outcome = client
+      .post('/credentials/c1/activate')
+      .catch((e: unknown) => e)
+      .finally(() => {
+        settled = true;
+      });
     await user.click(await screen.findByRole('button', { name: 'Continue with Corp IdP' }));
     expect(navigate).toHaveBeenCalledWith(
       '/auth/oidc/corp/start?purpose=stepup&return_to=%2Fservers%2Fs1%3Ftab%3Droles',
     );
+    // While the browser leaves for the provider the request stays pending: no error to show mid-redirect.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(settled).toBe(false);
+    // Back from the provider through the back-forward cache: the request fails as on cancel.
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
     await expect(outcome).resolves.toMatchObject({ code: 'reauth_required' });
     expect(seen.filter((s) => s.url.includes('/credentials/'))).toHaveLength(1);
   });
