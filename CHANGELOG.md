@@ -10,7 +10,7 @@ agent JSON schemas, the recording format and the database schema).
 ## [0.1.1] - 2026-10-25
 
 > **Recording format and keyring not externally reviewed.** The known limitations of
-> [0.1.0](#010---2026-10-25) still apply.
+> [0.1.0](https://github.com/aurimasniekis/go-hallpass/releases/tag/v0.1.0) still apply.
 
 ### Added
 
