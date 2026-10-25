@@ -33,8 +33,9 @@ func Default() *Config {
 			Ban: SSHBanConfig{Enabled: true, MaxFailures: 10, Window: Duration(10 * time.Minute), Duration: Duration(15 * time.Minute),
 				MaxDuration: Duration(24 * time.Hour)},
 		},
-		HTTP: HTTPConfig{Listen: ":8080"},
-		Log:  LogConfig{Level: "info", Format: "json"},
+		HTTP:    HTTPConfig{Listen: ":8080"},
+		Console: ConsoleConfig{Terminal: true},
+		Log:     LogConfig{Level: "info", Format: "json"},
 		Storage: StorageConfig{
 			MinFreeBytes:          2 << 30,
 			MinFreePercent:        5,

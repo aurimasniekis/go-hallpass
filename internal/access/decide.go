@@ -409,7 +409,7 @@ func (svc *Service) createGrantTx(ctx context.Context, tx *store.Tx, snap *polic
 	if err := tx.Q.InsertGrant(ctx, db.InsertGrantParams{
 		ID: gid, RequestID: r.ID, DecisionID: decisionID, AgentID: r.AgentID, ServerID: r.ServerID, RoleID: r.RoleID,
 		RemoteUser: role.RemoteUser, CapabilitiesJson: string(caps), PolicyVersion: snap.Version, StartsAt: start.UnixMicro(),
-		ExpiresAt: start.Add(dur).UnixMicro(), UpdatedAt: tx.NowMicros(),
+		ExpiresAt: start.Add(dur).UnixMicro(), UpdatedAt: tx.NowMicros(), OperatorID: r.OperatorID,
 	}); err != nil {
 		return nil, err
 	}

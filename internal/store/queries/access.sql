@@ -1,7 +1,7 @@
 -- name: InsertRequest :exec
 INSERT INTO access_requests (id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state,
-  idempotency_key, policy_version, created_at, expires_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?);
+  idempotency_key, policy_version, created_at, expires_at, updated_at, operator_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?);
 
 -- name: GetRequest :one
 SELECT * FROM access_requests WHERE id = ?;
@@ -51,8 +51,8 @@ SELECT * FROM approval_decisions WHERE request_id = ?;
 
 -- name: InsertGrant :exec
 INSERT INTO grants (id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version,
-  starts_at, expires_at, state, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?);
+  starts_at, expires_at, state, updated_at, operator_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?);
 
 -- name: GetGrant :one
 SELECT * FROM grants WHERE id = ?;
@@ -122,8 +122,8 @@ WHERE s.state != 'closed' AND (g.state != 'active' OR g.expires_at <= ?)
 LIMIT ?;
 
 -- name: InsertConnection :exec
-INSERT INTO ssh_connections (id, agent_id, agent_key_id, client_user, client_version, source_ip, state, opened_at, boot_id)
-VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?);
+INSERT INTO ssh_connections (id, agent_id, agent_key_id, client_user, client_version, source_ip, state, opened_at, boot_id, operator_id)
+VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?);
 
 -- name: CloseConnection :execrows
 UPDATE ssh_connections SET state = 'closed', closed_at = ?, close_reason = ? WHERE id = ? AND state = 'open';
@@ -210,3 +210,13 @@ ON CONFLICT (request_id, operator_id) DO NOTHING;
 
 -- name: ListRequestApprovals :many
 SELECT * FROM request_approvals WHERE request_id = ? ORDER BY approved_at, operator_id;
+
+-- name: ActiveConsoleGrantsOfIneligibleOperators :many
+-- Web terminal grants whose administrator is disabled or no longer holds the administrator role (ADR-0055).
+SELECT g.id FROM grants g JOIN operators o ON o.id = g.operator_id
+WHERE g.operator_id IS NOT NULL AND g.state = 'active' AND (o.enabled = 0 OR NOT EXISTS (
+  SELECT 1 FROM operator_roles r WHERE r.operator_id = o.id AND r.role = 'administrator'));
+
+-- name: CountLiveChannelsForOperator :one
+SELECT count(*) FROM ssh_channels c JOIN grants g ON g.id = c.grant_id
+WHERE g.operator_id = sqlc.arg(operator_id) AND c.state IN ('opening', 'active');

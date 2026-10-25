@@ -1982,6 +1982,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/terminals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Open a recorded terminal on a server role as yourself (administrators; off when console.terminal is false). It is a self-approved grant with its own access session: recorded, ended by expiry, revocation, lockdown or a disabled server or role, and audited. Connect within a minute to the stream with the returned single-use ticket. */
+        post: operations["openTerminal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/terminals/{id}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** WebSocket of an open terminal (same origin, same web session, ticket from openTerminal). Closing it ends the terminal's grant. */
+        get: operations["streamTerminal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/events": {
         parameters: {
             query?: never;
@@ -2108,6 +2142,23 @@ export interface components {
                 limited: boolean;
                 needs_enroll: boolean;
             };
+        };
+        TerminalOpenInput: {
+            server_id: string;
+            role_id: string;
+            /** @description Seconds; one of the allowed presets up to the role's maximum. Default: the role's default. */
+            duration?: number;
+        };
+        TerminalOpened: {
+            grant_id: string;
+            session_id: string;
+            server_id: string;
+            role_id: string;
+            remote_user: string;
+            expires_at: components["schemas"]["Timestamp"];
+            /** @description Single-use, valid for one minute, only for this web session. */
+            ticket: string;
+            stream_path: string;
         };
         BackupTarget: {
             enabled: boolean;
@@ -6982,6 +7033,54 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["StatsOverview"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    openTerminal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TerminalOpenInput"];
+            };
+        };
+        responses: {
+            /** @description opened */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalOpened"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    streamTerminal: {
+        parameters: {
+            query: {
+                ticket: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description switching protocols to a WebSocket */
+            101: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };

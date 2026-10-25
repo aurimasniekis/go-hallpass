@@ -300,6 +300,28 @@ func (s *Snapshot) Evaluate(agentID, serverID, roleID string) Decision {
 	return d
 }
 
+// EvaluateConsole is the policy for an administrator's web terminal on a server role (ADR-0055): agent rules do not
+// apply, but the server and role must exist and be enabled, lockdown refuses it, and the duration is limited by the
+// role's maximum and the global ceiling.
+func (s *Snapshot) EvaluateConsole(serverID, roleID string) Decision {
+	srv, role := s.servers[serverID], s.roles[roleID]
+	switch {
+	case srv == nil || role == nil || role.ServerID != serverID:
+		return Decision{Denied: true, Reason: "unknown"}
+	case !srv.Enabled || !role.Enabled:
+		return Decision{Denied: true, Reason: "disabled"}
+	case s.Lockdown:
+		return Decision{Denied: true, Reason: "lockdown"}
+	}
+	d := Decision{Level: LevelRequestable, MaxDuration: min(role.MaxDuration, s.settings.MaxGrantDuration), MatchedRules: []string{}}
+	for _, p := range s.settings.DurationPresets {
+		if p <= d.MaxDuration {
+			d.AllowedDurations = append(d.AllowedDurations, p)
+		}
+	}
+	return d
+}
+
 // DefaultDuration returns the duration used when an agent does not specify one: the role default, clamped to
 // the largest allowed preset not above it (or the smallest allowed preset).
 func (s *Snapshot) DefaultDuration(roleID string, d Decision) time.Duration {

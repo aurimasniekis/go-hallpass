@@ -42,6 +42,8 @@ const (
 	LockdownLift         Permission = "system.lockdown.lift"
 	SystemSettings       Permission = "system.settings"
 	SystemRead           Permission = "system.read"
+	// TerminalOpen opens a web terminal on a server role (administrators, unless console.terminal is off; ADR-0055).
+	TerminalOpen Permission = "terminal.open"
 )
 
 // Pseudo-permissions used by operations that are not role-gated.
@@ -60,6 +62,8 @@ type Options struct {
 	ApproverRecordingPlay  bool
 	AuditorRecordingExport bool
 	ApproversCanLockdown   bool
+	// WebTerminal grants administrators TerminalOpen (config console.terminal).
+	WebTerminal bool
 }
 
 // Matrix maps roles to permissions.
@@ -85,6 +89,9 @@ func New(o Options) *Matrix {
 	}
 	if o.ApproversCanLockdown {
 		approver = append(approver, LockdownEnable)
+	}
+	if o.WebTerminal {
+		admin = append(admin, TerminalOpen)
 	}
 	return &Matrix{roles: map[string][]Permission{
 		opauth.RoleAdministrator: admin, opauth.RoleApprover: approver, opauth.RoleAuditor: auditor, opauth.RoleViewer: viewer,
@@ -153,5 +160,5 @@ func Known(perm Permission) bool {
 		return true
 	}
 	return slices.Contains(New(Options{AuditorAddressRead: true, ApproverRecordingPlay: true, AuditorRecordingExport: true,
-		ApproversCanLockdown: true}).roles[opauth.RoleAdministrator], perm)
+		ApproversCanLockdown: true, WebTerminal: true}).roles[opauth.RoleAdministrator], perm)
 }

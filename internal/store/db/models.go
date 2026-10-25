@@ -24,6 +24,7 @@ type AccessRequest struct {
 	ExpiresAt          int64
 	DecidedAt          sql.NullInt64
 	UpdatedAt          int64
+	OperatorID         sql.NullString
 }
 
 type AccessSession struct {
@@ -313,6 +314,7 @@ type Grant struct {
 	EndReason        sql.NullString
 	RevokedBy        sql.NullString
 	UpdatedAt        int64
+	OperatorID       sql.NullString
 }
 
 type Group struct {
@@ -833,6 +835,7 @@ type SshConnection struct {
 	ClosedAt      sql.NullInt64
 	CloseReason   sql.NullString
 	BootID        string
+	OperatorID    sql.NullString
 }
 
 type StoreSpaceProbe struct {

@@ -1925,6 +1925,40 @@ paths:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/StatsOverview"}}}}
         default: {$ref: "#/components/responses/Problem"}
 
+  # ---------------------------------------------------------------- web terminals (ADR-0055)
+  /api/v1/terminals:
+    post:
+      operationId: openTerminal
+      tags: [access]
+      x-permission: terminal.open
+      x-reauth: true
+      x-mfa: true
+      summary: >-
+        Open a recorded terminal on a server role as yourself (administrators; off when console.terminal is false). It is
+        a self-approved grant with its own access session: recorded, ended by expiry, revocation, lockdown or a disabled
+        server or role, and audited. Connect within a minute to the stream with the returned single-use ticket.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/TerminalOpenInput"}}}
+      responses:
+        "201": {description: opened, content: {application/json: {schema: {$ref: "#/components/schemas/TerminalOpened"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/terminals/{id}/stream:
+    get:
+      operationId: streamTerminal
+      tags: [access]
+      x-permission: terminal.open
+      x-stream: true
+      summary: >-
+        WebSocket of an open terminal (same origin, same web session, ticket from openTerminal). Closing it ends the
+        terminal's grant.
+      parameters:
+        - {$ref: "#/components/parameters/ID"}
+        - {name: ticket, in: query, required: true, schema: {type: string, maxLength: 128}}
+      responses:
+        "101": {description: switching protocols to a WebSocket}
+        default: {$ref: "#/components/responses/Problem"}
+
   # ---------------------------------------------------------------- live
   /api/v1/events:
     get:
@@ -2058,6 +2092,26 @@ components:
             expires_at: {$ref: "#/components/schemas/Timestamp"}
             limited: {type: boolean}
             needs_enroll: {type: boolean}
+    TerminalOpenInput:
+      type: object
+      required: [server_id, role_id]
+      additionalProperties: false
+      properties:
+        server_id: {type: string, maxLength: 64}
+        role_id: {type: string, maxLength: 64}
+        duration: {type: integer, description: "Seconds; one of the allowed presets up to the role's maximum. Default: the role's default."}
+    TerminalOpened:
+      type: object
+      required: [grant_id, session_id, server_id, role_id, remote_user, expires_at, ticket, stream_path]
+      properties:
+        grant_id: {type: string}
+        session_id: {type: string}
+        server_id: {type: string}
+        role_id: {type: string}
+        remote_user: {type: string}
+        expires_at: {$ref: "#/components/schemas/Timestamp"}
+        ticket: {type: string, description: "Single-use, valid for one minute, only for this web session."}
+        stream_path: {type: string}
     BackupTarget:
       type: object
       required: [enabled, endpoint, region, bucket, prefix, path_style, access_key_id, allow_private_network, interval, keep_last, keep_daily_days, version, created_at, updated_at]

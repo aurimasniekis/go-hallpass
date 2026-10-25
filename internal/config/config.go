@@ -66,6 +66,7 @@ type Config struct {
 	Telemetry TelemetryConfig `yaml:"telemetry"`
 	Shutdown  ShutdownConfig  `yaml:"shutdown"`
 	RBAC      RBACConfig      `yaml:"rbac"`
+	Console   ConsoleConfig   `yaml:"console"`
 	Dev       DevConfig       `yaml:"dev"`
 }
 
@@ -192,6 +193,12 @@ type TelemetryConfig struct {
 // ShutdownConfig configures graceful shutdown (HP-OPS-002).
 type ShutdownConfig struct {
 	DrainTimeout Duration `yaml:"drain_timeout"`
+}
+
+// ConsoleConfig controls web console features (ADR-0055).
+type ConsoleConfig struct {
+	// Terminal lets administrators open recorded terminals on servers from the console (default true).
+	Terminal bool `yaml:"terminal"`
 }
 
 // RBACConfig sets the configurable cells of the operator permission matrix (PLAN §12.5); all default to false.

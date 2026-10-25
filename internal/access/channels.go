@@ -25,6 +25,8 @@ type ConnectionInfo struct {
 	ClientUser    string // untrusted; recorded only (HP-SSH-002)
 	ClientVersion string
 	SourceIP      string
+	// OperatorID names the administrator of a web terminal connection (AgentID is ConsoleAgentID).
+	OperatorID string
 }
 
 // OpenConnection records an authenticated agent connection.
@@ -34,6 +36,7 @@ func (svc *Service) OpenConnection(ctx context.Context, in ConnectionInfo) (stri
 		return tx.Q.InsertConnection(ctx, db.InsertConnectionParams{
 			ID: id, AgentID: in.AgentID, AgentKeyID: in.KeyID, ClientUser: truncate(in.ClientUser, 256), ClientVersion: truncate(in.ClientVersion, 256),
 			SourceIp: in.SourceIP, OpenedAt: tx.NowMicros(), BootID: svc.opts.BootID,
+			OperatorID: sql.NullString{String: in.OperatorID, Valid: in.OperatorID != ""},
 		})
 	})
 	return id, err
@@ -87,6 +90,8 @@ type RegisterInput struct {
 	GitRepo    string
 	// Subsystem is "sftp" for a file transfer; the role must grant file-transfer instead of exec.
 	Subsystem string
+	// OperatorID is the administrator of a web terminal (ADR-0055); it must match the grant's.
+	OperatorID string
 }
 
 // ChannelReg is a registered (opening) channel.
@@ -133,7 +138,7 @@ func (svc *Service) RegisterChannel(ctx context.Context, in RegisterInput) (*Cha
 			return err
 		}
 		g := grantFromRow(gr)
-		if g.AgentID != in.AgentID {
+		if g.AgentID != in.AgentID || g.OperatorID != in.OperatorID {
 			return ErrNotFoundOrForbidden
 		}
 		if snap.Lockdown {
@@ -142,12 +147,23 @@ func (svc *Service) RegisterChannel(ctx context.Context, in RegisterInput) (*Cha
 		if !g.ActiveAt(tx.Now.Add(svc.opts.MinRemainingToConnect)) {
 			return ErrAccessEnded
 		}
-		if !snap.Evaluate(g.AgentID, g.ServerID, g.RoleID).Requestable() {
-			return ErrAccessEnded
-		}
-		key, err := tx.Q.GetAgentKey(ctx, in.KeyID)
-		if err != nil || key.State != "active" || key.AgentID != in.AgentID {
-			return ErrAccessEnded
+		if g.Console() {
+			// A web terminal: no agent key or agent rules; the server and role must still be live and the operator
+			// still an enabled administrator (ADR-0055).
+			if !snap.EvaluateConsole(g.ServerID, g.RoleID).Requestable() {
+				return ErrAccessEnded
+			}
+			if err := consoleOperator(ctx, tx.Q, policy.OperatorInfo{ID: g.OperatorID}); err != nil {
+				return ErrAccessEnded
+			}
+		} else {
+			if !snap.Evaluate(g.AgentID, g.ServerID, g.RoleID).Requestable() {
+				return ErrAccessEnded
+			}
+			key, err := tx.Q.GetAgentKey(ctx, in.KeyID)
+			if err != nil || key.State != "active" || key.AgentID != in.AgentID {
+				return ErrAccessEnded
+			}
 		}
 		s, err := tx.Q.GetSession(ctx, sess.ID)
 		if err != nil {
@@ -185,12 +201,23 @@ func (svc *Service) RegisterChannel(ctx context.Context, in RegisterInput) (*Cha
 		if total >= int64(role.MaxConcurrent) {
 			return ErrConcurrencyLimit
 		}
-		mine, err := tx.Q.CountLiveChannelsForAgentRole(ctx, db.CountLiveChannelsForAgentRoleParams{AgentID: g.AgentID, RoleID: g.RoleID})
-		if err != nil {
-			return err
-		}
-		if mine >= int64(role.MaxConcurrentPerAgent) {
-			return ErrConcurrencyLimit
+		if g.Console() {
+			// All web terminals share one agent; limit them per operator instead.
+			mine, err := tx.Q.CountLiveChannelsForOperator(ctx, sql.NullString{String: g.OperatorID, Valid: true})
+			if err != nil {
+				return err
+			}
+			if mine >= MaxConsoleChannelsPerOperator {
+				return ErrConcurrencyLimit
+			}
+		} else {
+			mine, err := tx.Q.CountLiveChannelsForAgentRole(ctx, db.CountLiveChannelsForAgentRoleParams{AgentID: g.AgentID, RoleID: g.RoleID})
+			if err != nil {
+				return err
+			}
+			if mine >= int64(role.MaxConcurrentPerAgent) {
+				return ErrConcurrencyLimit
+			}
 		}
 		firstOnConn, err := tx.Q.CountChannelsForConnectionInSession(ctx, db.CountChannelsForConnectionInSessionParams{ConnectionID: in.ConnectionID, AccessSessionID: sess.ID})
 		if err != nil {

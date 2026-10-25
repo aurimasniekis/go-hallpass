@@ -276,7 +276,7 @@ func (q *Queries) ListAuditPage(ctx context.Context, arg ListAuditPageParams) ([
 }
 
 const listGrantsPage = `-- name: ListGrantsPage :many
-SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at FROM grants
+SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at, operator_id FROM grants
 WHERE (?1 IS NULL OR state = ?1)
   AND (?2 IS NULL OR agent_id = ?2)
   AND (?3 IS NULL OR server_id = ?3)
@@ -326,6 +326,7 @@ func (q *Queries) ListGrantsPage(ctx context.Context, arg ListGrantsPageParams) 
 			&i.EndReason,
 			&i.RevokedBy,
 			&i.UpdatedAt,
+			&i.OperatorID,
 		); err != nil {
 			return nil, err
 		}
@@ -342,7 +343,7 @@ func (q *Queries) ListGrantsPage(ctx context.Context, arg ListGrantsPageParams) 
 
 const listRequestsPage = `-- name: ListRequestsPage :many
 
-SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at FROM access_requests
+SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at, operator_id FROM access_requests
 WHERE (?1 IS NULL OR state = ?1)
   AND (?2 IS NULL OR agent_id = ?2)
   AND (?3 IS NULL OR server_id = ?3)
@@ -392,6 +393,7 @@ func (q *Queries) ListRequestsPage(ctx context.Context, arg ListRequestsPagePara
 			&i.ExpiresAt,
 			&i.DecidedAt,
 			&i.UpdatedAt,
+			&i.OperatorID,
 		); err != nil {
 			return nil, err
 		}

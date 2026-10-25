@@ -76,6 +76,19 @@ type harness struct {
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
+	return newHarnessWith(t, harnessOptions{})
+}
+
+// harnessOptions adjust the harness: configuration, permission matrix options, and whether the SSH data plane (web
+// terminals) is wired.
+type harnessOptions struct {
+	config  func(*config.Config)
+	matrix  rbac.Options
+	dataPln bool
+}
+
+func newHarnessWith(t *testing.T, o harnessOptions) *harness {
+	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0") //nolint:noctx // test listener
 	must(t, err)
 	dir := t.TempDir()
@@ -86,14 +99,21 @@ func newHarness(t *testing.T) *harness {
 	cfg.HTTP.Listen = ""
 	cfg.Egress.AllowCIDRs = []string{"10.0.0.0/8"}
 	cfg.PublicURL = "http://" + ln.Addr().String()
+	if o.config != nil {
+		o.config(cfg)
+	}
 	clk := clock.NewFake(time.Now())
 	ctx := context.Background()
 	a, err := app.New(ctx, cfg, slog.New(slog.DiscardHandler), app.WithClock(clk))
 	must(t, err)
-	h := &harness{t: t, ctx: ctx, clk: clk, a: a, base: cfg.PublicURL, matrix: rbac.New(rbac.Options{}), spec: loadSpec(t)}
+	h := &harness{t: t, ctx: ctx, clk: clk, a: a, base: cfg.PublicURL, matrix: rbac.New(o.matrix), spec: loadSpec(t)}
+	var proxy *sshproxy.Proxy
+	if o.dataPln {
+		proxy = a.NewProxy()
+	}
 	h.api = httpapi.New(httpapi.Deps{Store: a.Store, Audit: a.Audit, Bus: a.Bus, Agents: a.Agents, Inventory: a.Inventory, Credentials: a.Credentials,
 		Engine: a.Engine, Policy: a.Policy, Access: a.Access, Enforcer: a.Enforcer, Recording: a.Recording, Auth: a.Auth, OIDC: a.OIDC, Notify: a.Notify, Destaudit: a.Destaudit, Bans: a.Bans, RemoteBackup: a.RemoteBackup,
-		Matrix: h.matrix, BootID: a.BootID, Version: buildinfo.Get().Version},
+		Proxy: proxy, Matrix: h.matrix, BootID: a.BootID, Version: buildinfo.Get().Version},
 		httpapi.Options{PublicURL: cfg.PublicURL, Clock: clk, SessionRate: 100000, IPRate: 100000, AuthRate: 100000})
 	rctx, cancel := context.WithCancel(ctx)
 	h.cancel = cancel
@@ -1308,7 +1328,8 @@ func TestDisableAndDeleteAPI(t *testing.T) {
 		t.Fatalf("deleted agent listed: %+v", agents)
 	}
 	c.ok("listAgents", 200, "GET", "/api/v1/agents?include_deleted=true", nil).json(t, &agents)
-	if len(agents.Items) != 1 || agents.Items[0].Name != "ci-bot" {
+	// The history list also names the built-in web terminal agent (always deleted).
+	if len(agents.Items) != 2 || agents.Items[0].Name != "web terminal" || agents.Items[1].Name != "ci-bot" {
 		t.Fatalf("include_deleted: %+v", agents)
 	}
 }

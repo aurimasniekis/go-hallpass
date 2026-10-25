@@ -164,6 +164,8 @@ var Operations = []Operation{
 	{ID: "enableLockdown", Method: "POST", Path: "/api/v1/system/lockdown", Permission: "system.lockdown.enable", Reauth: true, MFA: false, Idempotent: true, Stream: false, Redirect: false, Token: false, Tags: []string{"system"}},
 	{ID: "liftLockdown", Method: "DELETE", Path: "/api/v1/system/lockdown", Permission: "system.lockdown.lift", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"system"}},
 	{ID: "getSystemStatus", Method: "GET", Path: "/api/v1/system/status", Permission: "dashboard.view", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"system"}},
+	{ID: "openTerminal", Method: "POST", Path: "/api/v1/terminals", Permission: "terminal.open", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"access"}},
+	{ID: "streamTerminal", Method: "GET", Path: "/api/v1/terminals/{id}/stream", Permission: "terminal.open", Reauth: false, MFA: false, Idempotent: false, Stream: true, Redirect: false, Token: false, Tags: []string{"access"}},
 	{ID: "listUserCAs", Method: "GET", Path: "/api/v1/user-cas", Permission: "credentials.manage", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"credentials"}},
 	{ID: "createUserCA", Method: "POST", Path: "/api/v1/user-cas", Permission: "credentials.manage", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"credentials"}},
 	{ID: "oidcCallback", Method: "GET", Path: "/auth/oidc/callback", Permission: "public", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: true, Token: false, Tags: []string{"sso"}},
@@ -492,6 +494,10 @@ type Server interface {
 	LiftLockdown(c *Call) (*Result, error)
 	// GetSystemStatus GET /api/v1/system/status (permission dashboard.view)
 	GetSystemStatus(c *Call) (*Result, error)
+	// OpenTerminal POST /api/v1/terminals (permission terminal.open)
+	OpenTerminal(c *Call) (*Result, error)
+	// StreamTerminal GET /api/v1/terminals/{id}/stream (permission terminal.open)
+	StreamTerminal(c *Call) (*Result, error)
 	// ListUserCAs GET /api/v1/user-cas (permission credentials.manage)
 	ListUserCAs(c *Call) (*Result, error)
 	// CreateUserCA POST /api/v1/user-cas (permission credentials.manage)
@@ -665,6 +671,8 @@ func Handlers(s Server) map[string]Handler {
 		"enableLockdown":                s.EnableLockdown,
 		"liftLockdown":                  s.LiftLockdown,
 		"getSystemStatus":               s.GetSystemStatus,
+		"openTerminal":                  s.OpenTerminal,
+		"streamTerminal":                s.StreamTerminal,
 		"listUserCAs":                   s.ListUserCAs,
 		"createUserCA":                  s.CreateUserCA,
 		"oidcCallback":                  s.OidcCallback,

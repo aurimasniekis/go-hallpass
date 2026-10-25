@@ -28,6 +28,36 @@ func (q *Queries) ActivateChannel(ctx context.Context, arg ActivateChannelParams
 	return result.RowsAffected()
 }
 
+const activeConsoleGrantsOfIneligibleOperators = `-- name: ActiveConsoleGrantsOfIneligibleOperators :many
+SELECT g.id FROM grants g JOIN operators o ON o.id = g.operator_id
+WHERE g.operator_id IS NOT NULL AND g.state = 'active' AND (o.enabled = 0 OR NOT EXISTS (
+  SELECT 1 FROM operator_roles r WHERE r.operator_id = o.id AND r.role = 'administrator'))
+`
+
+// Web terminal grants whose administrator is disabled or no longer holds the administrator role (ADR-0055).
+func (q *Queries) ActiveConsoleGrantsOfIneligibleOperators(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, activeConsoleGrantsOfIneligibleOperators)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const activeGrantIDsForAgent = `-- name: ActiveGrantIDsForAgent :many
 SELECT id FROM grants WHERE state = 'active' AND agent_id = ?
 `
@@ -110,7 +140,7 @@ func (q *Queries) ActiveGrantIDsForServer(ctx context.Context, serverID string) 
 }
 
 const activeGrants = `-- name: ActiveGrants :many
-SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at FROM grants WHERE state = 'active' ORDER BY expires_at
+SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at, operator_id FROM grants WHERE state = 'active' ORDER BY expires_at
 `
 
 func (q *Queries) ActiveGrants(ctx context.Context) ([]Grant, error) {
@@ -139,6 +169,7 @@ func (q *Queries) ActiveGrants(ctx context.Context) ([]Grant, error) {
 			&i.EndReason,
 			&i.RevokedBy,
 			&i.UpdatedAt,
+			&i.OperatorID,
 		); err != nil {
 			return nil, err
 		}
@@ -154,7 +185,7 @@ func (q *Queries) ActiveGrants(ctx context.Context) ([]Grant, error) {
 }
 
 const activeGrantsForAgent = `-- name: ActiveGrantsForAgent :many
-SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at FROM grants WHERE state = 'active' AND agent_id = ? ORDER BY expires_at
+SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at, operator_id FROM grants WHERE state = 'active' AND agent_id = ? ORDER BY expires_at
 `
 
 func (q *Queries) ActiveGrantsForAgent(ctx context.Context, agentID string) ([]Grant, error) {
@@ -183,6 +214,7 @@ func (q *Queries) ActiveGrantsForAgent(ctx context.Context, agentID string) ([]G
 			&i.EndReason,
 			&i.RevokedBy,
 			&i.UpdatedAt,
+			&i.OperatorID,
 		); err != nil {
 			return nil, err
 		}
@@ -372,6 +404,18 @@ func (q *Queries) CountLiveChannelsForAgentRole(ctx context.Context, arg CountLi
 	return count, err
 }
 
+const countLiveChannelsForOperator = `-- name: CountLiveChannelsForOperator :one
+SELECT count(*) FROM ssh_channels c JOIN grants g ON g.id = c.grant_id
+WHERE g.operator_id = ?1 AND c.state IN ('opening', 'active')
+`
+
+func (q *Queries) CountLiveChannelsForOperator(ctx context.Context, operatorID sql.NullString) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countLiveChannelsForOperator, operatorID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countLiveChannelsForRole = `-- name: CountLiveChannelsForRole :one
 SELECT count(*) FROM ssh_channels WHERE role_id = ? AND state IN ('opening', 'active')
 `
@@ -538,7 +582,7 @@ func (q *Queries) EndGrant(ctx context.Context, arg EndGrantParams) (int64, erro
 }
 
 const findActiveGrant = `-- name: FindActiveGrant :one
-SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at FROM grants
+SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at, operator_id FROM grants
 WHERE agent_id = ? AND server_id = ? AND role_id = ? AND state = 'active' AND expires_at > ?
 ORDER BY expires_at DESC, id ASC LIMIT 1
 `
@@ -575,6 +619,7 @@ func (q *Queries) FindActiveGrant(ctx context.Context, arg FindActiveGrantParams
 		&i.EndReason,
 		&i.RevokedBy,
 		&i.UpdatedAt,
+		&i.OperatorID,
 	)
 	return i, err
 }
@@ -613,7 +658,7 @@ func (q *Queries) GetChannel(ctx context.Context, id string) (SshChannel, error)
 }
 
 const getConnection = `-- name: GetConnection :one
-SELECT id, agent_id, agent_key_id, client_user, client_version, source_ip, state, opened_at, closed_at, close_reason, boot_id FROM ssh_connections WHERE id = ?
+SELECT id, agent_id, agent_key_id, client_user, client_version, source_ip, state, opened_at, closed_at, close_reason, boot_id, operator_id FROM ssh_connections WHERE id = ?
 `
 
 func (q *Queries) GetConnection(ctx context.Context, id string) (SshConnection, error) {
@@ -631,6 +676,7 @@ func (q *Queries) GetConnection(ctx context.Context, id string) (SshConnection, 
 		&i.ClosedAt,
 		&i.CloseReason,
 		&i.BootID,
+		&i.OperatorID,
 	)
 	return i, err
 }
@@ -660,7 +706,7 @@ func (q *Queries) GetDecisionByRequest(ctx context.Context, requestID string) (A
 }
 
 const getGrant = `-- name: GetGrant :one
-SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at FROM grants WHERE id = ?
+SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at, operator_id FROM grants WHERE id = ?
 `
 
 func (q *Queries) GetGrant(ctx context.Context, id string) (Grant, error) {
@@ -683,12 +729,13 @@ func (q *Queries) GetGrant(ctx context.Context, id string) (Grant, error) {
 		&i.EndReason,
 		&i.RevokedBy,
 		&i.UpdatedAt,
+		&i.OperatorID,
 	)
 	return i, err
 }
 
 const getGrantByRequest = `-- name: GetGrantByRequest :one
-SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at FROM grants WHERE request_id = ?
+SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at, operator_id FROM grants WHERE request_id = ?
 `
 
 func (q *Queries) GetGrantByRequest(ctx context.Context, requestID string) (Grant, error) {
@@ -711,12 +758,13 @@ func (q *Queries) GetGrantByRequest(ctx context.Context, requestID string) (Gran
 		&i.EndReason,
 		&i.RevokedBy,
 		&i.UpdatedAt,
+		&i.OperatorID,
 	)
 	return i, err
 }
 
 const getPendingRequest = `-- name: GetPendingRequest :one
-SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at FROM access_requests WHERE agent_id = ? AND server_id = ? AND role_id = ? AND state = 'pending'
+SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at, operator_id FROM access_requests WHERE agent_id = ? AND server_id = ? AND role_id = ? AND state = 'pending'
 `
 
 type GetPendingRequestParams struct {
@@ -744,12 +792,13 @@ func (q *Queries) GetPendingRequest(ctx context.Context, arg GetPendingRequestPa
 		&i.ExpiresAt,
 		&i.DecidedAt,
 		&i.UpdatedAt,
+		&i.OperatorID,
 	)
 	return i, err
 }
 
 const getRequest = `-- name: GetRequest :one
-SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at FROM access_requests WHERE id = ?
+SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at, operator_id FROM access_requests WHERE id = ?
 `
 
 func (q *Queries) GetRequest(ctx context.Context, id string) (AccessRequest, error) {
@@ -771,12 +820,13 @@ func (q *Queries) GetRequest(ctx context.Context, id string) (AccessRequest, err
 		&i.ExpiresAt,
 		&i.DecidedAt,
 		&i.UpdatedAt,
+		&i.OperatorID,
 	)
 	return i, err
 }
 
 const getRequestByIdempotencyKey = `-- name: GetRequestByIdempotencyKey :one
-SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at FROM access_requests WHERE agent_id = ? AND idempotency_key = ?
+SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at, operator_id FROM access_requests WHERE agent_id = ? AND idempotency_key = ?
 `
 
 type GetRequestByIdempotencyKeyParams struct {
@@ -803,6 +853,7 @@ func (q *Queries) GetRequestByIdempotencyKey(ctx context.Context, arg GetRequest
 		&i.ExpiresAt,
 		&i.DecidedAt,
 		&i.UpdatedAt,
+		&i.OperatorID,
 	)
 	return i, err
 }
@@ -942,8 +993,8 @@ func (q *Queries) InsertChannel(ctx context.Context, arg InsertChannelParams) er
 }
 
 const insertConnection = `-- name: InsertConnection :exec
-INSERT INTO ssh_connections (id, agent_id, agent_key_id, client_user, client_version, source_ip, state, opened_at, boot_id)
-VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?)
+INSERT INTO ssh_connections (id, agent_id, agent_key_id, client_user, client_version, source_ip, state, opened_at, boot_id, operator_id)
+VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
 `
 
 type InsertConnectionParams struct {
@@ -955,6 +1006,7 @@ type InsertConnectionParams struct {
 	SourceIp      string
 	OpenedAt      int64
 	BootID        string
+	OperatorID    sql.NullString
 }
 
 func (q *Queries) InsertConnection(ctx context.Context, arg InsertConnectionParams) error {
@@ -967,6 +1019,7 @@ func (q *Queries) InsertConnection(ctx context.Context, arg InsertConnectionPara
 		arg.SourceIp,
 		arg.OpenedAt,
 		arg.BootID,
+		arg.OperatorID,
 	)
 	return err
 }
@@ -1012,8 +1065,8 @@ func (q *Queries) InsertDecision(ctx context.Context, arg InsertDecisionParams) 
 
 const insertGrant = `-- name: InsertGrant :exec
 INSERT INTO grants (id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version,
-  starts_at, expires_at, state, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
+  starts_at, expires_at, state, updated_at, operator_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
 `
 
 type InsertGrantParams struct {
@@ -1029,6 +1082,7 @@ type InsertGrantParams struct {
 	StartsAt         int64
 	ExpiresAt        int64
 	UpdatedAt        int64
+	OperatorID       sql.NullString
 }
 
 func (q *Queries) InsertGrant(ctx context.Context, arg InsertGrantParams) error {
@@ -1045,14 +1099,15 @@ func (q *Queries) InsertGrant(ctx context.Context, arg InsertGrantParams) error 
 		arg.StartsAt,
 		arg.ExpiresAt,
 		arg.UpdatedAt,
+		arg.OperatorID,
 	)
 	return err
 }
 
 const insertRequest = `-- name: InsertRequest :exec
 INSERT INTO access_requests (id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state,
-  idempotency_key, policy_version, created_at, expires_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
+  idempotency_key, policy_version, created_at, expires_at, updated_at, operator_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
 `
 
 type InsertRequestParams struct {
@@ -1068,6 +1123,7 @@ type InsertRequestParams struct {
 	CreatedAt          int64
 	ExpiresAt          int64
 	UpdatedAt          int64
+	OperatorID         sql.NullString
 }
 
 func (q *Queries) InsertRequest(ctx context.Context, arg InsertRequestParams) error {
@@ -1084,6 +1140,7 @@ func (q *Queries) InsertRequest(ctx context.Context, arg InsertRequestParams) er
 		arg.CreatedAt,
 		arg.ExpiresAt,
 		arg.UpdatedAt,
+		arg.OperatorID,
 	)
 	return err
 }
@@ -1276,7 +1333,7 @@ func (q *Queries) ListRequestApprovals(ctx context.Context, requestID string) ([
 }
 
 const listRequestsForAgent = `-- name: ListRequestsForAgent :many
-SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at FROM access_requests WHERE agent_id = ? AND created_at > ? ORDER BY created_at DESC LIMIT ?
+SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at, operator_id FROM access_requests WHERE agent_id = ? AND created_at > ? ORDER BY created_at DESC LIMIT ?
 `
 
 type ListRequestsForAgentParams struct {
@@ -1310,6 +1367,7 @@ func (q *Queries) ListRequestsForAgent(ctx context.Context, arg ListRequestsForA
 			&i.ExpiresAt,
 			&i.DecidedAt,
 			&i.UpdatedAt,
+			&i.OperatorID,
 		); err != nil {
 			return nil, err
 		}
@@ -1374,7 +1432,7 @@ func (q *Queries) LiveChannels(ctx context.Context) ([]SshChannel, error) {
 }
 
 const pendingRequests = `-- name: PendingRequests :many
-SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at FROM access_requests WHERE state = 'pending' ORDER BY created_at
+SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at, operator_id FROM access_requests WHERE state = 'pending' ORDER BY created_at
 `
 
 func (q *Queries) PendingRequests(ctx context.Context) ([]AccessRequest, error) {
@@ -1402,6 +1460,7 @@ func (q *Queries) PendingRequests(ctx context.Context) ([]AccessRequest, error) 
 			&i.ExpiresAt,
 			&i.DecidedAt,
 			&i.UpdatedAt,
+			&i.OperatorID,
 		); err != nil {
 			return nil, err
 		}
@@ -1498,7 +1557,7 @@ func (q *Queries) PendingRequestsForServer(ctx context.Context, serverID string)
 }
 
 const recentGrantsForAgent = `-- name: RecentGrantsForAgent :many
-SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at FROM grants WHERE agent_id = ? AND (state = 'active' OR ended_at > ?) ORDER BY starts_at DESC LIMIT 100
+SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at, operator_id FROM grants WHERE agent_id = ? AND (state = 'active' OR ended_at > ?) ORDER BY starts_at DESC LIMIT 100
 `
 
 type RecentGrantsForAgentParams struct {
@@ -1532,6 +1591,7 @@ func (q *Queries) RecentGrantsForAgent(ctx context.Context, arg RecentGrantsForA
 			&i.EndReason,
 			&i.RevokedBy,
 			&i.UpdatedAt,
+			&i.OperatorID,
 		); err != nil {
 			return nil, err
 		}

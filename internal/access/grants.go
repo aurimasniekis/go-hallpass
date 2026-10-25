@@ -336,6 +336,9 @@ func (svc *Service) ReconcilePolicy(ctx context.Context) (canceled, revoked, cla
 		}
 		for _, g := range grants {
 			d := snap.Evaluate(g.AgentID, g.ServerID, g.RoleID)
+			if g.OperatorID.Valid {
+				d = snap.EvaluateConsole(g.ServerID, g.RoleID) // agent rules do not apply to web terminals
+			}
 			if !d.Requestable() {
 				sessID := ""
 				if s, err := tx.Q.GetSessionByGrant(ctx, g.ID); err == nil {

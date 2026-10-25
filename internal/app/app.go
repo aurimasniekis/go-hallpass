@@ -313,6 +313,13 @@ func (a *App) RunBackground(ctx context.Context) (wait func()) {
 			return a.Store.IntegrityCheck(ctx)
 		})
 	})
+	wg.Go(func() {
+		// ADR-0055: web terminals end within seconds when their administrator is disabled or loses the role.
+		jobs.Periodic(ctx, log, "access.console_operators", 2*time.Second, false, func(ctx context.Context) error {
+			_, err := a.Access.RevokeIneligibleConsoleGrants(ctx)
+			return err
+		})
+	})
 	a.RemoteBackup.Start(ctx)
 	wg.Go(func() {
 		jobs.Periodic(ctx, log, "backup.remote_schedule", time.Minute, true, a.RemoteBackup.Tick)

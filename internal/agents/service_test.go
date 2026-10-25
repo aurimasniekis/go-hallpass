@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/netip"
+	"slices"
 	"strings"
 	"testing"
 
@@ -253,7 +254,9 @@ func TestDelete(t *testing.T) {
 	if list, _ := svc.List(ctx); len(list) != 0 {
 		t.Fatalf("deleted agent listed: %+v", list)
 	}
-	if all, _ := svc.ListWithDeleted(ctx); len(all) != 1 || all[0].Name != "ci-bot" {
+	// The history list also names the built-in web terminal agent (always deleted).
+	if all, _ := svc.ListWithDeleted(ctx); len(all) != 2 || !slices.ContainsFunc(all, func(a *Agent) bool { return a.Name == "ci-bot" }) ||
+		!slices.ContainsFunc(all, func(a *Agent) bool { return a.Name == "web terminal" }) {
 		t.Fatalf("with deleted: %+v", all)
 	}
 	if _, err := svc.Update(ctx, admin, a.ID, UpdateInput{Version: got.Version, Description: ptrTo("x")}); !errors.Is(err, apperr.ErrNotFound) {

@@ -37,6 +37,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/recording"
 	"github.com/aurimasniekis/go-hallpass/internal/remotebackup"
 	"github.com/aurimasniekis/go-hallpass/internal/sshban"
+	"github.com/aurimasniekis/go-hallpass/internal/sshproxy"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 )
 
@@ -58,6 +59,8 @@ type Deps struct {
 	Notify      *notify.Service
 	Destaudit   *destaudit.Service
 	Bans        *sshban.Service
+	// Proxy runs web terminals through the SSH data plane (nil: web terminals unavailable).
+	Proxy *sshproxy.Proxy
 	// RemoteBackup manages backups to object storage.
 	RemoteBackup *remotebackup.Service
 	Matrix       *rbac.Matrix
@@ -94,6 +97,7 @@ type Server struct {
 
 	testMu      sync.Mutex
 	testResults map[string]testEntry // operatorID|providerID → latest test-login preview
+	terminals   terminalTickets      // web terminal tickets waiting for their WebSocket (ADR-0055)
 }
 
 type testEntry struct {

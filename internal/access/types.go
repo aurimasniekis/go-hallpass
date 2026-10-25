@@ -40,6 +40,17 @@ const (
 	ReasonCredentialRevoked = "credential_revoked" //nolint:gosec // G101 false positive: reason code
 	ReasonLockdown          = "lockdown"
 	ReasonShutdown          = "shutdown"
+	// ReasonTerminalClosed ends a web terminal grant when its browser connection closes.
+	ReasonTerminalClosed = "terminal_closed"
+	// ReasonOperatorIneligible ends a web terminal whose administrator was disabled or lost the role.
+	ReasonOperatorIneligible = "operator_ineligible"
+)
+
+// The built-in agent and key that web terminals run as (migration 0029). The agent is disabled and deleted and the
+// key revoked, so neither ever authenticates over SSH or appears in lists and policy.
+const (
+	ConsoleAgentID = "agt_00000000000000000000000000"
+	ConsoleKeyID   = "key_00000000000000000000000000"
 )
 
 // Errors with stable meaning for the SSH front end and API.
@@ -72,6 +83,8 @@ type Request struct {
 	ExpiresAt         time.Time     `json:"expires_at"`
 	DecidedAt         *time.Time    `json:"decided_at,omitempty"`
 	HasReason         bool          `json:"has_reason"`
+	// OperatorID names the administrator of a web terminal (agent is ConsoleAgentID); empty for agent access.
+	OperatorID string `json:"operator_id,omitempty"`
 }
 
 // Terminal reports whether the request can no longer change.
@@ -94,7 +107,12 @@ type Grant struct {
 	EndedAt       *time.Time `json:"ended_at,omitempty"`
 	EndReason     string     `json:"end_reason,omitempty"`
 	SessionID     string     `json:"session_id,omitempty"`
+	// OperatorID names the administrator of a web terminal (agent is ConsoleAgentID); empty for agent access.
+	OperatorID string `json:"operator_id,omitempty"`
 }
+
+// Console reports whether the grant is a web terminal of an administrator (ADR-0055).
+func (g *Grant) Console() bool { return g.OperatorID != "" }
 
 // ActiveAt reports whether the grant permits activity at t (expiry is time-authoritative).
 func (g *Grant) ActiveAt(t time.Time) bool { return g.State == GrantActive && t.Before(g.ExpiresAt) }
@@ -128,7 +146,7 @@ func requestFromRow(r db.AccessRequest) *Request {
 		ID: r.ID, AgentID: r.AgentID, AgentKeyID: r.AgentKeyID, ServerID: r.ServerID, RoleID: r.RoleID,
 		RequestedDuration: time.Duration(r.RequestedDurationS) * time.Second, State: r.State, StateReason: r.StateReason.String,
 		PolicyVersion: r.PolicyVersion, CreatedAt: ts(r.CreatedAt), ExpiresAt: ts(r.ExpiresAt),
-		DecidedAt: tsPtr(r.DecidedAt.Int64, r.DecidedAt.Valid), HasReason: len(r.ReasonEnc) > 0,
+		DecidedAt: tsPtr(r.DecidedAt.Int64, r.DecidedAt.Valid), HasReason: len(r.ReasonEnc) > 0, OperatorID: r.OperatorID.String,
 	}
 }
 
@@ -137,6 +155,7 @@ func grantFromRow(r db.Grant) *Grant {
 		ID: r.ID, RequestID: r.RequestID, DecisionID: r.DecisionID, AgentID: r.AgentID, ServerID: r.ServerID, RoleID: r.RoleID,
 		RemoteUser: r.RemoteUser, PolicyVersion: r.PolicyVersion, StartsAt: ts(r.StartsAt), ExpiresAt: ts(r.ExpiresAt),
 		State: r.State, EndedAt: tsPtr(r.EndedAt.Int64, r.EndedAt.Valid), EndReason: r.EndReason.String,
+		OperatorID: r.OperatorID.String,
 	}
 	_ = json.Unmarshal([]byte(r.CapabilitiesJson), &g.Capabilities)
 	return g
