@@ -804,7 +804,8 @@
   - A tag without a matching CHANGELOG section fails the release; the draft release notes are that section.
   - The release procedure is docs/RELEASING.md. Release evidence lives in `docs/evidence/vX.Y.Z/`.
 - **Open before tagging (operator):** R-08 (name/trademark check) and R-15 (versioning commitments) are marked as
-  blocking a public release and are not resolved by this ADR.
+  blocking a public release and are not resolved by this ADR. Both were resolved by operator decision on 2026-10-25,
+  before the v0.1.0 tag.
 
 ### ADR-0047 — Git remotes: plain git through the gateway, repository and ref rules, metadata-only recording
 
@@ -952,12 +953,12 @@
 | R-05 | **Default global grant-duration ceiling.** | 24 h (matches the largest preset). Roles default to a 6 h max and a 30 m default. | — |
 | R-06 | **SFTP/SCP subsystem** as a separately authorized capability. | **Resolved 2026-10-24 (operator request):** the `file-transfer` capability serves SFTP (and scp over SFTP) with per-file metadata recording (ADR-0049, security-relevant). | Resolved |
 | R-07 | **Log schema**: ECS-aligned names vs a custom namespace. | ECS-aligned core fields plus a `hallpass.*` namespace. | WP02 |
-| R-08 | **Trademark/name/domain check** for "HallPass". | Not verified. The operator should check before public release. | Public release |
+| R-08 | **Trademark/name/domain check** for "HallPass". | **Resolved 2026-10-25 (operator decision):** the operator accepted the name for the public 0.1.0 release. No trademark search was done by the agents. | Resolved |
 | R-09 | **Self-approval default.** | Prohibited by default for agent owners. Configurable. | WP08 |
 | R-10 | **Chat approvals for privileged roles.** | Allowed by default, with a per-role `approval_channels` restriction (e.g. web-only for `administrator`-class roles), and optionally require that the approver completed web MFA within N hours. | WP16 |
 | R-11 | **CSP for CSS-in-JS** (Ant Design). | Try nonce or static extraction in WP19. Otherwise accept `style-src 'unsafe-inline'` with strict `script-src`. | WP19 |
 | R-12 | **Breached-password check** (offline k-anonymity list). | Not in v1. Revisit for local-auth-heavy deployments. | — |
 | R-13 | **`restore --force`** moves existing data aside instead of refusing (ADR-0032 item 2, security-relevant). | Keep: explicit, non-destructive, lock + KEK required. | — |
 | R-14 | **Trivy unfixed-findings waiver** (ADR-0033 item 3, security-relevant). | Add `.trivyignore` with per-finding justification and expiry before 1.0; until then manual review. | RG-2 |
-| R-15 | **Versioning policy commitments** in docs/VERSIONING.md (ADR-0033 item 9). | Accept as written. | Public release |
+| R-15 | **Versioning policy commitments** in docs/VERSIONING.md (ADR-0033 item 9). | **Resolved 2026-10-25 (operator decision):** accepted as written. | Resolved |
 | R-16 | **Built-in reverse-tunnel connector** for destinations behind NAT (operator request). | Today: Tailscale, WireGuard or reverse SSH tunnels (docs/operator/remote-networks.md). Proposal: a `hallpass-connector` that dials out over mutually authenticated TLS or SSH with an enrolled Ed25519 identity, is bound to an explicit set of servers, carries only TCP to those servers' port 22 (host keys still pinned end to end), and has every stream audited. Needs operator approval of scope before implementation. | Before 1.0 or later |

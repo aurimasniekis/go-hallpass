@@ -1375,7 +1375,7 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP24 | Packaging and release pipeline | WP22, WP23 | implemented | e74a005 |
 | WP25 | Destination-side audit integration | WP12, WP21 | implemented | 1e93d1d |
 | WP26 | Hardening | WP01–WP25 | implemented | 3b246c0, ffeae3b, 6b62a86, ed5c39e, 7bf9c69, 2ddb598, 41b1db6 |
-| WP27 | Release-gate validation and RC | WP26 | in-progress | |
+| WP27 | Release-gate validation and RC | WP26 | in-progress | v0.1.0 released as pre-1.0 with known limitations; RG-1, RG-5, RG-6 fail |
 
 ---
 
@@ -1710,7 +1710,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-DOC-003` Destination hardening guide — WP25 — evidence: D — ✅ done: docs/destination/hardening.md + docs/destination/audit-collector.md
 - [ ] `HP-DOC-004` Guarantees and non-guarantees — WP27 — evidence: D — ◐ written: docs/security-guarantees.md (G-1..G-10 with status, non-guarantees, assumptions) consistent with THREAT_MODEL; release-time consistency review is part of RG-10 (WP27)
 - [x] `HP-DOC-005` Recording format spec — WP12 — evidence: D — ✅ done: docs/formats/hprec1.md + docs/operator/recording.md
-- [ ] `HP-DOC-006` Changelog and versioning — WP24 — evidence: D — ◐ done: CHANGELOG.md + docs/VERSIONING.md (policy commitments await operator review, R-15)
+- [x] `HP-DOC-006` Changelog and versioning — WP24 — evidence: D — ✅ done: CHANGELOG.md + docs/VERSIONING.md (policy commitments accepted by the operator, R-15)
 
 
 ---

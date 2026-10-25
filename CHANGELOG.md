@@ -5,68 +5,12 @@ All notable changes to HallPass are documented in this file. The format follows
 [docs/VERSIONING.md](docs/VERSIONING.md) (Semantic Versioning for the binary, with separate versioning for the REST API,
 agent JSON schemas, the recording format and the database schema).
 
-## [Unreleased]
-
-### Added
-
-- **Git remotes.** Agents clone, fetch and push with plain git through the gateway
-  (`git clone center:github/acme/api.git`), with requests, approvals and time-bound grants. Git remotes have their own
-  page with presets for GitHub, GitLab.com and Bitbucket. Access profiles limit repositories with patterns
-  (`acme/{api,web}`, `acme/*`, `**`) and pushes with branch, protected-branch and tag rules; refused pushes never
-  reach the host. Force-pushes are refused unless a profile allows them: HallPass proves every branch update is a
-  fast-forward from the pushed commits. Git operations are recorded as metadata (repository, ref updates, bytes),
-  not as byte streams.
-- **File transfer.** A new role capability, `file-transfer`, lets agents use plain `scp` and `sftp`
-  (`scp build.tar web1@center:/tmp/`, `web1+deploy@center` to name the role), with requests, approvals and grants as
-  for shell access. Every upload, download, rename, deletion and failure is recorded with its path, size and SHA-256;
-  file contents are not stored. Other SSH subsystems and the legacy scp protocol (`scp -O`) stay refused.
-- **Several approvers.** A role or git access profile can require 1–5 distinct approvers; the request stays pending
-  until enough have approved, any denial ends it, and policy never auto-approves such roles.
-- `ssh <gateway> list` marks git remotes (`kind` in `hallpass.list/v1`), and `help` shows how to use git and file
-  transfer.
-- The session timeline describes git operations, file operations and partial approvals in words.
-- **Disable, enable and delete** servers, git remotes, roles and access profiles from the console and the API
-  (`POST …/disable`, `POST …/enable`, `DELETE`), and delete agents (`DELETE /api/v1/agents/{id}`; their keys stay
-  revoked for good). Disabling ends active access and cancels pending requests. Deleting
-  also revokes the login keys and frees the name; the record stays so past sessions and the audit log can still name
-  it. Deleting a server or git remote needs its name typed and takes its roles with it.
-- **API tokens** for Terraform and scripts (**Administration → API tokens**, `/api/v1/api-tokens`): bearer tokens
-  that act for their creator with one of the creator's roles, expire after 1–366 days, and work only on configuration
-  and read operations (`x-token` in the API document). They are what the
-  [Terraform provider](https://github.com/aurimasniekis/terraform-provider-hallpass) uses.
-- Database growth bounds: delivered notifications are kept for 30 days and finished background jobs for 7 days; free
-  pages are returned to the filesystem every 5 minutes; a writer queue-depth metric.
-
-### Changed
-
-- Every configuration create (roles and access profiles, agent and host keys, login keys, OIDC providers and
-  mappings, integrations, notification routes) honors `Idempotency-Key`, so automation can retry it safely.
-- The policy page's effective-access preview names the deciding rules, and the server wizard recognizes rules that
-  reach a server through groups or labels.
-
-### Security
-
-- API tokens skip recent authentication and MFA on the operations they may use, because issuing one requires both
-  (ADR-0052). They cannot decide requests, revoke grants, read recordings, manage operators or tokens, or use lockdown.
-
-### Fixed
-
-- Scanning host keys says why it failed, for example that the address is outside `egress.allow_cidrs`, the connection
-  was refused or timed out, instead of only "no host keys could be retrieved".
-- The server and git remote lists show confirmed host keys; they showed "None active" and "Not confirmed" for every
-  entry.
-- A retired host key can be enrolled again: scanning offers it as pending for confirmation, pasting it trusts it. Both
-  failed before, because the retired entry blocked the same key.
-- `enabled` in a server or role `PATCH` was silently ignored, and the console had no way to disable either. It is
-  applied now.
-- Git access profiles show the bare public key to add on the git host. They showed an `authorized_keys` line with
-  options, which GitHub and other git hosts reject.
-
-## [0.1.0] - 2026-10-24
+## [0.1.0] - 2026-10-25
 
 First release. HallPass is a terminating SSH gateway for AI agents: agents use plain `ssh` with their own key,
 policy and a human decide what they may reach and for how long, and HallPass logs in to the destination with a
-credential the agent never sees and records the session.
+credential the agent never sees and records the session. Agents can also use git and file transfer
+through it.
 
 > **Recording format and keyring not externally reviewed.** The HPREC1 format, the keyring and field encryption have
 > had an internal review only.
@@ -87,8 +31,8 @@ credential the agent never sees and records the session.
 - **Agent SSH gateway.** A shell-free command grammar (`list`, `roles`, `request`, `status`, `cancel`, `connect`,
   `exec`, `sessions`, `whoami`, `version`, `help`) with versioned JSON output (`hallpass.*/v1`) and stable exit codes
   80–90. Exec, interactive shells and PTYs with an environment allowlist, signals and exit-status propagation.
-  Port forwarding, agent forwarding, X11 and subsystems are refused and audited. Hidden and unknown servers give the
-  same answer.
+  Port forwarding, agent forwarding, X11 and subsystems (except SFTP for file transfer) are refused and audited.
+  Hidden and unknown servers give the same answer.
 - **Destination credentials agents never see.** Managed Ed25519 login keys per server role, encrypted at rest, with
   a suggested `restrict,from="…"` line and overlap rotation, or OpenSSH user certificates from a HallPass CA that live
   about two minutes. Strict destination host-key pinning or host-CA trust, with no trust on first use. Anti-SSRF
@@ -99,6 +43,19 @@ credential the agent never sees and records the session.
 - **Requests, approvals and grants.** Deduplicated requests with reasons, approvals in the web console, Slack and
   Telegram (chat buttons re-check the approver's authority at click time), time-bound grants that never extend,
   revocation, lockdown, and termination of live sessions within 5 seconds of expiry or revocation.
+- **Git remotes.** Agents clone, fetch and push with plain git through the gateway
+  (`git clone center:github/acme/api.git`), with requests, approvals and time-bound grants. Git remotes have their own
+  page with presets for GitHub, GitLab.com and Bitbucket. Access profiles limit repositories with patterns
+  (`acme/{api,web}`, `acme/*`, `**`) and pushes with branch, protected-branch and tag rules; refused pushes never
+  reach the host. Force-pushes are refused unless a profile allows them: HallPass proves every branch update is a
+  fast-forward from the pushed commits. Git operations are recorded as metadata (repository, ref updates, bytes),
+  not as byte streams.
+- **File transfer.** A role capability, `file-transfer`, lets agents use plain `scp` and `sftp`
+  (`scp build.tar web1@center:/tmp/`, `web1+deploy@center` to name the role), with requests, approvals and grants as
+  for shell access. Every upload, download, rename, deletion and failure is recorded with its path, size and SHA-256;
+  file contents are not stored. Other SSH subsystems and the legacy scp protocol (`scp -O`) are refused.
+- **Several approvers.** A role or git access profile can require 1–5 distinct approvers; the request stays pending
+  until enough have approved, any denial ends it, and policy never auto-approves such roles.
 - **Recording and audit.** Mandatory, fail-closed session recording in the encrypted, integrity-chained HPREC1
   format; reconciliation after crashes; retention classes; export; `hallpass verify`; browser replay next to a session
   timeline; a hash-chained audit log with integrity anchors. An optional destination-side exec collector
@@ -109,6 +66,14 @@ credential the agent never sees and records the session.
 - **Web console and API.** A React web console embedded in the binary (light and dark themes): dashboard, requests,
   sessions with live activities, agents, servers, policy, operators, integrations, audit and system pages. A REST API
   (`/api/v1`, OpenAPI 3.1) and server-sent events for live updates.
+- **Lifecycle.** Disable, enable and delete servers, git remotes, roles and access profiles, and delete agents. Disabling
+  ends active access and cancels pending requests. Deleting also revokes the login keys and frees the name; the record
+  stays so past sessions and the audit log can still name it.
+- **API tokens and Terraform.** Bearer tokens for automation (**Administration → API tokens**) that act for their
+  creator with one of the creator's roles, expire after 1–366 days, and work only on configuration and read
+  operations. Every configuration create honors `Idempotency-Key`. The
+  [Terraform provider](https://github.com/aurimasniekis/terraform-provider-hallpass) manages agents, servers, git
+  remotes, roles, keys, policy, single sign-on and chat approvals with them.
 - **Operations.** One static Go binary with SQLite storage (WAL, `synchronous=FULL`), forward-only migrations with
   pre-migration snapshots, a KEK with purpose-key and KEK rotation, backup, restore and verification, Prometheus
   metrics, `/healthz` and `/readyz`, optional OpenTelemetry tracing, and ECS-aligned JSON logs with redaction.
@@ -124,6 +89,8 @@ credential the agent never sees and records the session.
 
 - An internal security review, performed by AI agents, not an external party: both HIGH and all MEDIUM findings fixed with regression tests. One LOW is accepted and one LOW is open.
 - The recording format and keyring have not been externally reviewed.
+- API tokens skip recent authentication and MFA on the operations they may use, because issuing one requires both.
+  They cannot decide requests, revoke grants, read recordings, manage operators or tokens, or use lockdown.
 
 [Unreleased]: https://github.com/aurimasniekis/go-hallpass/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/aurimasniekis/go-hallpass/releases/tag/v0.1.0
