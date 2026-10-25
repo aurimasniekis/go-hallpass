@@ -35,6 +35,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/outbox"
 	"github.com/aurimasniekis/go-hallpass/internal/policy"
 	"github.com/aurimasniekis/go-hallpass/internal/recording"
+	"github.com/aurimasniekis/go-hallpass/internal/remotebackup"
 	"github.com/aurimasniekis/go-hallpass/internal/sshban"
 	"github.com/aurimasniekis/go-hallpass/internal/sshproxy"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
@@ -75,6 +76,8 @@ type App struct {
 	Destaudit   *destaudit.Service
 	Bans        *sshban.Service
 	Proxy       *sshproxy.Proxy
+	// RemoteBackup runs scheduled backups to object storage (ADR-0054).
+	RemoteBackup *remotebackup.Service
 
 	// Recorders opens channel recordings; nil means recording is unavailable and mandatory-recording roles fail
 	// closed. New sets it to Recording.
@@ -188,6 +191,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	if a.Bans, err = sshban.New(ctx, a.Store, a.Audit, a.Clock, cfg.SSH.Ban, log); err != nil {
 		return nil, fmt.Errorf("ssh bans: %w", err)
 	}
+	a.RemoteBackup = remotebackup.New(remotebackup.Deps{Store: a.Store, Keyring: a.Keyring, Audit: a.Audit, Metrics: a.Metrics},
+		remotebackup.Options{DataDir: a.Store.Dir(), AllowInsecureHTTP: !cfg.IsProduction(), Clock: a.Clock, Logger: log})
 	a.Health = health.New(health.Options{ExposeDetails: !cfg.IsProduction()})
 	a.Health.MustRegister(
 		health.StoreHealth("store", a.Store.Health()),
@@ -308,7 +313,14 @@ func (a *App) RunBackground(ctx context.Context) (wait func()) {
 			return a.Store.IntegrityCheck(ctx)
 		})
 	})
-	return wg.Wait
+	a.RemoteBackup.Start(ctx)
+	wg.Go(func() {
+		jobs.Periodic(ctx, log, "backup.remote_schedule", time.Minute, true, a.RemoteBackup.Tick)
+	})
+	return func() {
+		wg.Wait()
+		a.RemoteBackup.Wait()
+	}
 }
 
 // Close releases storage and the audit file.
@@ -342,6 +354,7 @@ func SealedColumns() []keyring.Column {
 		keyring.FieldColumn("mfa_totp", "operator_id", "secret_enc", keyring.PurposeField),
 		keyring.FieldColumn("outbox_messages", "id", "body_enc", keyring.PurposeField),
 		keyring.FieldColumn("integrations", "id", "secrets_enc", keyring.PurposeCredential),
+		keyring.FieldColumn("backup_target", "id", "secret_enc", keyring.PurposeCredential),
 		keyring.FieldColumn("login_credentials", "id", "private_enc", keyring.PurposeCredential),
 		keyring.FieldColumn("user_cas", "id", "private_enc", keyring.PurposeCredential),
 		keyring.FieldColumn("gateway_host_keys", "id", "private_enc", keyring.PurposeCredential),

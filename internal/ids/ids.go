@@ -48,6 +48,7 @@ const (
 	Route          = "rte"
 	SSHBan         = "ban"
 	APIToken       = "atk"
+	Backup         = "bkp"
 	Boot           = "boot"
 )
 

@@ -1,4 +1,4 @@
-package backup
+package backup_test
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/aurimasniekis/go-hallpass/internal/access"
+	"github.com/aurimasniekis/go-hallpass/internal/backup"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
 	"github.com/aurimasniekis/go-hallpass/internal/sshproxy"
 )
@@ -88,15 +89,15 @@ func TestVerifyRefusesForeignSegmentPaths(t *testing.T) {
 			if path == "RECDIR/../../kek" {
 				path = filepath.Join(m.SourceDataDir, "recordings") + "/../../kek"
 			}
-			d := openWritable(t, filepath.Join(dir, DBFile))
+			d := openWritable(t, filepath.Join(dir, backup.DBFile))
 			if _, err := d.Exec("UPDATE recording_segments SET path = ?", path); err != nil {
 				t.Fatal(err)
 			}
 			must(t, d.Close())
-			rehash(t, dir, DBFile)
+			rehash(t, dir, backup.DBFile)
 			expectProblem(t, dir, "path")
-			_, err := Restore(context.Background(), dir, filepath.Join(t.TempDir(), "r"), RestoreOptions{})
-			if !errors.Is(err, ErrInvalid) {
+			_, err := backup.Restore(context.Background(), dir, filepath.Join(t.TempDir(), "r"), backup.RestoreOptions{})
+			if !errors.Is(err, backup.ErrInvalid) {
 				t.Fatalf("restore with a foreign segment path: %v", err)
 			}
 		})
@@ -122,14 +123,14 @@ func TestBackupAfterKEKRotationWithRetiredKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := filepath.Join(t.TempDir(), "b")
-	res, err := Create(ctx, f.a.Store, out, Options{})
+	res, err := backup.Create(ctx, f.a.Store, out, backup.Options{})
 	if err != nil {
 		t.Fatalf("backup after KEK rotation: %v", err)
 	}
 	if res.Manifest.KEKID != newW.ID() {
 		t.Fatalf("manifest kek_id %s, want %s", res.Manifest.KEKID, newW.ID())
 	}
-	if rep, err := Verify(ctx, out); err != nil || !rep.OK {
+	if rep, err := backup.Verify(ctx, out); err != nil || !rep.OK {
 		t.Fatalf("verify: %v %+v", err, rep)
 	}
 	_ = os.Remove(newFile)

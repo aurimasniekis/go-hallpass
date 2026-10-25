@@ -1,4 +1,4 @@
-package backup
+package backup_test
 
 import (
 	"bytes"
@@ -6,12 +6,14 @@ import (
 	"crypto/sha256"
 	"strings"
 	"testing"
+
+	"github.com/aurimasniekis/go-hallpass/internal/backup"
 )
 
 func exportAll(t *testing.T, f *fixture, since int64) (string, int) {
 	t.Helper()
 	var buf bytes.Buffer
-	n, err := ExportAnchors(f.ctx, f.a.Store.ReadDB(), since, &buf)
+	n, err := backup.ExportAnchors(f.ctx, f.a.Store.ReadDB(), since, &buf)
 	must(t, err)
 	return buf.String(), n
 }
@@ -29,9 +31,9 @@ func anchoredFixture(t *testing.T) (*fixture, string) {
 	return f, out
 }
 
-func verifyAnchors(t *testing.T, f *fixture, anchors string) *AnchorReport {
+func verifyAnchors(t *testing.T, f *fixture, anchors string) *backup.AnchorReport {
 	t.Helper()
-	rep, err := VerifyAnchors(f.ctx, f.a.Store.ReadDB(), strings.NewReader(anchors))
+	rep, err := backup.VerifyAnchors(f.ctx, f.a.Store.ReadDB(), strings.NewReader(anchors))
 	must(t, err)
 	return rep
 }
@@ -41,7 +43,7 @@ func exec(t *testing.T, f *fixture, q string, args ...any) {
 	must(t, f.a.Store.W().Exec(f.ctx, q, args...))
 }
 
-func hasProblem(rep *AnchorReport, s string) bool {
+func hasProblem(rep *backup.AnchorReport, s string) bool {
 	for _, p := range rep.Problems {
 		if strings.Contains(p, s) {
 			return true
@@ -73,7 +75,7 @@ func TestAnchors(t *testing.T) {
 		if rep := verifyAnchors(t, f, anchors+"\n"); rep.OK || !hasProblem(rep, "without a retention tombstone") {
 			t.Fatalf("after relabeling: %+v", rep)
 		}
-		if _, err := ExportAnchors(f.ctx, f.a.Store.ReadDB(), -1, &bytes.Buffer{}); err == nil {
+		if _, err := backup.ExportAnchors(f.ctx, f.a.Store.ReadDB(), -1, &bytes.Buffer{}); err == nil {
 			t.Fatal("negative since accepted")
 		}
 	})
@@ -84,7 +86,7 @@ func TestAnchors(t *testing.T) {
 		if rep.OK || !hasProblem(rep, "local chain") {
 			t.Fatalf("report %+v", rep)
 		}
-		if _, err := ExportAnchors(f.ctx, f.a.Store.ReadDB(), 0, &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "refusing") {
+		if _, err := backup.ExportAnchors(f.ctx, f.a.Store.ReadDB(), 0, &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "refusing") {
 			t.Fatalf("export of a broken chain: %v", err)
 		}
 	})
@@ -145,7 +147,7 @@ func TestAnchors(t *testing.T) {
 	t.Run("malformed input", func(t *testing.T) {
 		f, _ := anchoredFixture(t)
 		for _, in := range []string{"", "\n\n", "not json\n", `{"seq":0,"hash":"00"}`, `{"seq":1,"hash":"zz"}`, `{"seq":1,"hash":"` + strings.Repeat("0", 64) + `","x":1}`} {
-			if _, err := VerifyAnchors(context.Background(), f.a.Store.ReadDB(), strings.NewReader(in)); err == nil {
+			if _, err := backup.VerifyAnchors(context.Background(), f.a.Store.ReadDB(), strings.NewReader(in)); err == nil {
 				t.Errorf("accepted %q", in)
 			}
 		}

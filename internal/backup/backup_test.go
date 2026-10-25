@@ -1,4 +1,4 @@
-package backup
+package backup_test
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aurimasniekis/go-hallpass/internal/backup"
 	"github.com/aurimasniekis/go-hallpass/internal/recording/hprec"
 	"github.com/aurimasniekis/go-hallpass/internal/store"
 )
@@ -28,7 +29,7 @@ func TestRoundTrip(t *testing.T) {
 	seq, head, err := f.a.Recording.ChainHead(ctx)
 	must(t, err)
 	out := filepath.Join(t.TempDir(), "nested", "b1")
-	res, err := Create(ctx, f.a.Store, out, Options{})
+	res, err := backup.Create(ctx, f.a.Store, out, backup.Options{})
 	must(t, err)
 	m := res.Manifest
 	if len(res.Problems) != 0 || m.Segments.Copied != 3 || len(m.Files) != 4 || m.KEKIncluded || m.KEKID != f.a.Keyring.KEKID() ||
@@ -40,12 +41,12 @@ func TestRoundTrip(t *testing.T) {
 	must(t, filepath.WalkDir(out, func(p string, d fs.DirEntry, err error) error {
 		must(t, err)
 		rel, _ := filepath.Rel(out, p)
-		if !d.IsDir() && rel != ManifestFile && rel != ManifestSumFile && rel != DBFile && !strings.HasSuffix(rel, ".hprec") {
+		if !d.IsDir() && rel != backup.ManifestFile && rel != backup.ManifestSumFile && rel != backup.DBFile && !strings.HasSuffix(rel, ".hprec") {
 			t.Errorf("unexpected file in backup: %s", rel)
 		}
 		return nil
 	}))
-	rep, err := Verify(ctx, out)
+	rep, err := backup.Verify(ctx, out)
 	must(t, err)
 	if !rep.OK || rep.Files != 4 || rep.ChainLength != 3 || len(rep.Warnings) != 0 {
 		t.Fatalf("verify: %+v", rep)
@@ -53,7 +54,7 @@ func TestRoundTrip(t *testing.T) {
 	must(t, f.a.Close())
 
 	target := filepath.Join(t.TempDir(), "restored")
-	rr, err := Restore(ctx, out, target, RestoreOptions{KEKID: m.KEKID})
+	rr, err := backup.Restore(ctx, out, target, backup.RestoreOptions{KEKID: m.KEKID})
 	must(t, err)
 	if rr.Files != 4 || rr.MovedAside != "" {
 		t.Fatalf("restore: %+v", rr)
@@ -107,19 +108,19 @@ func TestOpenSegmentAndReadOnlySource(t *testing.T) {
 	f := newFixture(t)
 	f.finished("uptime")
 	rec := f.record("tail -f /var/log/syslog")
-	src, err := OpenReadOnly(f.ctx, f.cfg.DataDir)
+	src, err := backup.OpenReadOnly(f.ctx, f.cfg.DataDir)
 	must(t, err)
 	if src.DB() == nil || src.Dir() != f.a.Store.Dir() {
 		t.Fatal("read-only source")
 	}
 	out := filepath.Join(t.TempDir(), "b")
-	res, err := Create(f.ctx, src, out, Options{})
+	res, err := backup.Create(f.ctx, src, out, backup.Options{})
 	must(t, err)
 	must(t, src.Close())
 	if res.Manifest.Segments.Copied != 2 || res.Manifest.Segments.OpenAtSnapshot != 1 {
 		t.Fatalf("segments: %+v", res.Manifest.Segments)
 	}
-	var open *File
+	var open *backup.File
 	for i := range res.Manifest.Files {
 		if res.Manifest.Files[i].OpenAtSnapshot {
 			open = &res.Manifest.Files[i]
@@ -132,12 +133,12 @@ func TestOpenSegmentAndReadOnlySource(t *testing.T) {
 	status := 0
 	must(t, rec.Exit(&status, ""))
 	must(t, rec.Finalize("exit_status"))
-	_, err = Verify(f.ctx, out)
+	_, err = backup.Verify(f.ctx, out)
 	must(t, err)
 	must(t, f.a.Close())
 
 	target := filepath.Join(t.TempDir(), "r")
-	_, err = Restore(f.ctx, out, target, RestoreOptions{})
+	_, err = backup.Restore(f.ctx, out, target, backup.RestoreOptions{})
 	must(t, err)
 	a2 := openApp(t, testConfig(target, f.cfg.KEK.File))
 	defer a2.Close()
@@ -160,38 +161,38 @@ func backupOf(t *testing.T, n int) (string, *fixture) {
 		f.finished("cmd" + string(rune('a'+i)))
 	}
 	out := filepath.Join(t.TempDir(), "b")
-	_, err := Create(f.ctx, f.a.Store, out, Options{})
+	_, err := backup.Create(f.ctx, f.a.Store, out, backup.Options{})
 	must(t, err)
 	must(t, f.a.Close())
 	return out, f
 }
 
-func readManifestT(t *testing.T, dir string) *Manifest {
+func readManifestT(t *testing.T, dir string) *backup.Manifest {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join(dir, ManifestFile))
+	b, err := os.ReadFile(filepath.Join(dir, backup.ManifestFile))
 	must(t, err)
-	var m Manifest
+	var m backup.Manifest
 	must(t, json.Unmarshal(b, &m))
 	return &m
 }
 
 // rewriteManifest applies fn and writes a consistent manifest.json and manifest.sha256, as an attacker or a
 // careless operator could.
-func rewriteManifest(t *testing.T, dir string, fn func(*Manifest)) {
+func rewriteManifest(t *testing.T, dir string, fn func(*backup.Manifest)) {
 	t.Helper()
 	m := readManifestT(t, dir)
 	fn(m)
-	must(t, os.Remove(filepath.Join(dir, ManifestFile)))
-	must(t, os.Remove(filepath.Join(dir, ManifestSumFile)))
-	must(t, writeManifest(dir, m))
+	must(t, os.Remove(filepath.Join(dir, backup.ManifestFile)))
+	must(t, os.Remove(filepath.Join(dir, backup.ManifestSumFile)))
+	must(t, backup.WriteManifestForTest(dir, m))
 }
 
 // rehash updates the manifest entry of rel to the file's current size and hash.
 func rehash(t *testing.T, dir, rel string) {
 	t.Helper()
-	size, sum, err := hashFile(filepath.Join(dir, filepath.FromSlash(rel)))
+	size, sum, err := backup.HashFileForTest(filepath.Join(dir, filepath.FromSlash(rel)))
 	must(t, err)
-	rewriteManifest(t, dir, func(m *Manifest) {
+	rewriteManifest(t, dir, func(m *backup.Manifest) {
 		for i := range m.Files {
 			if m.Files[i].Path == rel {
 				m.Files[i].Size, m.Files[i].SHA256 = size, hex.EncodeToString(sum[:])
@@ -203,7 +204,7 @@ func rehash(t *testing.T, dir, rel string) {
 func firstSegment(t *testing.T, dir string) string {
 	t.Helper()
 	for _, f := range readManifestT(t, dir).Files {
-		if f.Kind == KindSegment {
+		if f.Kind == backup.KindSegment {
 			return f.Path
 		}
 	}
@@ -245,10 +246,10 @@ func copyTree(t *testing.T, src string) string {
 	return dst
 }
 
-func expectProblem(t *testing.T, dir, want string) *Report {
+func expectProblem(t *testing.T, dir, want string) *backup.Report {
 	t.Helper()
-	rep, err := Verify(context.Background(), dir)
-	if err == nil || !errors.Is(err, ErrInvalid) || rep.OK {
+	rep, err := backup.Verify(context.Background(), dir)
+	if err == nil || !errors.Is(err, backup.ErrInvalid) || rep.OK {
 		t.Fatalf("verify passed, want problem %q: %+v", want, rep)
 	}
 	if !strings.Contains(err.Error(), want) {
@@ -266,7 +267,7 @@ func TestVerifyDetectsTampering(t *testing.T) {
 		want string
 	}{
 		{"segment byte flipped", func(t *testing.T, dir string) { flipByteAt(t, filepath.Join(dir, firstSegment(t, dir)), -3) }, "does not match the manifest"},
-		{"database byte flipped", func(t *testing.T, dir string) { flipByteAt(t, filepath.Join(dir, DBFile), 200) }, "hallpass.db does not match"},
+		{"database byte flipped", func(t *testing.T, dir string) { flipByteAt(t, filepath.Join(dir, backup.DBFile), 200) }, "hallpass.db does not match"},
 		{"segment missing", func(t *testing.T, dir string) { must(t, os.Remove(filepath.Join(dir, firstSegment(t, dir)))) }, "is missing"},
 		{"unlisted file", func(t *testing.T, dir string) {
 			must(t, os.WriteFile(filepath.Join(dir, "recordings", "extra.hprec"), []byte("x"), 0o600))
@@ -275,13 +276,13 @@ func TestVerifyDetectsTampering(t *testing.T) {
 			must(t, os.Symlink("/etc/hosts", filepath.Join(dir, "link")))
 		}, "not a regular file"},
 		{"manifest edited without checksum", func(t *testing.T, dir string) {
-			p := filepath.Join(dir, ManifestFile)
+			p := filepath.Join(dir, backup.ManifestFile)
 			b, err := os.ReadFile(p)
 			must(t, err)
 			must(t, os.WriteFile(p, append(b, ' '), 0o600))
 		}, "does not match manifest.sha256"},
-		{"checksum file missing", func(t *testing.T, dir string) { must(t, os.Remove(filepath.Join(dir, ManifestSumFile))) }, "manifest checksum"},
-		{"manifest missing", func(t *testing.T, dir string) { must(t, os.Remove(filepath.Join(dir, ManifestFile))) }, "read manifest"},
+		{"checksum file missing", func(t *testing.T, dir string) { must(t, os.Remove(filepath.Join(dir, backup.ManifestSumFile))) }, "manifest checksum"},
+		{"manifest missing", func(t *testing.T, dir string) { must(t, os.Remove(filepath.Join(dir, backup.ManifestFile))) }, "read manifest"},
 		{"segment replaced consistently in manifest", func(t *testing.T, dir string) {
 			rel := firstSegment(t, dir)
 			flipByteAt(t, filepath.Join(dir, rel), -3)
@@ -295,8 +296,8 @@ func TestVerifyDetectsTampering(t *testing.T) {
 		{"segment dropped from manifest", func(t *testing.T, dir string) {
 			rel := firstSegment(t, dir)
 			must(t, os.Remove(filepath.Join(dir, rel)))
-			rewriteManifest(t, dir, func(m *Manifest) {
-				var keep []File
+			rewriteManifest(t, dir, func(m *backup.Manifest) {
+				var keep []backup.File
 				for _, f := range m.Files {
 					if f.Path != rel {
 						keep = append(keep, f)
@@ -306,24 +307,28 @@ func TestVerifyDetectsTampering(t *testing.T) {
 			})
 		}, "neither in the backup nor recorded as missing"},
 		{"path traversal", func(t *testing.T, dir string) {
-			rewriteManifest(t, dir, func(m *Manifest) { m.Files[1].Path = "recordings/../../etc/passwd" })
+			rewriteManifest(t, dir, func(m *backup.Manifest) { m.Files[1].Path = "recordings/../../etc/passwd" })
 		}, "invalid path"},
 		{"duplicate entry", func(t *testing.T, dir string) {
-			rewriteManifest(t, dir, func(m *Manifest) { m.Files = append(m.Files, m.Files[1]) })
+			rewriteManifest(t, dir, func(m *backup.Manifest) { m.Files = append(m.Files, m.Files[1]) })
 		}, "twice"},
 		{"wrong kind", func(t *testing.T, dir string) {
-			rewriteManifest(t, dir, func(m *Manifest) { m.Files[1].Kind = KindDatabase })
+			rewriteManifest(t, dir, func(m *backup.Manifest) { m.Files[1].Kind = backup.KindDatabase })
 		}, "inconsistent kind"},
-		{"kek claimed", func(t *testing.T, dir string) { rewriteManifest(t, dir, func(m *Manifest) { m.KEKIncluded = true }) }, "never contain"},
-		{"wrong format", func(t *testing.T, dir string) { rewriteManifest(t, dir, func(m *Manifest) { m.Format = "tar" }) }, "not a HallPass backup"},
-		{"wrong version", func(t *testing.T, dir string) { rewriteManifest(t, dir, func(m *Manifest) { m.Version = 9 }) }, "unsupported backup format"},
-		{"wrong kek id", func(t *testing.T, dir string) { rewriteManifest(t, dir, func(m *Manifest) { m.KEKID = "0000" }) }, "wrapped under KEK"},
-		{"wrong chain head", func(t *testing.T, dir string) { rewriteManifest(t, dir, func(m *Manifest) { m.ChainHead.Seq = 1 }) }, "chain head"},
+		{"kek claimed", func(t *testing.T, dir string) {
+			rewriteManifest(t, dir, func(m *backup.Manifest) { m.KEKIncluded = true })
+		}, "never contain"},
+		{"wrong format", func(t *testing.T, dir string) { rewriteManifest(t, dir, func(m *backup.Manifest) { m.Format = "tar" }) }, "not a HallPass backup"},
+		{"wrong version", func(t *testing.T, dir string) { rewriteManifest(t, dir, func(m *backup.Manifest) { m.Version = 9 }) }, "unsupported backup format"},
+		{"wrong kek id", func(t *testing.T, dir string) { rewriteManifest(t, dir, func(m *backup.Manifest) { m.KEKID = "0000" }) }, "wrapped under KEK"},
+		{"wrong chain head", func(t *testing.T, dir string) {
+			rewriteManifest(t, dir, func(m *backup.Manifest) { m.ChainHead.Seq = 1 })
+		}, "chain head"},
 		{"open flag mismatch", func(t *testing.T, dir string) {
-			rewriteManifest(t, dir, func(m *Manifest) { m.Files[1].OpenAtSnapshot = true })
+			rewriteManifest(t, dir, func(m *backup.Manifest) { m.Files[1].OpenAtSnapshot = true })
 		}, "disagree about its state"},
 		{"unknown segment", func(t *testing.T, dir string) {
-			rewriteManifest(t, dir, func(m *Manifest) { m.Files[1].SegmentID = "seg_nope" })
+			rewriteManifest(t, dir, func(m *backup.Manifest) { m.Files[1].SegmentID = "seg_nope" })
 		}, "has no row"},
 	}
 	for _, c := range cases {
@@ -331,8 +336,8 @@ func TestVerifyDetectsTampering(t *testing.T) {
 			dir := copyTree(t, base)
 			c.mod(t, dir)
 			expectProblem(t, dir, c.want)
-			_, err := Restore(context.Background(), dir, filepath.Join(t.TempDir(), "r"), RestoreOptions{})
-			if !errors.Is(err, ErrInvalid) {
+			_, err := backup.Restore(context.Background(), dir, filepath.Join(t.TempDir(), "r"), backup.RestoreOptions{})
+			if !errors.Is(err, backup.ErrInvalid) {
 				t.Fatalf("restore of a bad backup: %v", err)
 			}
 		})
@@ -344,27 +349,27 @@ func TestSchemaVersionChecks(t *testing.T) {
 	base, _ := backupOf(t, 1)
 	t.Run("manifest disagrees with database", func(t *testing.T) {
 		dir := copyTree(t, base)
-		rewriteManifest(t, dir, func(m *Manifest) { m.SchemaVersion++ })
+		rewriteManifest(t, dir, func(m *backup.Manifest) { m.SchemaVersion++ })
 		expectProblem(t, dir, "manifest says")
 	})
 	t.Run("newer than binary", func(t *testing.T) {
 		dir := copyTree(t, base)
-		d, err := sql.Open("sqlite", "file:"+filepath.Join(dir, DBFile))
+		d, err := sql.Open("sqlite", "file:"+filepath.Join(dir, backup.DBFile))
 		must(t, err)
 		_, err = d.ExecContext(context.Background(), "INSERT INTO goose_db_version (version_id, is_applied) VALUES (9999, 1)")
 		must(t, err)
 		must(t, d.Close())
-		rehash(t, dir, DBFile)
-		rewriteManifest(t, dir, func(m *Manifest) { m.SchemaVersion = 9999 })
+		rehash(t, dir, backup.DBFile)
+		rewriteManifest(t, dir, func(m *backup.Manifest) { m.SchemaVersion = 9999 })
 		expectProblem(t, dir, "newer than this binary")
-		_, err = Restore(context.Background(), dir, filepath.Join(t.TempDir(), "r"), RestoreOptions{})
-		if !errors.Is(err, store.ErrSchemaTooNew) || !errors.Is(err, ErrInvalid) {
+		_, err = backup.Restore(context.Background(), dir, filepath.Join(t.TempDir(), "r"), backup.RestoreOptions{})
+		if !errors.Is(err, store.ErrSchemaTooNew) || !errors.Is(err, backup.ErrInvalid) {
 			t.Fatalf("restore: %v", err)
 		}
 	})
 	t.Run("corrupt database copy", func(t *testing.T) {
 		dir := copyTree(t, base)
-		p := filepath.Join(dir, DBFile)
+		p := filepath.Join(dir, backup.DBFile)
 		b, err := os.ReadFile(p)
 		must(t, err)
 		// Damage a b-tree page beyond the header; the manifest is made consistent so only SQLite notices.
@@ -372,7 +377,7 @@ func TestSchemaVersionChecks(t *testing.T) {
 			b[i] = 0xff
 		}
 		must(t, os.WriteFile(p, b, 0o600))
-		rehash(t, dir, DBFile)
+		rehash(t, dir, backup.DBFile)
 		expectProblem(t, dir, "database copy")
 	})
 }
@@ -385,8 +390,8 @@ func TestRestoreTargetRules(t *testing.T) {
 	m := readManifestT(t, base)
 
 	t.Run("kek mismatch", func(t *testing.T) {
-		_, err := Restore(ctx, base, filepath.Join(t.TempDir(), "r"), RestoreOptions{KEKID: "deadbeef"})
-		if !errors.Is(err, ErrKEKMismatch) {
+		_, err := backup.Restore(ctx, base, filepath.Join(t.TempDir(), "r"), backup.RestoreOptions{KEKID: "deadbeef"})
+		if !errors.Is(err, backup.ErrKEKMismatch) {
 			t.Fatalf("got %v", err)
 		}
 	})
@@ -394,18 +399,18 @@ func TestRestoreTargetRules(t *testing.T) {
 		target := filepath.Join(t.TempDir(), "r")
 		must(t, store.PrepareDataDir(target))
 		must(t, os.WriteFile(filepath.Join(target, store.LockFile), nil, 0o600))
-		_, err := Restore(ctx, base, target, RestoreOptions{KEKID: m.KEKID})
+		_, err := backup.Restore(ctx, base, target, backup.RestoreOptions{KEKID: m.KEKID})
 		must(t, err)
 	})
 	t.Run("non-empty refused, then forced", func(t *testing.T) {
 		target := filepath.Join(t.TempDir(), "r")
-		_, err := Restore(ctx, base, target, RestoreOptions{})
+		_, err := backup.Restore(ctx, base, target, backup.RestoreOptions{})
 		must(t, err)
 		// A second restore over live data is refused and changes nothing.
 		before, err := os.ReadFile(filepath.Join(target, store.DBFile))
 		must(t, err)
-		_, err = Restore(ctx, base, target, RestoreOptions{})
-		if !errors.Is(err, ErrNotEmpty) || !strings.Contains(err.Error(), "hallpass.db") {
+		_, err = backup.Restore(ctx, base, target, backup.RestoreOptions{})
+		if !errors.Is(err, backup.ErrNotEmpty) || !strings.Contains(err.Error(), "hallpass.db") {
 			t.Fatalf("got %v", err)
 		}
 		after, err := os.ReadFile(filepath.Join(target, store.DBFile))
@@ -414,7 +419,7 @@ func TestRestoreTargetRules(t *testing.T) {
 			t.Fatal("refused restore modified the target")
 		}
 		must(t, os.WriteFile(filepath.Join(target, store.QuarantineDir, "q"), []byte("evidence"), 0o600))
-		rr, err := Restore(ctx, base, target, RestoreOptions{Force: true})
+		rr, err := backup.Restore(ctx, base, target, backup.RestoreOptions{Force: true})
 		must(t, err)
 		if rr.MovedAside == "" || len(rr.Warnings) == 0 {
 			t.Fatalf("force: %+v", rr)
@@ -438,7 +443,7 @@ func TestRestoreTargetRules(t *testing.T) {
 		l, err := store.AcquireLock(filepath.Join(target, store.LockFile))
 		must(t, err)
 		defer func() { _ = l.Release() }()
-		_, err = Restore(ctx, base, target, RestoreOptions{})
+		_, err = backup.Restore(ctx, base, target, backup.RestoreOptions{})
 		if !errors.Is(err, store.ErrLocked) {
 			t.Fatalf("got %v", err)
 		}
@@ -446,7 +451,7 @@ func TestRestoreTargetRules(t *testing.T) {
 	t.Run("same data dir path", func(t *testing.T) {
 		// Restoring onto the original location (after moving it away) needs no path rewrite.
 		must(t, os.Rename(f.cfg.DataDir, f.cfg.DataDir+".old"))
-		_, err := Restore(ctx, base, f.cfg.DataDir, RestoreOptions{KEKID: m.KEKID})
+		_, err := backup.Restore(ctx, base, f.cfg.DataDir, backup.RestoreOptions{KEKID: m.KEKID})
 		must(t, err)
 		a := openApp(t, f.cfg)
 		vr, err := a.Recording.Verify(ctx, "")
@@ -471,78 +476,30 @@ func TestCreateRecordsLiveProblems(t *testing.T) {
 	flipByteAt(t, paths[0].Path, -3)
 	must(t, os.Remove(paths[1].Path))
 	out := filepath.Join(t.TempDir(), "b")
-	res, err := Create(f.ctx, f.a.Store, out, Options{})
+	res, err := backup.Create(f.ctx, f.a.Store, out, backup.Options{})
 	must(t, err)
 	if len(res.Problems) != 1 || len(res.Manifest.Segments.Missing) != 1 || len(res.Manifest.Warnings) != 1 {
 		t.Fatalf("result: %+v", res)
 	}
-	rep, err := Verify(f.ctx, out)
+	rep, err := backup.Verify(f.ctx, out)
 	must(t, err)
 	if len(rep.Warnings) != 2 {
 		t.Fatalf("warnings: %+v", rep.Warnings)
 	}
-	if _, err := Create(f.ctx, f.a.Store, out, Options{}); !errors.Is(err, ErrExists) {
+	if _, err := backup.Create(f.ctx, f.a.Store, out, backup.Options{}); !errors.Is(err, backup.ErrExists) {
 		t.Fatalf("existing destination: %v", err)
 	}
 }
 
-func TestSegHasher(t *testing.T) {
-	body := func(n int) []byte {
-		b := append([]byte(hprec.Magic), 0, 0, 0, byte(n))
-		b = append(b, make([]byte, n+2*hprec.SlotSize)...)
-		return append(b, []byte("frames")...)
-	}
-	full := body(10)
-	h := sha256.Sum256(full[:12+10])
-	ct := sha256.Sum256([]byte("frames"))
-	run := func(b []byte, rec sql.NullInt64, chunk int) string {
-		s := newSegHasher(rec)
-		for len(b) > 0 {
-			k := min(chunk, len(b))
-			_, _ = s.Write(b[:k])
-			b = b[k:]
-		}
-		return s.check(h[:], ct[:])
-	}
-	for _, chunk := range []int{1, 7, 4096} {
-		if p := run(full, sql.NullInt64{}, chunk); p != "" {
-			t.Fatalf("chunk %d: %s", chunk, p)
-		}
-		if p := run(full, sql.NullInt64{Int64: int64(len(full)), Valid: true}, chunk); p != "" {
-			t.Fatalf("limit chunk %d: %s", chunk, p)
-		}
-	}
-	// Trailing bytes beyond the recorded size are not part of the frames region.
-	if p := run(append(full, 'x'), sql.NullInt64{Int64: int64(len(full)), Valid: true}, 5); p != "" {
-		t.Fatal(p)
-	}
-	for name, c := range map[string]struct {
-		b    []byte
-		rec  sql.NullInt64
-		want string
-	}{
-		"short":       {full[:5], sql.NullInt64{}, "not an HPREC1"},
-		"bad magic":   {append([]byte("XXXXXXXX"), full[8:]...), sql.NullInt64{}, "not an HPREC1"},
-		"no slots":    {full[:40], sql.NullInt64{}, "truncated"},
-		"zero header": {body(0), sql.NullInt64{}, "truncated"},
-		"shorter":     {full, sql.NullInt64{Int64: int64(len(full)) + 5, Valid: true}, "shorter than recorded"},
-		"frames":      {append(full[:len(full)-1], 'X'), sql.NullInt64{}, "ciphertext hash"},
-	} {
-		if p := run(c.b, c.rec, 3); !strings.Contains(p, c.want) {
-			t.Errorf("%s: got %q want %q", name, p, c.want)
-		}
-	}
-}
-
 func TestOpenReadOnlyMissing(t *testing.T) {
-	if _, err := OpenReadOnly(context.Background(), t.TempDir()); err == nil {
+	if _, err := backup.OpenReadOnly(context.Background(), t.TempDir()); err == nil {
 		t.Fatal("expected error for a directory without a database")
 	}
 }
 
 func TestReadOnlySnapshotRefusals(t *testing.T) {
 	f := newFixture(t)
-	src, err := OpenReadOnly(f.ctx, f.cfg.DataDir)
+	src, err := backup.OpenReadOnly(f.ctx, f.cfg.DataDir)
 	must(t, err)
 	defer src.Close()
 	dir := t.TempDir()
@@ -556,7 +513,7 @@ func TestReadOnlySnapshotRefusals(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(f.ctx)
 	cancel()
-	if _, err := Create(ctx, src, filepath.Join(dir, "b"), Options{}); err == nil {
+	if _, err := backup.Create(ctx, src, filepath.Join(dir, "b"), backup.Options{}); err == nil {
 		t.Fatal("canceled context accepted")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "b")); !errors.Is(err, fs.ErrNotExist) {

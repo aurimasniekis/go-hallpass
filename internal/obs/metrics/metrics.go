@@ -74,6 +74,9 @@ type Metrics struct {
 	outboxDead      prometheus.Gauge
 	deliveries      *prometheus.CounterVec
 	jobRuns         *prometheus.CounterVec
+	backupRuns      *prometheus.CounterVec
+	backupLastOK    prometheus.Gauge
+	backupDuration  prometheus.Histogram
 	httpRequests    *prometheus.CounterVec
 	httpDuration    *prometheus.HistogramVec
 	httpInFlight    prometheus.Gauge
@@ -143,6 +146,9 @@ func New() *Metrics {
 	m.outboxDead = f.gauge("outbox_dead", "Outbox messages dead-lettered after exhausting retries.")
 	m.deliveries = f.counterVec("notification_deliveries_total", "Notification delivery attempts by provider and outcome.", "provider", "outcome")
 	m.jobRuns = f.counterVec("job_runs_total", "Background job runs by job name and result.", "job", "result")
+	m.backupRuns = f.counterVec("backup_remote_runs_total", "Remote (object storage) backup runs by result.", "result")
+	m.backupLastOK = f.gauge("backup_remote_last_success_timestamp_seconds", "Start time of the last successful remote backup (Unix seconds); 0 if none.")
+	m.backupDuration = f.histogram("backup_remote_duration_seconds", "Remote backup run duration.", []float64{1, 5, 15, 60, 300, 900, 3600, 10800})
 
 	m.httpRequests = f.counterVec("http_requests_total", "HTTP requests by route template, method and status class.", "route", "method", "code")
 	m.httpDuration = f.histogramVec("http_request_duration_seconds", "HTTP request duration by route template and method.", HTTPBuckets, "route", "method")
@@ -487,6 +493,30 @@ func (m *Metrics) JobRun(job string, err error) {
 		r = "error"
 	}
 	m.jobRuns.WithLabelValues(m.jobNames.norm(job), enumJobResult.norm(r)).Inc()
+}
+
+// BackupRun counts a finished remote backup run (result: succeeded, failed).
+func (m *Metrics) BackupRun(result string, d time.Duration) {
+	if m == nil {
+		return
+	}
+	if result != "succeeded" {
+		result = "failed"
+	}
+	m.backupRuns.WithLabelValues(result).Inc()
+	m.backupDuration.Observe(d.Seconds())
+}
+
+// SetBackupLastSuccess records the start time of the last successful remote backup.
+func (m *Metrics) SetBackupLastSuccess(t time.Time) {
+	if m == nil {
+		return
+	}
+	if t.IsZero() {
+		m.backupLastOK.Set(0)
+		return
+	}
+	m.backupLastOK.Set(float64(t.Unix()))
 }
 
 // --- HTTP ---

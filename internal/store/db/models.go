@@ -172,6 +172,53 @@ type AuditEvent struct {
 	Hash          []byte
 }
 
+type BackupRemoteSegment struct {
+	SegmentID   string
+	Generation  int64
+	Object      string
+	KeyID       string
+	Size        int64
+	FirstSeenAt int64
+	GoneAt      sql.NullInt64
+}
+
+type BackupRun struct {
+	ID               string
+	Generation       int64
+	Trigger          string
+	RequestedBy      sql.NullString
+	State            string
+	StartedAt        int64
+	FinishedAt       sql.NullInt64
+	DbBytes          sql.NullInt64
+	Segments         sql.NullInt64
+	SegmentsUploaded sql.NullInt64
+	UploadedBytes    sql.NullInt64
+	Error            sql.NullString
+	RemoteState      string
+}
+
+type BackupTarget struct {
+	ID                  string
+	Enabled             int64
+	Endpoint            string
+	Region              string
+	Bucket              string
+	Prefix              string
+	PathStyle           int64
+	AccessKeyID         string
+	SecretEnc           []byte
+	CaBundlePem         string
+	AllowPrivateNetwork int64
+	IntervalSeconds     int64
+	KeepLast            int64
+	KeepDailyDays       int64
+	Generation          int64
+	Version             int64
+	CreatedAt           int64
+	UpdatedAt           int64
+}
+
 type DeliveryAttempt struct {
 	ID         int64
 	OutboxID   string
