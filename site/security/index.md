@@ -92,7 +92,7 @@ which **has not been externally reviewed**.
 
 ## Release status
 
-The current release is 0.1.1, a pre-1.0 version. Its known limitations:
+The current release is 0.2.0, a pre-1.0 version. Its known limitations:
 
 - The HPREC1 recording format, the keyring and field encryption have had internal review only, no external
   cryptographic review.

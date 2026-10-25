@@ -7,17 +7,22 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-25
+
+> **Recording format, backup format and keyring not externally reviewed.** The known limitations of
+> [0.1.0](https://github.com/aurimasniekis/go-hallpass/releases/tag/v0.1.0) still apply.
+
 ### Added
 
-- The agent page shows how to set up the agent's machine: the key command, the gateway's `known_hosts` lines and a
-  `~/.ssh/config` block with the gateway address. `ssh.public_address` sets that address when agents connect to
-  another name or port than the public URL host and the SSH listener.
 - **Backups to object storage.** HallPass backs itself up on a schedule to an S3-compatible bucket (AWS S3,
   Cloudflare R2, MinIO and others): **Administration → Backups**, `/api/v1/system/backups`, or the Terraform
   `hallpass_backup_target` resource. The database snapshot is encrypted before upload; recordings, already encrypted,
   are uploaded once and shared by later backups. Retention keeps the newest backups plus one per day. Every run is
   listed with its result, and `hallpass_backup_remote_*` metrics track them. `hallpass backup remote-list` and
   `remote-download` restore a backup on a new host with the KEK.
+- The agent page shows how to set up the agent's machine: the key command, the gateway's `known_hosts` lines and a
+  `~/.ssh/config` block with the gateway address. `ssh.public_address` sets that address when agents connect to
+  another name or port than the public URL host and the SSH listener.
 
 ### Security
 
@@ -127,6 +132,7 @@ through it.
 - API tokens skip recent authentication and MFA on the operations they may use, because issuing one requires both.
   They cannot decide requests, revoke grants, read recordings, manage operators or tokens, or use lockdown.
 
-[Unreleased]: https://github.com/aurimasniekis/go-hallpass/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/aurimasniekis/go-hallpass/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/aurimasniekis/go-hallpass/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/aurimasniekis/go-hallpass/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/aurimasniekis/go-hallpass/releases/tag/v0.1.0
