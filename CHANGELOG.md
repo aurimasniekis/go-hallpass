@@ -7,8 +7,20 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-25
+
+> **Recording format, backup format and keyring not externally reviewed.** The known limitations of
+> [0.1.0](https://github.com/aurimasniekis/go-hallpass/releases/tag/v0.1.0) still apply.
+
 ### Fixed
 
+- **The console works on phones.** Below tablet width the navigation opens from a menu button and the header stays in
+  place; on phones every table shows one card per row, with the row's actions and details kept. No page scrolls
+  sideways any more.
+- Re-authenticating through single sign-on before a sensitive action no longer shows a red "recent authentication
+  required" error while the browser goes to the identity provider.
+- A request the browser abandons (for example when a page navigates away) is no longer logged as an error; it is
+  logged at debug level with status 499. Failed API operations log the status actually sent instead of 400.
 - Startup no longer warns "recording key slot repaired from the database copy" for every recording made since the last
   start. Writing the second key slot of a healthy recording is routine and is now logged once, at info level; the
   warning stays for slots that actually stopped working.
@@ -138,7 +150,8 @@ through it.
 - API tokens skip recent authentication and MFA on the operations they may use, because issuing one requires both.
   They cannot decide requests, revoke grants, read recordings, manage operators or tokens, or use lockdown.
 
-[Unreleased]: https://github.com/aurimasniekis/go-hallpass/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/aurimasniekis/go-hallpass/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/aurimasniekis/go-hallpass/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/aurimasniekis/go-hallpass/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/aurimasniekis/go-hallpass/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/aurimasniekis/go-hallpass/releases/tag/v0.1.0
