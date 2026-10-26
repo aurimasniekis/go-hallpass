@@ -149,7 +149,8 @@ func (a *App) NewAPI() *httpapi.Server {
 		Metrics: a.Metrics,
 		Notify:  a.Notify, Destaudit: a.Destaudit, Bans: a.Bans, RemoteBackup: a.RemoteBackup, Proxy: a.Proxy, BootID: a.BootID, Version: buildinfo.Get().Version},
 		httpapi.Options{PublicURL: a.Cfg.PublicURL, Secure: strings.HasPrefix(a.Cfg.PublicURL, "https://"), TrustedProxies: proxies, UI: a.UI,
-			Clock: a.Clock, Logger: a.Log, AgentSSHHost: sshHost, AgentSSHPort: sshPort})
+			Clock: a.Clock, Logger: a.Log, AgentSSHHost: sshHost, AgentSSHPort: sshPort, EgressAllowCIDRs: a.Cfg.Egress.AllowCIDRs,
+			EgressAllowSpecialCIDRs: a.Cfg.Egress.AllowSpecialCIDRs, EgressSourceAddresses: a.Cfg.Egress.SourceAddresses})
 }
 
 // rootHandler adds the infrastructure endpoints (HP-OPS-001) and HTTP metrics/tracing (HP-OBS-003/004) around the API.

@@ -295,6 +295,7 @@ paths:
       operationId: createOperator
       tags: [operators]
       x-permission: operators.manage
+      x-token: true
       x-reauth: true
       x-mfa: true
       x-idempotency-key: true
@@ -318,7 +319,11 @@ paths:
       operationId: updateOperator
       tags: [operators]
       x-permission: operators.manage
+      x-token: true
       x-reauth: true
+      summary: >-
+        Change an operator's manual roles, operator groups or enabled state. An API token cannot change these for the
+        operator it acts for.
       x-mfa: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       requestBody:
@@ -360,6 +365,7 @@ paths:
       operationId: listOperatorIdentities
       tags: [operators]
       x-permission: operators.manage
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Identity"}}}}}}}
@@ -367,6 +373,7 @@ paths:
       operationId: linkOperatorIdentity
       tags: [operators]
       x-permission: operators.manage
+      x-token: true
       x-reauth: true
       x-mfa: true
       parameters: [{$ref: "#/components/parameters/ID"}]
@@ -380,6 +387,7 @@ paths:
       operationId: unlinkOperatorIdentity
       tags: [operators]
       x-permission: operators.manage
+      x-token: true
       x-reauth: true
       parameters:
         - {$ref: "#/components/parameters/ID"}
@@ -442,12 +450,15 @@ paths:
       operationId: createAPIToken
       tags: [operators]
       x-permission: operators.manage
+      x-token: true
       x-reauth: true
       x-mfa: true
       x-idempotency-key: true
       summary: >-
-        Issue an automation token for yourself with one of your roles. It is shown once. It works only while you are
-        enabled and still hold the role, and only on operations marked x-token.
+        Issue an automation token that acts for you with one of your roles, or any role if you are an administrator. It
+        is shown once. It works only while you are enabled and still hold the role (or administrator), and only on
+        operations marked x-token. An administrator API token may call this too: the new token is then its child, is
+        revoked with it, and cannot issue tokens itself.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: "#/components/schemas/APITokenInput"}}}
@@ -455,11 +466,23 @@ paths:
         "201": {description: created, content: {application/json: {schema: {$ref: "#/components/schemas/APITokenCreated"}}}}
         default: {$ref: "#/components/responses/Problem"}
   /api/v1/api-tokens/{id}:
+    get:
+      operationId: getAPIToken
+      tags: [operators]
+      x-permission: operators.manage
+      x-token: true
+      summary: One token's metadata. An API token sees only the tokens it issued.
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/APIToken"}}}}
+        default: {$ref: "#/components/responses/Problem"}
     delete:
       operationId: revokeAPIToken
       tags: [operators]
       x-permission: operators.manage
+      x-token: true
       x-reauth: true
+      summary: Revoke a token and the tokens it issued. An API token may revoke only the tokens it issued.
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/APIToken"}}}}
@@ -1733,6 +1756,7 @@ paths:
       operationId: listOperatorProviderLinks
       tags: [operators]
       x-permission: operators.manage
+      x-token: true
       parameters: [{$ref: "#/components/parameters/ID"}]
       responses:
         "200": {description: ok, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/ProviderLink"}}}}}}}
@@ -1740,6 +1764,7 @@ paths:
       operationId: linkOperatorProvider
       tags: [operators]
       x-permission: operators.manage
+      x-token: true
       x-reauth: true
       x-mfa: true
       parameters: [{$ref: "#/components/parameters/ID"}]
@@ -1753,6 +1778,7 @@ paths:
       operationId: unlinkOperatorProvider
       tags: [operators]
       x-permission: operators.manage
+      x-token: true
       x-reauth: true
       parameters:
         - {$ref: "#/components/parameters/ID"}
@@ -1925,6 +1951,18 @@ paths:
                   items: {type: array, items: {$ref: "#/components/schemas/GatewayHostKey"}}
                   ssh_host: {type: string}
                   ssh_port: {type: integer}
+  /api/v1/system/egress:
+    get:
+      operationId: getEgress
+      tags: [system]
+      x-permission: inventory.address.read
+      x-token: true
+      summary: >-
+        The gateway's egress configuration from its config file (read-only): the ranges destinations may resolve into
+        and the gateway's own source addresses as destinations see them.
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/Egress"}}}}
+        default: {$ref: "#/components/responses/Problem"}
   /api/v1/stats/overview:
     get:
       operationId: getStatsOverview
@@ -2219,6 +2257,7 @@ components:
         last_used_ip: {type: string}
         revoked_at: {$ref: "#/components/schemas/Timestamp"}
         revoked_by: {type: string}
+        parent_token_id: {type: string, description: The API token that issued this one, if any. Revoking it revokes this token too.}
     APITokenInput:
       type: object
       required: [name, role]
@@ -2231,7 +2270,7 @@ components:
           type: boolean
           description: >-
             Issue a token without expiry, for Terraform and break-glass automation. It still stops when it is revoked or
-            when its operator is disabled or loses the role. Omit expires_in_days.
+            when its operator is disabled or loses the role (and is not an administrator). Omit expires_in_days.
     APITokenCreated:
       type: object
       required: [token, api_token]
@@ -3062,6 +3101,13 @@ components:
           description: >-
             Slug of the enabled SSO provider the sign-in page goes to directly; "" turns it off. Omitted in a PUT, it
             is left unchanged. Email and password sign-in stays at /login/password while password login is enabled.
+    Egress:
+      type: object
+      required: [allow_cidrs, allow_special_cidrs, source_addresses]
+      properties:
+        allow_cidrs: {$ref: "#/components/schemas/StringList", description: "egress.allow_cidrs: ranges destinations may resolve into."}
+        allow_special_cidrs: {$ref: "#/components/schemas/StringList", description: "egress.allow_special_cidrs: normally denied ranges re-allowed."}
+        source_addresses: {$ref: "#/components/schemas/StringList", description: "egress.source_addresses: the gateway's egress addresses."}
     SystemStatus:
       type: object
       required: [lockdown, version, boot_id, pending_requests, active_grants, live_channels, storage_ok]

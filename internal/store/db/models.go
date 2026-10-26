@@ -110,19 +110,20 @@ type ApiIdempotency struct {
 }
 
 type ApiToken struct {
-	ID           string
-	Name         string
-	OperatorID   string
-	Role         string
-	Mac          []byte
-	Hint         string
-	CreatedAt    int64
-	ExpiresAt    int64
-	LastUsedAt   sql.NullInt64
-	LastUsedIp   sql.NullString
-	RevokedAt    sql.NullInt64
-	RevokedBy    sql.NullString
-	NeverExpires int64
+	ID            string
+	Name          string
+	OperatorID    string
+	Role          string
+	Mac           []byte
+	Hint          string
+	CreatedAt     int64
+	ExpiresAt     int64
+	LastUsedAt    sql.NullInt64
+	LastUsedIp    sql.NullString
+	RevokedAt     sql.NullInt64
+	RevokedBy     sql.NullString
+	NeverExpires  int64
+	ParentTokenID sql.NullString
 }
 
 type ApprovalDecision struct {

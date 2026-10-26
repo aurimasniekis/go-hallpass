@@ -69,8 +69,9 @@ yet.**
 - **Recovery without the KEK.** Losing it makes encrypted data unrecoverable, by design.
 
 - **API tokens skip step-up.** A configuration change that needs recent sign-in in the console does not with an
-  [API token](/operators/api-tokens). A leaked token can change configuration until it expires or is revoked, but it can
-  never approve requests, read recordings or manage operators.
+  [API token](/operators/api-tokens). A leaked token can change configuration until it expires or is revoked. It can
+  never approve requests or read recordings itself, but an **administrator** token can manage operators, so it can
+  create or re-link an approver account for whoever holds it.
 
 ## Assumptions
 

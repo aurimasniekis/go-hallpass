@@ -15,7 +15,7 @@ import { formatDateTime } from '../../lib/format';
 import { useNow } from '../../lib/useNow';
 import { usePermissions } from '../../lib/usePermissions';
 import { OperatorName } from '../../shared/names';
-import { roleLabel } from '../operators/roles';
+import { OPERATOR_ROLES, roleLabel } from '../operators/roles';
 import { useOneTimeSecret } from '../operators/useOneTimeSecret';
 import { FormModal } from '../servers/FormModal';
 
@@ -37,8 +37,9 @@ function TokenState({ token, now }: { token: APIToken; now: number }) {
 }
 
 /**
- * Automation tokens for Terraform and scripts (ADR-0052). A token acts for the operator who created it with one of
- * their roles, only on configuration and read operations; it is shown once and stored only as a keyed hash.
+ * Automation tokens for Terraform and scripts (ADR-0052, ADR-0058). A token acts for the operator who created it with
+ * one of their roles (any role for an administrator), only on configuration and read operations; it is shown once and
+ * stored only as a keyed hash. Tokens issued by an administrator token are listed with their parent.
  */
 export function ApiTokensPage() {
   const { can, me, loading } = usePermissions();
@@ -61,6 +62,9 @@ export function ApiTokensPage() {
     );
   }
   const myRoles: OperatorRole[] = me?.operator.roles ?? [];
+  const isAdmin = myRoles.includes('administrator');
+  const roleChoices = isAdmin ? OPERATOR_ROLES.map((r) => r.value) : myRoles;
+  const tokenName = (id: string) => tokens.data?.find((t) => t.id === id)?.name ?? id;
   return (
     <>
       <PageHeader
@@ -85,12 +89,14 @@ export function ApiTokensPage() {
         title="What a token can do"
         description={
           <>
-            A token acts for you, with one of your roles, until it expires or is revoked, or for good if you
-            choose &quot;Never expires&quot;. It stops working if you lose that role or your account is
-            disabled. It can read what the role allows and change configuration: agents, servers, git remotes,
-            roles, keys, policy, single sign-on and chat integrations. It can never approve or deny requests,
-            revoke access, read recordings, change operators or tokens, or use lockdown. Its changes are
-            recorded in the audit log under your name, marked with the token.
+            A token acts for you with one role until it expires or is revoked, or for good if you choose
+            &quot;Never expires&quot;. Administrators may pick any role, for example Auditor for a read-only
+            integration; other operators pick one of their own. It stops working if your account is disabled
+            or you lose that role (and are not an administrator). It can read what the role allows and change
+            configuration: agents, servers, git remotes, roles, keys, policy, single sign-on, chat
+            integrations and, with the Administrator role, operators and the tokens it issues itself. It can
+            never approve or deny requests, revoke access, read recordings, invite operators or use lockdown.
+            Its changes are recorded in the audit log under your name, marked with the token.
           </>
         }
       />
@@ -105,7 +111,20 @@ export function ApiTokensPage() {
         emptyTitle="No API tokens"
         emptyDescription="Create one for Terraform or a script. It is shown once."
         columns={[
-          { key: 'name', title: 'Name', render: (_, t) => <strong>{t.name}</strong> },
+          {
+            key: 'name',
+            title: 'Name',
+            render: (_, t) => (
+              <>
+                <strong>{t.name}</strong>
+                {t.parent_token_id ? (
+                  <div style={{ color: 'var(--hp-color-text-secondary)' }}>
+                    Issued by token {tokenName(t.parent_token_id)}
+                  </div>
+                ) : null}
+              </>
+            ),
+          },
           {
             key: 'hint',
             title: 'Token',
@@ -141,7 +160,7 @@ export function ApiTokensPage() {
                   title={`Revoke the token ${t.name}?`}
                   confirmLabel="Revoke"
                   buttonProps={{ size: 'small', 'aria-label': `Revoke token ${t.name}` }}
-                  description="Anything using it stops working immediately. This cannot be undone."
+                  description="Anything using it stops working immediately, and so do the tokens it issued. This cannot be undone."
                   onConfirm={async () => {
                     await api.call('delete', '/api/v1/api-tokens/{id}', { path: { id: t.id } });
                     return undefined;
@@ -161,7 +180,7 @@ export function ApiTokensPage() {
         okText="Create token"
         formLabel="New API token"
         initialValues={{
-          role: myRoles.includes('administrator') ? 'administrator' : myRoles[0],
+          role: isAdmin ? 'administrator' : myRoles[0],
           expires_in_days: 90,
           never_expires: false,
         }}
@@ -192,8 +211,17 @@ export function ApiTokensPage() {
         >
           <Input autoComplete="off" />
         </Form.Item>
-        <Form.Item name="role" label="Role" extra="One of your own roles." rules={[{ required: true }]}>
-          <Select options={myRoles.map((r) => ({ value: r, label: roleLabel(r) }))} />
+        <Form.Item
+          name="role"
+          label="Role"
+          extra={
+            isAdmin
+              ? 'Any role. Pick the least the automation needs, e.g. Auditor for a read-only integration.'
+              : 'One of your own roles.'
+          }
+          rules={[{ required: true }]}
+        >
+          <Select options={roleChoices.map((r) => ({ value: r, label: roleLabel(r) }))} />
         </Form.Item>
         <Form.Item
           name="never_expires"

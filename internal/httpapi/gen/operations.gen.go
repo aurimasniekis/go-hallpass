@@ -26,8 +26,9 @@ var Operations = []Operation{
 	{ID: "getAgentOwners", Method: "GET", Path: "/api/v1/agents/{id}/owners", Permission: "policy.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"agents", "policy"}},
 	{ID: "setAgentOwners", Method: "PUT", Path: "/api/v1/agents/{id}/owners", Permission: "policy.write", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"agents", "policy"}},
 	{ID: "listAPITokens", Method: "GET", Path: "/api/v1/api-tokens", Permission: "operators.manage", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"operators"}},
-	{ID: "createAPIToken", Method: "POST", Path: "/api/v1/api-tokens", Permission: "operators.manage", Reauth: true, MFA: true, Idempotent: true, Stream: false, Redirect: false, Token: false, Tags: []string{"operators"}},
-	{ID: "revokeAPIToken", Method: "DELETE", Path: "/api/v1/api-tokens/{id}", Permission: "operators.manage", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"operators"}},
+	{ID: "createAPIToken", Method: "POST", Path: "/api/v1/api-tokens", Permission: "operators.manage", Reauth: true, MFA: true, Idempotent: true, Stream: false, Redirect: false, Token: true, Tags: []string{"operators"}},
+	{ID: "getAPIToken", Method: "GET", Path: "/api/v1/api-tokens/{id}", Permission: "operators.manage", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"operators"}},
+	{ID: "revokeAPIToken", Method: "DELETE", Path: "/api/v1/api-tokens/{id}", Permission: "operators.manage", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"operators"}},
 	{ID: "listAuditEvents", Method: "GET", Path: "/api/v1/audit-events", Permission: "audit.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"audit"}},
 	{ID: "verifyAuditChain", Method: "GET", Path: "/api/v1/audit-events/verify", Permission: "audit.verify", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"audit"}},
 	{ID: "bootstrap", Method: "POST", Path: "/api/v1/auth/bootstrap", Permission: "public", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"auth"}},
@@ -91,16 +92,16 @@ var Operations = []Operation{
 	{ID: "deleteOIDCMapping", Method: "DELETE", Path: "/api/v1/oidc-providers/{id}/mappings/{mid}", Permission: "auth.settings", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"sso"}},
 	{ID: "getOIDCTestLogin", Method: "GET", Path: "/api/v1/oidc-providers/{id}/test-login", Permission: "auth.settings", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"sso"}},
 	{ID: "listOperators", Method: "GET", Path: "/api/v1/operators", Permission: "operators.manage", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"operators"}},
-	{ID: "createOperator", Method: "POST", Path: "/api/v1/operators", Permission: "operators.manage", Reauth: true, MFA: true, Idempotent: true, Stream: false, Redirect: false, Token: false, Tags: []string{"operators"}},
+	{ID: "createOperator", Method: "POST", Path: "/api/v1/operators", Permission: "operators.manage", Reauth: true, MFA: true, Idempotent: true, Stream: false, Redirect: false, Token: true, Tags: []string{"operators"}},
 	{ID: "getOperator", Method: "GET", Path: "/api/v1/operators/{id}", Permission: "operators.manage", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"operators"}},
-	{ID: "updateOperator", Method: "PATCH", Path: "/api/v1/operators/{id}", Permission: "operators.manage", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"operators"}},
-	{ID: "listOperatorIdentities", Method: "GET", Path: "/api/v1/operators/{id}/identities", Permission: "operators.manage", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"operators"}},
-	{ID: "linkOperatorIdentity", Method: "POST", Path: "/api/v1/operators/{id}/identities", Permission: "operators.manage", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"operators"}},
-	{ID: "unlinkOperatorIdentity", Method: "DELETE", Path: "/api/v1/operators/{id}/identities", Permission: "operators.manage", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"operators"}},
+	{ID: "updateOperator", Method: "PATCH", Path: "/api/v1/operators/{id}", Permission: "operators.manage", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"operators"}},
+	{ID: "listOperatorIdentities", Method: "GET", Path: "/api/v1/operators/{id}/identities", Permission: "operators.manage", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"operators"}},
+	{ID: "linkOperatorIdentity", Method: "POST", Path: "/api/v1/operators/{id}/identities", Permission: "operators.manage", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"operators"}},
+	{ID: "unlinkOperatorIdentity", Method: "DELETE", Path: "/api/v1/operators/{id}/identities", Permission: "operators.manage", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"operators"}},
 	{ID: "issueLinkInvite", Method: "POST", Path: "/api/v1/operators/{id}/link-invite", Permission: "operators.manage", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"operators"}},
-	{ID: "listOperatorProviderLinks", Method: "GET", Path: "/api/v1/operators/{id}/provider-links", Permission: "operators.manage", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"operators"}},
-	{ID: "linkOperatorProvider", Method: "POST", Path: "/api/v1/operators/{id}/provider-links", Permission: "operators.manage", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"operators"}},
-	{ID: "unlinkOperatorProvider", Method: "DELETE", Path: "/api/v1/operators/{id}/provider-links", Permission: "operators.manage", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"operators"}},
+	{ID: "listOperatorProviderLinks", Method: "GET", Path: "/api/v1/operators/{id}/provider-links", Permission: "operators.manage", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"operators"}},
+	{ID: "linkOperatorProvider", Method: "POST", Path: "/api/v1/operators/{id}/provider-links", Permission: "operators.manage", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"operators"}},
+	{ID: "unlinkOperatorProvider", Method: "DELETE", Path: "/api/v1/operators/{id}/provider-links", Permission: "operators.manage", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"operators"}},
 	{ID: "issueResetToken", Method: "POST", Path: "/api/v1/operators/{id}/reset-token", Permission: "operators.manage", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"operators"}},
 	{ID: "listOperatorSessions", Method: "GET", Path: "/api/v1/operators/{id}/sessions", Permission: "operators.manage", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"operators"}},
 	{ID: "revokeOperatorSessions", Method: "DELETE", Path: "/api/v1/operators/{id}/sessions", Permission: "operators.manage", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"operators"}},
@@ -160,6 +161,7 @@ var Operations = []Operation{
 	{ID: "deleteBackupTarget", Method: "DELETE", Path: "/api/v1/system/backups/target", Permission: "system.settings", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"system"}},
 	{ID: "testBackupTarget", Method: "POST", Path: "/api/v1/system/backups/target/test", Permission: "system.settings", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"system"}},
 	{ID: "acknowledgeBreakGlass", Method: "POST", Path: "/api/v1/system/breakglass-ack", Permission: "system.settings", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"system"}},
+	{ID: "getEgress", Method: "GET", Path: "/api/v1/system/egress", Permission: "inventory.address.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"system"}},
 	{ID: "listGatewayHostKeys", Method: "GET", Path: "/api/v1/system/gateway-host-keys", Permission: "dashboard.view", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"system"}},
 	{ID: "enableLockdown", Method: "POST", Path: "/api/v1/system/lockdown", Permission: "system.lockdown.enable", Reauth: true, MFA: false, Idempotent: true, Stream: false, Redirect: false, Token: false, Tags: []string{"system"}},
 	{ID: "liftLockdown", Method: "DELETE", Path: "/api/v1/system/lockdown", Permission: "system.lockdown.lift", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: false, Tags: []string{"system"}},
@@ -220,6 +222,8 @@ type Server interface {
 	ListAPITokens(c *Call) (*Result, error)
 	// CreateAPIToken POST /api/v1/api-tokens (permission operators.manage)
 	CreateAPIToken(c *Call) (*Result, error)
+	// GetAPIToken GET /api/v1/api-tokens/{id} (permission operators.manage)
+	GetAPIToken(c *Call) (*Result, error)
 	// RevokeAPIToken DELETE /api/v1/api-tokens/{id} (permission operators.manage)
 	RevokeAPIToken(c *Call) (*Result, error)
 	// ListAuditEvents GET /api/v1/audit-events (permission audit.read)
@@ -486,6 +490,8 @@ type Server interface {
 	TestBackupTarget(c *Call) (*Result, error)
 	// AcknowledgeBreakGlass POST /api/v1/system/breakglass-ack (permission system.settings)
 	AcknowledgeBreakGlass(c *Call) (*Result, error)
+	// GetEgress GET /api/v1/system/egress (permission inventory.address.read)
+	GetEgress(c *Call) (*Result, error)
 	// ListGatewayHostKeys GET /api/v1/system/gateway-host-keys (permission dashboard.view)
 	ListGatewayHostKeys(c *Call) (*Result, error)
 	// EnableLockdown POST /api/v1/system/lockdown (permission system.lockdown.enable)
@@ -534,6 +540,7 @@ func Handlers(s Server) map[string]Handler {
 		"setAgentOwners":                s.SetAgentOwners,
 		"listAPITokens":                 s.ListAPITokens,
 		"createAPIToken":                s.CreateAPIToken,
+		"getAPIToken":                   s.GetAPIToken,
 		"revokeAPIToken":                s.RevokeAPIToken,
 		"listAuditEvents":               s.ListAuditEvents,
 		"verifyAuditChain":              s.VerifyAuditChain,
@@ -667,6 +674,7 @@ func Handlers(s Server) map[string]Handler {
 		"deleteBackupTarget":            s.DeleteBackupTarget,
 		"testBackupTarget":              s.TestBackupTarget,
 		"acknowledgeBreakGlass":         s.AcknowledgeBreakGlass,
+		"getEgress":                     s.GetEgress,
 		"listGatewayHostKeys":           s.ListGatewayHostKeys,
 		"enableLockdown":                s.EnableLockdown,
 		"liftLockdown":                  s.LiftLockdown,

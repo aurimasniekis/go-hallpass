@@ -1088,6 +1088,59 @@
   events from the feed, not from HallPass. Each audit event and published session event costs one more row in its
   write transaction while publishing is enabled. New dependencies: go-pulse and nats.go (plus nats-server in tests).
 
+### ADR-0058 — API tokens for any role, issued by administrator tokens (security-relevant change)
+
+- **Status:** accepted (operator request, 2026-10-26). **Security-relevant change, flagged for operator review:** it
+  relaxes ADR-0052's "a token carries one of its creator's roles" and "tokens cannot issue tokens".
+- **Context:** the operator wants Terraform to manage API tokens, starting with a read-only (Auditor) token for an
+  integration. Under ADR-0052 a person had to hold Auditor to mint it, and only in the console, while Terraform's own
+  token is an Administrator token that could not issue tokens.
+- **Decision:**
+  - An administrator may issue a token with **any** role, because the administrator role holds every permission of
+    every other role (`rbac.New`). A token then works while its creator is enabled and holds its role **or**
+    administrator. Other operators still choose one of their own roles.
+  - `createAPIToken`, `revokeAPIToken` and a new `getAPIToken` are `x-token`. Since they need `operators.manage`, only
+    administrator tokens can use them, without recent authentication or MFA (as ADR-0052 for the other `x-token`
+    operations).
+  - A token issued by a token records `parent_token_id` (migration 0031). The parent sees and revokes only its own
+    children (others answer 404); `listAPITokens` stays console-only. Revoking a token revokes its children in the same
+    transaction, each audited. A child cannot issue tokens, so the chain is at most one level deep.
+  - `api_token.created` from a token names the parent (`via: api_token:<id>`, `parent_token_id`).
+- **Alternatives:** service-account operators without console login (a new principal with its own role assignment and
+  UI; can be added later, and a token issued by Terraform already acts for an accountable administrator); limiting
+  token-issued tokens to non-administrator roles (little gain once ADR-0059 lets an administrator token create
+  administrator operators).
+- **Consequences:** a leaked administrator token can mint further tokens; revoking it revokes them too, and they all
+  stop when the creating administrator is disabled. A token for a role the creator does not hold no longer depends on
+  that role assignment, only on the creator staying administrator.
+
+### ADR-0059 — Operator management with API tokens, and a read-only egress endpoint (security-relevant change)
+
+- **Status:** accepted (operator decision, 2026-10-26: "full operator management"). **Security-relevant change,
+  flagged for operator review:** privilege changes no longer need a person with recent authentication and MFA.
+- **Context:** the operator wants operators, their roles, single sign-on identities and chat accounts declared in
+  Terraform. ADR-0052 kept operator changes console-only.
+- **Decision:**
+  - `createOperator`, `updateOperator` (manual roles, operator groups, enabled), `list/link/unlinkOperatorIdentity`
+    and `list/link/unlinkOperatorProvider` (chat accounts) are `x-token`. They need `operators.manage`
+    (administrator tokens) and skip recent authentication and MFA. Every change is audited under the token's operator
+    with `via: api_token:<id>`. The last-administrator and SSO-administrator guards apply unchanged.
+  - A token cannot change the roles, groups or enabled state of the operator it acts for, so automation cannot lock
+    out or re-shape the account its token depends on. It may link SSO identities and chat accounts to that operator.
+  - Invitations, password-reset and link-invite tokens, operator sessions and break-glass stay console-only.
+  - `GET /api/v1/system/egress` (`inventory.address.read`, `x-token`) shows `egress.allow_cidrs`,
+    `egress.allow_special_cidrs` and `egress.source_addresses` read-only. **They stay in the configuration file:**
+    the egress allow list is the guard against a compromised administrator session or token aiming a server at internal
+    or metadata addresses (THREAT_MODEL T-19), so it is neither managed through the API nor derived from servers.
+- **Alternatives:** non-administrator role assignments only (the operator chose full management); an API-managed
+  egress list within a configuration ceiling (no gain over setting the configuration range to the destination
+  subnets).
+- **Consequences:** **a leaked administrator token can now take over access approval**: create an administrator or
+  approver operator, link an attacker's SSO identity or chat account to it (or to an existing approver), and approve
+  requests as that operator. ADR-0052's "a leaked token cannot approve the resulting requests" no longer holds for
+  administrator tokens. Keep Terraform's token in a secret manager, watch its last use, prefer non-administrator tokens
+  for everything that only reads, and review `operator.*` audit events with `via: api_token:*`.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

@@ -41,9 +41,11 @@ type Principal struct {
 	Limited     bool
 	NeedsEnroll bool
 	// TokenID is set when the request used an automation token instead of a browser session.
-	TokenID    string
-	tokenHash  []byte
-	csrfSecret []byte
+	TokenID string
+	// TokenParentID is set when that token was itself issued by an API token (ADR-0058).
+	TokenParentID string
+	tokenHash     []byte
+	csrfSecret    []byte
 }
 
 // MFASatisfied reports whether this session completed MFA (or does not need it).

@@ -88,4 +88,27 @@ describe('<ApiTokensPage>', () => {
     const post = calls.find((c) => c.method === 'POST');
     expect(post?.body).toEqual({ name: 'tf', role: 'administrator', never_expires: true });
   });
+
+  it('lets an administrator pick any role and names the token that issued a child', async () => {
+    const user = userEvent.setup();
+    const child = { ...token, id: 'atk_4', name: 'deed', role: 'auditor', parent_token_id: 'atk_1' };
+    const { calls } = mockApi({
+      'GET /api/v1/me': makeMe({ permissions: ['operators.manage'], operator: { roles: ['administrator'] } }),
+      'GET /api/v1/api-tokens': { items: [token, child] },
+      'GET /api/v1/operators': { items: [] },
+      'POST /api/v1/api-tokens': () => jsonResponse(201, { token: 'hallpass_at_audit', api_token: child }),
+    });
+    renderInRouter(<ApiTokensPage />);
+    expect(await screen.findByText('Issued by token terraform')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /New token/ }));
+    const form = await screen.findByRole('form', { name: 'New API token' });
+    await user.type(within(form).getByLabelText('Name'), 'deed');
+    await user.click(within(form).getByLabelText('Role'));
+    await user.click(await screen.findByTitle('Auditor'));
+    await user.click(screen.getByRole('button', { name: 'Create token' }));
+    expect(await screen.findByText('hallpass_at_audit')).toBeInTheDocument();
+    const post = calls.find((c) => c.method === 'POST');
+    expect(post?.body).toEqual({ name: 'deed', role: 'auditor', expires_in_days: 90 });
+  });
 });

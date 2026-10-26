@@ -67,7 +67,8 @@ flowchart LR
 - **Operators** with Argon2id passwords and TOTP or OIDC single sign-on, and administrator, approver, auditor and
   viewer roles.
 - **Configuration as code** with the [Terraform provider](https://github.com/aurimasniekis/terraform-provider-hallpass)
-  and API tokens: agents, servers, git remotes, roles, keys, policy, single sign-on and chat approvals.
+  and API tokens: agents, servers, git remotes, roles, keys, policy, single sign-on, chat approvals, operators and API
+  tokens.
 - **One Go binary** with the web UI embedded and SQLite storage. Encrypted, scheduled backups to S3-compatible storage
   (or to disk), restore, integrity anchors, Prometheus metrics, health checks and optional OpenTelemetry tracing.
 

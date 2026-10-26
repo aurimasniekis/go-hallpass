@@ -7,6 +7,25 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+### Added
+
+- **Operators and API tokens from Terraform.** Administrator API tokens may create operators, set their roles,
+  operator groups and enabled state, and link single sign-on identities and chat accounts; they may also issue, read and
+  revoke tokens of their own. A token cannot change the roles or enabled state of the operator it acts for.
+- `GET /api/v1/system/egress` shows the egress settings from the configuration file (read-only).
+
+### Changed
+
+- An administrator may issue an API token with **any** role, for example Auditor for a read-only integration, without
+  holding that role. The token works while its creator stays an administrator.
+- Revoking an API token also revokes the tokens it issued. A token issued by a token cannot issue tokens.
+
+### Security
+
+- Administrator API tokens can now manage operators without recent sign-in or MFA, so a leaked administrator token can
+  create or re-link an approver account and approve requests with it. Use the least role an integration needs and
+  review operator changes made through tokens.
+
 ## [0.4.0] - 2026-10-26
 
 > **Recording format, backup format and keyring not externally reviewed.** The known limitations of

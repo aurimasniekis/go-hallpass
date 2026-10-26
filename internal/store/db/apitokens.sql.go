@@ -11,7 +11,7 @@ import (
 )
 
 const getAPIToken = `-- name: GetAPIToken :one
-SELECT id, name, operator_id, role, mac, hint, created_at, expires_at, last_used_at, last_used_ip, revoked_at, revoked_by, never_expires FROM api_tokens WHERE id = ?
+SELECT id, name, operator_id, role, mac, hint, created_at, expires_at, last_used_at, last_used_ip, revoked_at, revoked_by, never_expires, parent_token_id FROM api_tokens WHERE id = ?
 `
 
 func (q *Queries) GetAPIToken(ctx context.Context, id string) (ApiToken, error) {
@@ -31,12 +31,13 @@ func (q *Queries) GetAPIToken(ctx context.Context, id string) (ApiToken, error) 
 		&i.RevokedAt,
 		&i.RevokedBy,
 		&i.NeverExpires,
+		&i.ParentTokenID,
 	)
 	return i, err
 }
 
 const getAPITokenByMAC = `-- name: GetAPITokenByMAC :one
-SELECT id, name, operator_id, role, mac, hint, created_at, expires_at, last_used_at, last_used_ip, revoked_at, revoked_by, never_expires FROM api_tokens WHERE mac = ?
+SELECT id, name, operator_id, role, mac, hint, created_at, expires_at, last_used_at, last_used_ip, revoked_at, revoked_by, never_expires, parent_token_id FROM api_tokens WHERE mac = ?
 `
 
 func (q *Queries) GetAPITokenByMAC(ctx context.Context, mac []byte) (ApiToken, error) {
@@ -56,25 +57,27 @@ func (q *Queries) GetAPITokenByMAC(ctx context.Context, mac []byte) (ApiToken, e
 		&i.RevokedAt,
 		&i.RevokedBy,
 		&i.NeverExpires,
+		&i.ParentTokenID,
 	)
 	return i, err
 }
 
 const insertAPIToken = `-- name: InsertAPIToken :exec
-INSERT INTO api_tokens (id, name, operator_id, role, mac, hint, created_at, expires_at, never_expires)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO api_tokens (id, name, operator_id, role, mac, hint, created_at, expires_at, never_expires, parent_token_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertAPITokenParams struct {
-	ID           string
-	Name         string
-	OperatorID   string
-	Role         string
-	Mac          []byte
-	Hint         string
-	CreatedAt    int64
-	ExpiresAt    int64
-	NeverExpires int64
+	ID            string
+	Name          string
+	OperatorID    string
+	Role          string
+	Mac           []byte
+	Hint          string
+	CreatedAt     int64
+	ExpiresAt     int64
+	NeverExpires  int64
+	ParentTokenID sql.NullString
 }
 
 func (q *Queries) InsertAPIToken(ctx context.Context, arg InsertAPITokenParams) error {
@@ -88,12 +91,13 @@ func (q *Queries) InsertAPIToken(ctx context.Context, arg InsertAPITokenParams) 
 		arg.CreatedAt,
 		arg.ExpiresAt,
 		arg.NeverExpires,
+		arg.ParentTokenID,
 	)
 	return err
 }
 
 const listAPITokens = `-- name: ListAPITokens :many
-SELECT id, name, operator_id, role, mac, hint, created_at, expires_at, last_used_at, last_used_ip, revoked_at, revoked_by, never_expires FROM api_tokens ORDER BY revoked_at IS NOT NULL, created_at DESC
+SELECT id, name, operator_id, role, mac, hint, created_at, expires_at, last_used_at, last_used_ip, revoked_at, revoked_by, never_expires, parent_token_id FROM api_tokens ORDER BY revoked_at IS NOT NULL, created_at DESC
 `
 
 func (q *Queries) ListAPITokens(ctx context.Context) ([]ApiToken, error) {
@@ -119,10 +123,38 @@ func (q *Queries) ListAPITokens(ctx context.Context) ([]ApiToken, error) {
 			&i.RevokedAt,
 			&i.RevokedBy,
 			&i.NeverExpires,
+			&i.ParentTokenID,
 		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveChildAPITokens = `-- name: ListActiveChildAPITokens :many
+SELECT id FROM api_tokens WHERE parent_token_id = ?1 AND revoked_at IS NULL ORDER BY id
+`
+
+func (q *Queries) ListActiveChildAPITokens(ctx context.Context, parent sql.NullString) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveChildAPITokens, parent)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

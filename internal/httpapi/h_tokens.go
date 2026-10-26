@@ -3,6 +3,7 @@ package httpapi
 import (
 	"time"
 
+	"github.com/aurimasniekis/go-hallpass/internal/apperr"
 	"github.com/aurimasniekis/go-hallpass/internal/httpapi/gen"
 	"github.com/aurimasniekis/go-hallpass/internal/opauth"
 )
@@ -35,7 +36,30 @@ func (s *Server) CreateAPIToken(c *gen.Call) (*gen.Result, error) {
 	}{token, t})
 }
 
+// visibleAPIToken returns a token's metadata; an API token sees only the tokens it issued (ADR-0058).
+func (s *Server) visibleAPIToken(c *gen.Call) (*opauth.APIToken, error) {
+	t, err := s.d.Auth.GetAPIToken(c.R.Context(), c.R.PathValue("id"))
+	if err != nil {
+		return nil, err
+	}
+	if c.Principal.TokenID != "" && t.ParentTokenID != c.Principal.TokenID {
+		return nil, apperr.New(apperr.CodeNotFound, "API token not found")
+	}
+	return t, nil
+}
+
+func (s *Server) GetAPIToken(c *gen.Call) (*gen.Result, error) {
+	t, err := s.visibleAPIToken(c)
+	if err != nil {
+		return nil, err
+	}
+	return ok(t)
+}
+
 func (s *Server) RevokeAPIToken(c *gen.Call) (*gen.Result, error) {
+	if _, err := s.visibleAPIToken(c); err != nil {
+		return nil, err
+	}
 	t, err := s.d.Auth.RevokeAPIToken(c.R.Context(), actor(c), c.R.PathValue("id"))
 	if err != nil {
 		return nil, err

@@ -609,6 +609,21 @@ func (s *Server) setLockdown(c *gen.Call, on bool) (*gen.Result, error) {
 func (s *Server) EnableLockdown(c *gen.Call) (*gen.Result, error) { return s.setLockdown(c, true) }
 func (s *Server) LiftLockdown(c *gen.Call) (*gen.Result, error)   { return s.setLockdown(c, false) }
 
+// GetEgress returns the egress configuration (read-only; it lives in the config file, ADR-0059).
+func (s *Server) GetEgress(*gen.Call) (*gen.Result, error) {
+	nonNil := func(v []string) []string {
+		if v == nil {
+			return []string{}
+		}
+		return v
+	}
+	return ok(struct {
+		AllowCIDRs        []string `json:"allow_cidrs"`
+		AllowSpecialCIDRs []string `json:"allow_special_cidrs"`
+		SourceAddresses   []string `json:"source_addresses"`
+	}{nonNil(s.o.EgressAllowCIDRs), nonNil(s.o.EgressAllowSpecialCIDRs), nonNil(s.o.EgressSourceAddresses)})
+}
+
 func (s *Server) ListGatewayHostKeys(c *gen.Call) (*gen.Result, error) {
 	v, err := s.d.Credentials.GatewayHostKeys(c.R.Context())
 	if err != nil {

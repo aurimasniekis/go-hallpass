@@ -361,6 +361,9 @@ func (s *Server) UpdateOperator(c *gen.Call) (*gen.Result, error) {
 		return nil, err
 	}
 	ctx, id := c.R.Context(), c.R.PathValue("id")
+	if err := notTokenOwner(c, id); err != nil {
+		return nil, err
+	}
 	if in.Enabled != nil && !*in.Enabled && id == c.Principal.Operator.ID {
 		return nil, apperr.New(apperr.CodePrecondition, "you cannot disable your own account")
 	}
@@ -410,6 +413,15 @@ func (s *Server) RevokeOperatorSessions(c *gen.Call) (*gen.Result, error) {
 		return nil, err
 	}
 	return noContent()
+}
+
+// notTokenOwner refuses an API token's change to the roles, groups or enabled state of the operator it acts for
+// (ADR-0059): Terraform must not lock out or re-shape the account its own token depends on.
+func notTokenOwner(c *gen.Call, operatorID string) error {
+	if c.Principal.TokenID != "" && operatorID == c.Principal.Operator.ID {
+		return apperr.New(apperr.CodePrecondition, "an API token cannot change the operator it acts for")
+	}
+	return nil
 }
 
 func (s *Server) ListOperatorIdentities(c *gen.Call) (*gen.Result, error) {

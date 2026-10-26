@@ -74,6 +74,8 @@ type Options struct {
 	// AgentSSHHost and AgentSSHPort are where agents connect over SSH (shown in the console's SSH setup).
 	AgentSSHHost string
 	AgentSSHPort int
+	// Egress* are the config file's egress settings, shown read-only (getEgress).
+	EgressAllowCIDRs, EgressAllowSpecialCIDRs, EgressSourceAddresses []string
 	// PublicURL is the external origin; mutations must carry a matching Origin header.
 	PublicURL string
 	// Secure selects __Host- cookies with the Secure flag and HSTS (production / https).

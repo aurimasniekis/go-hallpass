@@ -1408,8 +1408,8 @@ func TestAPITokenAPI(t *testing.T) {
 		t.Fatalf("delete (x-reauth) with a token: %d %s", r.status, r.body)
 	}
 	for _, path := range []struct{ method, path string }{
-		{"GET", "/api/v1/me"}, {"POST", "/api/v1/operators"}, {"GET", "/api/v1/api-tokens"},
-		{"POST", "/api/v1/api-tokens"}, {"POST", "/api/v1/requests/req_x/approve"}, {"POST", "/api/v1/system/lockdown"},
+		{"GET", "/api/v1/me"}, {"GET", "/api/v1/api-tokens"}, {"POST", "/api/v1/invitations"},
+		{"POST", "/api/v1/requests/req_x/approve"}, {"POST", "/api/v1/system/lockdown"},
 	} {
 		if r := h.bearerDo(tok, path.method, path.path, map[string]any{}); r.status != 403 {
 			t.Errorf("%s %s with a token: %d %s", path.method, path.path, r.status, r.body)
@@ -1434,6 +1434,110 @@ func TestAPITokenAPI(t *testing.T) {
 	c.ok("revokeAPIToken", 200, "DELETE", "/api/v1/api-tokens/"+created.APIToken.ID, nil)
 	if r := h.bearerDo(tok, "GET", "/api/v1/servers", nil); r.status != 401 {
 		t.Fatalf("revoked token: %d", r.status)
+	}
+}
+
+// Terraform with an administrator token (ADR-0058, ADR-0059): it issues tokens for any role, sees and revokes only its
+// own children, manages operators but not the one it acts for, and reads the egress configuration.
+func TestAPITokenAutomation(t *testing.T) {
+	h := newHarness(t)
+	c := h.bootstrapAdmin()
+	var tf struct {
+		Token    string
+		APIToken struct{ ID string } `json:"api_token"`
+	}
+	c.ok("createAPIToken", 201, "POST", "/api/v1/api-tokens", map[string]any{"name": "terraform", "role": "administrator", "never_expires": true}).json(t, &tf)
+	var other struct {
+		APIToken struct{ ID string } `json:"api_token"`
+	}
+	c.ok("createAPIToken", 201, "POST", "/api/v1/api-tokens", map[string]any{"name": "other", "role": "viewer", "expires_in_days": 1}).json(t, &other)
+
+	r := h.bearerDo(tf.Token, "POST", "/api/v1/api-tokens", map[string]any{"name": "deed", "role": "auditor", "never_expires": true})
+	if r.status != 201 {
+		t.Fatalf("token issuing a token: %d %s", r.status, r.body)
+	}
+	h.spec.validate(t, "createAPIToken", r)
+	var deed struct {
+		Token    string
+		APIToken struct {
+			ID            string
+			Role          string
+			ParentTokenID string `json:"parent_token_id"`
+		} `json:"api_token"`
+	}
+	r.json(t, &deed)
+	if deed.APIToken.Role != "auditor" || deed.APIToken.ParentTokenID != tf.APIToken.ID {
+		t.Fatalf("child token: %s", r.body)
+	}
+	r = h.bearerDo(tf.Token, "GET", "/api/v1/api-tokens/"+deed.APIToken.ID, nil)
+	if r.status != 200 {
+		t.Fatalf("get own child: %d %s", r.status, r.body)
+	}
+	h.spec.validate(t, "getAPIToken", r)
+	for _, id := range []string{tf.APIToken.ID, other.APIToken.ID} {
+		if r := h.bearerDo(tf.Token, "GET", "/api/v1/api-tokens/"+id, nil); r.status != 404 {
+			t.Fatalf("token read a token it did not issue: %d %s", r.status, r.body)
+		}
+		if r := h.bearerDo(tf.Token, "DELETE", "/api/v1/api-tokens/"+id, nil); r.status != 404 {
+			t.Fatalf("token revoked a token it did not issue: %d %s", r.status, r.body)
+		}
+	}
+	for _, p := range []string{"/api/v1/system/status", "/api/v1/agents", "/api/v1/servers", "/api/v1/grants?state=active"} {
+		if r := h.bearerDo(deed.Token, "GET", p, nil); r.status != 200 {
+			t.Fatalf("auditor token GET %s: %d %s", p, r.status, r.body)
+		}
+	}
+	for _, p := range []string{"/api/v1/system/egress", "/api/v1/api-tokens/" + deed.APIToken.ID} {
+		if r := h.bearerDo(deed.Token, "GET", p, nil); r.status != 403 {
+			t.Fatalf("auditor token GET %s: %d %s", p, r.status, r.body)
+		}
+	}
+	r = h.bearerDo(tf.Token, "GET", "/api/v1/system/egress", nil)
+	if r.status != 200 || !strings.Contains(string(r.body), `"allow_cidrs":[`) {
+		t.Fatalf("egress: %d %s", r.status, r.body)
+	}
+	h.spec.validate(t, "getEgress", r)
+
+	// Operators: create, change roles and groups; never the operator the token acts for.
+	r = h.bearerDo(tf.Token, "POST", "/api/v1/operators", map[string]any{"email": "rita@example.com", "display_name": "Rita", "roles": []string{"auditor"}})
+	if r.status != 201 {
+		t.Fatalf("create operator with a token: %d %s", r.status, r.body)
+	}
+	h.spec.validate(t, "createOperator", r)
+	var rita struct{ ID string }
+	r.json(t, &rita)
+	r = h.bearerDo(tf.Token, "PATCH", "/api/v1/operators/"+rita.ID, map[string]any{"roles": []string{"approver", "viewer"}, "groups": []string{"oncall"}})
+	if r.status != 200 || !strings.Contains(string(r.body), `"approver"`) {
+		t.Fatalf("update operator with a token: %d %s", r.status, r.body)
+	}
+	if r := h.bearerDo(tf.Token, "GET", "/api/v1/operators/"+rita.ID+"/identities", nil); r.status != 200 {
+		t.Fatalf("identities with a token: %d %s", r.status, r.body)
+	}
+	me := c.meID()
+	for _, body := range []map[string]any{{"roles": []string{"administrator", "viewer"}}, {"enabled": false}, {"groups": []string{"x"}}} {
+		if r := h.bearerDo(tf.Token, "PATCH", "/api/v1/operators/"+me, body); r.status != 409 || !strings.Contains(string(r.body), "operator it acts for") {
+			t.Fatalf("PATCH the token's own operator %v: %d %s", body, r.status, r.body)
+		}
+	}
+	// Chat accounts can be linked declaratively, including to the operator the token acts for.
+	link := map[string]any{"provider": "telegram", "workspace": "hallpass_bot", "provider_user_id": "4242", "display": "@me"}
+	if r := h.bearerDo(tf.Token, "POST", "/api/v1/operators/"+me+"/provider-links", link); r.status != 204 {
+		t.Fatalf("link chat account with a token: %d %s", r.status, r.body)
+	}
+	r = h.bearerDo(tf.Token, "GET", "/api/v1/operators/"+me+"/provider-links", nil)
+	if r.status != 200 || !strings.Contains(string(r.body), `"provider_user_id":"4242"`) {
+		t.Fatalf("list chat links with a token: %d %s", r.status, r.body)
+	}
+	h.spec.validate(t, "listOperatorProviderLinks", r)
+	if r := h.bearerDo(tf.Token, "DELETE", "/api/v1/operators/"+me+"/provider-links?provider=telegram&workspace=hallpass_bot&user_id=4242", nil); r.status != 204 {
+		t.Fatalf("unlink chat account with a token: %d %s", r.status, r.body)
+	}
+
+	if r := h.bearerDo(tf.Token, "DELETE", "/api/v1/api-tokens/"+deed.APIToken.ID, nil); r.status != 200 {
+		t.Fatalf("revoke own child: %d %s", r.status, r.body)
+	}
+	if r := h.bearerDo(deed.Token, "GET", "/api/v1/system/status", nil); r.status != 401 {
+		t.Fatalf("revoked child token: %d", r.status)
 	}
 }
 

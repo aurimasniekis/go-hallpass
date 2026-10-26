@@ -17,8 +17,8 @@ import (
 )
 
 // Automation (API) tokens: `hallpass_at_<43 base64url chars>` bearer tokens for Terraform and scripts. A token acts for
-// the operator who created it, with one role that operator held when creating it, and only while the operator is still
-// enabled and holds that role. Only a keyed MAC is stored.
+// the operator who created it, with one role, and only while the operator is still enabled and holds that role or is an
+// administrator (administrators hold every permission of every other role, ADR-0058). Only a keyed MAC is stored.
 const (
 	APITokenPrefix = "hallpass_at_"
 	MinAPITokenTTL = 24 * time.Hour
@@ -46,12 +46,14 @@ type APIToken struct {
 	LastUsedIP   string     `json:"last_used_ip,omitempty"`
 	RevokedAt    *time.Time `json:"revoked_at,omitempty"`
 	RevokedBy    string     `json:"revoked_by,omitempty"`
+	// ParentTokenID is the API token that issued this one, if any (ADR-0058).
+	ParentTokenID string `json:"parent_token_id,omitempty"`
 }
 
 func apiTokenFromRow(r db.ApiToken) *APIToken {
 	t := &APIToken{ID: r.ID, Name: r.Name, OperatorID: r.OperatorID, Role: r.Role, Hint: r.Hint,
 		CreatedAt: time.UnixMicro(r.CreatedAt).UTC(), NeverExpires: r.NeverExpires == 1, LastUsedIP: r.LastUsedIp.String,
-		RevokedBy: r.RevokedBy.String}
+		RevokedBy: r.RevokedBy.String, ParentTokenID: r.ParentTokenID.String}
 	if !t.NeverExpires {
 		v := time.UnixMicro(r.ExpiresAt).UTC()
 		t.ExpiresAt = &v
@@ -67,15 +69,19 @@ func apiTokenFromRow(r db.ApiToken) *APIToken {
 	return t
 }
 
-// CreateAPIToken issues a token for the calling operator with one of their roles. The token is returned once. A token
-// either expires after ttl or, with neverExpires (and ttl zero), never expires (ADR-0053).
+// CreateAPIToken issues a token for the calling operator with one of their roles, or any role for an administrator. The
+// token is returned once. A token either expires after ttl or, with neverExpires (and ttl zero), never expires
+// (ADR-0053). An administrator token may issue tokens, which it then parents; a token issued by a token may not
+// (ADR-0058).
 func (svc *Service) CreateAPIToken(ctx context.Context, p *Principal, name, role string, ttl time.Duration, neverExpires bool) (*APIToken, string, error) {
 	name = strings.TrimSpace(name)
 	v := &apperr.Validation{}
 	if name == "" || utf8.RuneCountInString(name) > 100 {
 		v.Add("name", "must be 1-100 characters")
 	}
-	if !slices.Contains(p.Operator.Roles, role) {
+	if !slices.Contains(AllRoles, role) {
+		v.Add("role", "must be administrator, approver, auditor or viewer")
+	} else if !holdsTokenRole(p.Operator.Roles, role) {
 		v.Add("role", "must be one of your own roles")
 	}
 	switch {
@@ -84,8 +90,8 @@ func (svc *Service) CreateAPIToken(ctx context.Context, p *Principal, name, role
 	case !neverExpires && (ttl < MinAPITokenTTL || ttl > MaxAPITokenTTL):
 		v.Add("expires_in_days", "must be between 1 and 366 days")
 	}
-	if p.TokenID != "" {
-		return nil, "", apperr.New(apperr.CodeForbidden, "API tokens cannot issue tokens")
+	if p.TokenParentID != "" {
+		return nil, "", apperr.New(apperr.CodeForbidden, "a token issued by another token cannot issue tokens")
 	}
 	if err := v.Err(); err != nil {
 		return nil, "", err
@@ -105,11 +111,16 @@ func (svc *Service) CreateAPIToken(ctx context.Context, p *Principal, name, role
 		if neverExpires {
 			expires, details = neverExpiresAt, map[string]any{"name": name, "role": role, "never_expires": true}
 		}
+		actor := audit.Actor{Type: audit.ActorOperator, ID: p.Operator.ID}
+		if p.TokenID != "" {
+			actor.Via, details["parent_token_id"] = "api_token:"+p.TokenID, p.TokenID
+		}
 		if err := tx.Q.InsertAPIToken(ctx, db.InsertAPITokenParams{ID: id, Name: name, OperatorID: p.Operator.ID, Role: role, Mac: mac,
-			Hint: token[len(token)-4:], CreatedAt: tx.NowMicros(), ExpiresAt: expires.UnixMicro(), NeverExpires: b2i(neverExpires)}); err != nil {
+			Hint: token[len(token)-4:], CreatedAt: tx.NowMicros(), ExpiresAt: expires.UnixMicro(), NeverExpires: b2i(neverExpires),
+			ParentTokenID: sql.NullString{String: p.TokenID, Valid: p.TokenID != ""}}); err != nil {
 			return err
 		}
-		_, err := svc.audit.Append(ctx, tx, audit.Event{Actor: audit.Actor{Type: audit.ActorOperator, ID: p.Operator.ID}, Action: "api_token.created",
+		_, err := svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "api_token.created",
 			Target: audit.Target{Type: "api_token", ID: id}, Details: details})
 		return err
 	})
@@ -145,7 +156,8 @@ func (svc *Service) ListAPITokens(ctx context.Context) ([]*APIToken, error) {
 	return out, nil
 }
 
-// RevokeAPIToken stops a token at once. Revoking a revoked token is a no-op.
+// RevokeAPIToken stops a token at once, together with the tokens it issued (ADR-0058). Revoking a revoked token is a
+// no-op.
 func (svc *Service) RevokeAPIToken(ctx context.Context, actor audit.Actor, id string) (*APIToken, error) {
 	err := svc.s.W().TxNamed(ctx, "opauth.revoke_api_token", func(tx *store.Tx) error {
 		if _, err := tx.Q.GetAPIToken(ctx, id); errors.Is(err, sql.ErrNoRows) {
@@ -153,13 +165,29 @@ func (svc *Service) RevokeAPIToken(ctx context.Context, actor audit.Actor, id st
 		} else if err != nil {
 			return err
 		}
-		n, err := tx.Q.RevokeAPIToken(ctx, db.RevokeAPITokenParams{Now: sql.NullInt64{Int64: tx.NowMicros(), Valid: true},
-			Actor: sql.NullString{String: actorRef(actor), Valid: true}, ID: id})
-		if err != nil || n == 0 {
+		children, err := tx.Q.ListActiveChildAPITokens(ctx, sql.NullString{String: id, Valid: true})
+		if err != nil {
 			return err
 		}
-		_, err = svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "api_token.revoked", Target: audit.Target{Type: "api_token", ID: id}})
-		return err
+		for _, tid := range append([]string{id}, children...) {
+			n, err := tx.Q.RevokeAPIToken(ctx, db.RevokeAPITokenParams{Now: sql.NullInt64{Int64: tx.NowMicros(), Valid: true},
+				Actor: sql.NullString{String: actorRef(actor), Valid: true}, ID: tid})
+			if err != nil {
+				return err
+			}
+			if n == 0 {
+				continue
+			}
+			var details map[string]any
+			if tid != id {
+				details = map[string]any{"parent_token_id": id}
+			}
+			if _, err := svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "api_token.revoked", Target: audit.Target{Type: "api_token", ID: tid},
+				Details: details}); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -168,8 +196,8 @@ func (svc *Service) RevokeAPIToken(ctx context.Context, actor audit.Actor, id st
 }
 
 // AuthenticateAPIToken resolves a bearer token to a principal: the creating operator restricted to the token's role.
-// Unknown, revoked and expired tokens, and tokens whose operator is disabled or no longer holds the role, all fail
-// with the same error.
+// Unknown, revoked and expired tokens, and tokens whose operator is disabled or no longer holds the role (nor
+// administrator), all fail with the same error.
 func (svc *Service) AuthenticateAPIToken(ctx context.Context, token, ip string) (*Principal, error) {
 	if !strings.HasPrefix(token, APITokenPrefix) || len(token) != len(APITokenPrefix)+43 {
 		return nil, ErrUnauthorized
@@ -196,7 +224,7 @@ func (svc *Service) AuthenticateAPIToken(ctx context.Context, token, ip string) 
 		return nil, ErrUnauthorized
 	}
 	op, err := svc.Get(ctx, row.OperatorID)
-	if err != nil || !op.Enabled || !slices.Contains(op.Roles, row.Role) {
+	if err != nil || !op.Enabled || !holdsTokenRole(op.Roles, row.Role) {
 		return nil, ErrUnauthorized
 	}
 	if !row.LastUsedAt.Valid || now.Sub(time.UnixMicro(row.LastUsedAt.Int64)) >= apiTokenTouchEvery {
@@ -207,5 +235,12 @@ func (svc *Service) AuthenticateAPIToken(ctx context.Context, token, ip string) 
 	}
 	scoped := *op
 	scoped.Roles = []string{row.Role}
-	return &Principal{Operator: &scoped, SessionID: row.ID, TokenID: row.ID, Method: MethodToken, AuthAt: now, ExpiresAt: time.UnixMicro(row.ExpiresAt)}, nil
+	return &Principal{Operator: &scoped, SessionID: row.ID, TokenID: row.ID, TokenParentID: row.ParentTokenID.String, Method: MethodToken,
+		AuthAt: now, ExpiresAt: time.UnixMicro(row.ExpiresAt)}, nil
+}
+
+// holdsTokenRole reports whether an operator with roles may hold a token with role: their own roles, and every role
+// for administrators, whose permissions include those of every other role (ADR-0058).
+func holdsTokenRole(roles []string, role string) bool {
+	return slices.Contains(roles, role) || slices.Contains(roles, RoleAdministrator)
 }

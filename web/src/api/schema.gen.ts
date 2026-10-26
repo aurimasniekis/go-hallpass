@@ -392,6 +392,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /** Change an operator's manual roles, operator groups or enabled state. An API token cannot change these for the operator it acts for. */
         patch: operations["updateOperator"];
         trace?: never;
     };
@@ -490,7 +491,7 @@ export interface paths {
         /** Automation tokens (metadata only; the token itself is shown once at creation). */
         get: operations["listAPITokens"];
         put?: never;
-        /** Issue an automation token for yourself with one of your roles. It is shown once. It works only while you are enabled and still hold the role, and only on operations marked x-token. */
+        /** Issue an automation token that acts for you with one of your roles, or any role if you are an administrator. It is shown once. It works only while you are enabled and still hold the role (or administrator), and only on operations marked x-token. An administrator API token may call this too: the new token is then its child, is revoked with it, and cannot issue tokens itself. */
         post: operations["createAPIToken"];
         delete?: never;
         options?: never;
@@ -505,9 +506,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** One token's metadata. An API token sees only the tokens it issued. */
+        get: operations["getAPIToken"];
         put?: never;
         post?: never;
+        /** Revoke a token and the tokens it issued. An API token may revoke only the tokens it issued. */
         delete: operations["revokeAPIToken"];
         options?: never;
         head?: never;
@@ -1966,6 +1969,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/system/egress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The gateway's egress configuration from its config file (read-only): the ranges destinations may resolve into and the gateway's own source addresses as destinations see them. */
+        get: operations["getEgress"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/stats/overview": {
         parameters: {
             query?: never;
@@ -2259,6 +2279,8 @@ export interface components {
             last_used_ip?: string;
             revoked_at?: components["schemas"]["Timestamp"];
             revoked_by?: string;
+            /** @description The API token that issued this one */
+            parent_token_id?: string;
         };
         APITokenInput: {
             name: string;
@@ -2266,7 +2288,7 @@ export interface components {
             role: "administrator" | "approver" | "auditor" | "viewer";
             /** @description Required unless never_expires is set. */
             expires_in_days?: number;
-            /** @description Issue a token without expiry, for Terraform and break-glass automation. It still stops when it is revoked or when its operator is disabled or loses the role. Omit expires_in_days. */
+            /** @description Issue a token without expiry, for Terraform and break-glass automation. It still stops when it is revoked or when its operator is disabled or loses the role (and is not an administrator). Omit expires_in_days. */
             never_expires?: boolean;
         };
         APITokenCreated: {
@@ -3045,6 +3067,14 @@ export interface components {
             local_login_disabled: boolean;
             /** @description Slug of the enabled SSO provider the sign-in page goes to directly; "" turns it off. Omitted in a PUT, it is left unchanged. Email and password sign-in stays at /login/password while password login is enabled. */
             direct_provider?: string;
+        };
+        Egress: {
+            /** @description egress.allow_cidrs: ranges destinations may resolve into. */
+            allow_cidrs: components["schemas"]["StringList"];
+            /** @description egress.allow_special_cidrs: normally denied ranges re-allowed. */
+            allow_special_cidrs: components["schemas"]["StringList"];
+            /** @description egress.source_addresses: the gateway's egress addresses. */
+            source_addresses: components["schemas"]["StringList"];
         };
         SystemStatus: {
             lockdown: boolean;
@@ -3938,6 +3968,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["APITokenCreated"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAPIToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIToken"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -7018,6 +7071,27 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    getEgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Egress"];
+                };
+            };
+            default: components["responses"]["Problem"];
         };
     };
     getStatsOverview: {
