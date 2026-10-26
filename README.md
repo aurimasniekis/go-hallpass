@@ -102,7 +102,7 @@ Images are on Docker Hub as [`aurimasniekis/hallpass`](https://hub.docker.com/r/
 `ghcr.io/aurimasniekis/go-hallpass`) for linux/amd64 and linux/arm64.
 
 ```sh
-export HP_VERSION=0.3.0
+export HP_VERSION=0.4.0
 gh attestation verify oci://docker.io/aurimasniekis/hallpass:$HP_VERSION --repo aurimasniekis/go-hallpass
 git clone --depth 1 --branch v$HP_VERSION https://github.com/aurimasniekis/go-hallpass.git && cd go-hallpass/deploy
 install -d -m 0700 secrets && sudo chown 65532:65532 secrets
@@ -125,7 +125,7 @@ Release archives for linux/amd64, linux/arm64 and darwin/arm64 are on the
 [releases page](https://github.com/aurimasniekis/go-hallpass/releases), with `SHA256SUMS`, SBOMs and build provenance.
 
 ```sh
-V=0.3.0; base=https://github.com/aurimasniekis/go-hallpass/releases/download/v$V
+V=0.4.0; base=https://github.com/aurimasniekis/go-hallpass/releases/download/v$V
 curl -fLO "$base/hallpass_${V}_linux_amd64.tar.gz" -fLO "$base/SHA256SUMS"
 sha256sum --check --ignore-missing SHA256SUMS
 gh attestation verify "hallpass_${V}_linux_amd64.tar.gz" --repo aurimasniekis/go-hallpass
