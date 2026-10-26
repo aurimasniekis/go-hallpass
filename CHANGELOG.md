@@ -7,6 +7,11 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-26
+
+> **Recording format, backup format and keyring not externally reviewed.** The known limitations of
+> [0.1.0](https://github.com/aurimasniekis/go-hallpass/releases/tag/v0.1.0) still apply.
+
 ### Added
 
 - **Default sign-in provider.** The sign-in page can go straight to one SSO provider instead of showing the sign-in
@@ -157,7 +162,8 @@ through it.
 - API tokens skip recent authentication and MFA on the operations they may use, because issuing one requires both.
   They cannot decide requests, revoke grants, read recordings, manage operators or tokens, or use lockdown.
 
-[Unreleased]: https://github.com/aurimasniekis/go-hallpass/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/aurimasniekis/go-hallpass/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/aurimasniekis/go-hallpass/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/aurimasniekis/go-hallpass/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/aurimasniekis/go-hallpass/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/aurimasniekis/go-hallpass/compare/v0.1.0...v0.1.1
