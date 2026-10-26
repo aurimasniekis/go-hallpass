@@ -151,7 +151,7 @@ func (svc *Service) Open(ctx context.Context, reg *access.ChannelReg, kind strin
 	}
 	r := &channelRecorder{
 		svc: svc, reg: reg, kind: k, start: time.Now(), q: make(chan item, svc.opts.QueueRecords),
-		bytes: make(chan struct{}, max(svc.opts.QueueBytes/1024, 1)), done: make(chan struct{}),
+		bytes: make(chan struct{}, max(svc.opts.QueueBytes/1024, 1)), done: make(chan struct{}), halt: make(chan struct{}),
 		strict: svc.opts.Durability == "strict", recordInput: reg.Role.RecordInput,
 	}
 	if err := r.openSegment(ctx, 0, nil); err != nil {
@@ -170,13 +170,15 @@ type item struct {
 }
 
 type channelRecorder struct {
-	svc         *Service
-	reg         *access.ChannelReg
-	kind        hprec.Kind
-	start       time.Time
-	q           chan item
-	bytes       chan struct{} // 1 token per KiB queued
-	done        chan struct{}
+	svc   *Service
+	reg   *access.ChannelReg
+	kind  hprec.Kind
+	start time.Time
+	q     chan item
+	bytes chan struct{} // 1 token per KiB queued
+	done  chan struct{}
+	// halt ends the loop without finalizing; only tests close it, to simulate a process death.
+	halt        chan struct{}
 	strict      bool
 	recordInput bool
 
@@ -371,6 +373,8 @@ func (r *channelRecorder) loop(ctx context.Context) {
 			if it.ack != nil {
 				it.ack <- err
 			}
+		case <-r.halt:
+			return
 		case <-tick.C:
 			if r.failure() == nil && r.w != nil && r.w.Pending() > 0 {
 				if err := r.w.Flush(); err != nil {

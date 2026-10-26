@@ -248,6 +248,7 @@ func TestReconcileQuarantinesTamperedFinalFile(t *testing.T) {
 	must(t, err)
 	rec := r.(*channelRecorder)
 	must(t, rec.Output(sshproxy.StreamStdout, []byte("line one\n")))
+	halt(rec)
 	_, err = rec.w.Finalize("exit_status") // crash after the rename, before the DB commit
 	must(t, err)
 	path := svc.segmentPath(reg.SessionID, rec.segID)

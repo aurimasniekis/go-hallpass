@@ -40,6 +40,16 @@ func (f *fx) replay(svc *Service, segID string) []hprec.Record {
 }
 
 // HP-REC-001/007/008: a channel recording round-trips, is finalized with a manifest and verifies.
+// halt stops a recorder's loop goroutine without finalizing, as a process death would, so the test may drive its
+// writer directly. Records still queued are dropped.
+func halt(rec *channelRecorder) {
+	rec.mu.Lock()
+	rec.closed = true
+	rec.mu.Unlock()
+	close(rec.halt)
+	<-rec.done
+}
+
 func TestRecorderRoundTrip(t *testing.T) {
 	for _, mode := range []string{"group", "strict"} {
 		t.Run(mode, func(t *testing.T) {
@@ -289,9 +299,7 @@ func TestReconcileStartup(t *testing.T) {
 	}
 	// crash simulates a process death: the writer stops without finalizing.
 	crash := func(rec *channelRecorder) {
-		rec.mu.Lock()
-		rec.closed = true
-		rec.mu.Unlock()
+		halt(rec)
 		_ = rec.w.Close()
 	}
 
@@ -306,6 +314,7 @@ func TestReconcileStartup(t *testing.T) {
 
 	// 2. finalized on disk, DB not updated.
 	_, rec2 := open()
+	halt(rec2)
 	_, err = rec2.w.Finalize("exit_status")
 	must(t, err)
 
@@ -432,9 +441,7 @@ func TestReconcileUnrecoverableAndVerifyMissing(t *testing.T) {
 	r, err := svc.Open(f.ctx, reg, access.KindExec, false)
 	must(t, err)
 	rec := r.(*channelRecorder)
-	rec.mu.Lock()
-	rec.closed = true
-	rec.mu.Unlock()
+	halt(rec)
 	_ = rec.w.Close()
 	must(t, os.WriteFile(rec.partialPath(), []byte("not a segment"), 0o600))
 
