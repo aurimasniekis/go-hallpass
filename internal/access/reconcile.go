@@ -49,7 +49,7 @@ func (svc *Service) ReconcileStartup(ctx context.Context) (*ReconcileResult, err
 			return nil, err
 		}
 		if err := svc.s.W().TxNamed(ctx, "access.reconcile_event", func(tx *store.Tx) error {
-			return appendTimeline(ctx, tx, TimelineEvent{SessionID: ch.AccessSessionID, Seq: seq, Type: EvChannelExited, ChannelID: ch.ID,
+			return svc.appendTimeline(ctx, tx, TimelineEvent{SessionID: ch.AccessSessionID, Seq: seq, Type: EvChannelExited, ChannelID: ch.ID,
 				ConnectionID: ch.ConnectionID, Data: map[string]any{"reason": "process_restart", "interrupted": true},
 				IdempotencyKey: "reconcile|" + ch.ID})
 		}); err != nil {

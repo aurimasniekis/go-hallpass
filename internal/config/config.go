@@ -70,6 +70,7 @@ type Config struct {
 	Shutdown  ShutdownConfig  `yaml:"shutdown"`
 	RBAC      RBACConfig      `yaml:"rbac"`
 	Console   ConsoleConfig   `yaml:"console"`
+	Events    EventsConfig    `yaml:"events"`
 	Dev       DevConfig       `yaml:"dev"`
 }
 
@@ -205,6 +206,24 @@ type ShutdownConfig struct {
 type ConsoleConfig struct {
 	// Terminal lets administrators open recorded terminals on servers from the console (default true).
 	Terminal bool `yaml:"terminal"`
+}
+
+// EventsConfig configures event publishing (ADR-0057).
+type EventsConfig struct {
+	Pulse PulseConfig `yaml:"pulse"`
+}
+
+// PulseConfig publishes audit and session events to Pulse (NATS JetStream).
+type PulseConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// URL of the Pulse NATS endpoint, e.g. tls://events.example.com:4222 (tls:// is required in production).
+	URL string `yaml:"url"`
+	// CredsFile is the Pulse client .creds file issued for HallPass.
+	CredsFile string `yaml:"creds_file"`
+	// CAFile trusts an extra CA for the NATS TLS certificate (empty: the system roots).
+	CAFile string `yaml:"ca_file"`
+	// Source is the CloudEvents source of published events.
+	Source string `yaml:"source"`
 }
 
 // RBACConfig sets the configurable cells of the operator permission matrix (PLAN §12.5); all default to false.

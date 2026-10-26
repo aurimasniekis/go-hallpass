@@ -35,6 +35,7 @@ func Default() *Config {
 		},
 		HTTP:    HTTPConfig{Listen: ":8080"},
 		Console: ConsoleConfig{Terminal: true},
+		Events:  EventsConfig{Pulse: PulseConfig{Source: "hallpass"}},
 		Log:     LogConfig{Level: "info", Format: "json"},
 		Storage: StorageConfig{
 			MinFreeBytes:          2 << 30,

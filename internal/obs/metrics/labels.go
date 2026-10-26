@@ -200,6 +200,16 @@ const (
 	DeliveryDead      DeliveryOutcome = "dead"
 )
 
+// EventOutcome is the outcome of publishing one event to Pulse (internal/events).
+type EventOutcome string
+
+// Event publish outcomes.
+const (
+	EventPublished EventOutcome = "published"
+	EventRetry     EventOutcome = "retry"
+	EventDead      EventOutcome = "dead"
+)
+
 // LoginMethod is an operator login method.
 type LoginMethod string
 
@@ -267,6 +277,7 @@ var (
 	enumTxResult  = newEnum(TxOK, TxBusy, TxFull, TxIO, TxCorrupt, TxConstraint, TxConflict, TxNotFound, TxCanceled, TxError)
 	enumProvider  = newEnum(ProviderSlack, ProviderTelegram, ProviderSMTP, ProviderWeb, ProviderWebhook)
 	enumDelivery  = newEnum(DeliveryDelivered, DeliveryRetry, DeliveryDead)
+	enumEvent     = newEnum(EventPublished, EventRetry, EventDead)
 	enumLoginMeth = newEnum(LoginPassword, LoginOIDC, LoginRecovery)
 	enumLoginOut  = newEnum(LoginSuccess, LoginFailure, LoginDenied, LoginThrottled, LoginError)
 	enumVolume    = newEnum(VolumeData, VolumeRecordings, VolumeBackups)

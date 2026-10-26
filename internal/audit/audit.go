@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/aurimasniekis/go-hallpass/internal/events"
 	"github.com/aurimasniekis/go-hallpass/internal/ids"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
@@ -100,9 +101,10 @@ type Sink interface {
 
 // Writer appends audit events.
 type Writer struct {
-	kr   *keyring.Keyring
-	mu   sync.RWMutex
-	sink Sink
+	kr     *keyring.Keyring
+	mu     sync.RWMutex
+	sink   Sink
+	events *events.Recorder
 }
 
 // NewWriter returns a writer. kr may be nil only if events never carry sensitive details.
@@ -112,6 +114,14 @@ func NewWriter(kr *keyring.Keyring) *Writer { return &Writer{kr: kr} }
 func (w *Writer) SetSink(s Sink) {
 	w.mu.Lock()
 	w.sink = s
+	w.mu.Unlock()
+}
+
+// SetEvents publishes every record to Pulse through r (ADR-0057); the published payload is the record as a sink
+// receives it, never the sensitive details. nil turns publishing off.
+func (w *Writer) SetEvents(r *events.Recorder) {
+	w.mu.Lock()
+	w.events = r
 	w.mu.Unlock()
 }
 
@@ -180,13 +190,19 @@ func (w *Writer) Append(ctx context.Context, tx *store.Tx, ev Event) (string, er
 		return "", err
 	}
 	w.mu.RLock()
-	sink := w.sink
+	sink, rec := w.sink, w.events
 	w.mu.RUnlock()
+	if sink == nil && rec == nil {
+		return id, nil
+	}
+	r := Record{ID: id, Seq: seq, At: row.At, ActorType: row.ActorType, ActorID: ev.Actor.ID, Action: ev.Action,
+		TargetType: ev.Target.Type, TargetID: ev.Target.ID, Outcome: ev.Outcome, SourceIP: ev.SourceIP,
+		CorrelationID: ev.CorrelationID, Details: ev.Details, HasSensitive: enc != nil}
+	if err := rec.Record(ctx, tx, events.Event{ID: id, Name: ev.Action, Payload: r}); err != nil {
+		return "", fmt.Errorf("audit event: %w", err)
+	}
 	if sink != nil {
-		rec := Record{ID: id, Seq: seq, At: row.At, ActorType: row.ActorType, ActorID: ev.Actor.ID, Action: ev.Action,
-			TargetType: ev.Target.Type, TargetID: ev.Target.ID, Outcome: ev.Outcome, SourceIP: ev.SourceIP,
-			CorrelationID: ev.CorrelationID, Details: ev.Details, HasSensitive: enc != nil}
-		tx.AfterCommit(func() { _ = sink.Write(rec) })
+		tx.AfterCommit(func() { _ = sink.Write(r) })
 	}
 	return id, nil
 }

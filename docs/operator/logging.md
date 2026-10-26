@@ -44,3 +44,5 @@ Redaction is defense in depth, not a guarantee for arbitrary free text. Code mus
 Set `log.audit_file` to append every committed audit record as one JSON line (file mode 0600) for SIEM ingestion. The
 database hash chain is authoritative: verify it with `GET /api/v1/audit-events/verify` or after a restore. The file is
 for forwarding only.
+
+To stream the same records (and agent session events) to an event bus instead, see [events.md](events.md).

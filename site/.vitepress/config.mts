@@ -62,6 +62,7 @@ export default defineConfig({
           { text: 'Keys and the KEK', link: '/operators/keys' },
           { text: 'Backup and restore', link: '/operators/backup' },
           { text: 'Monitoring', link: '/operators/monitoring' },
+          { text: 'Events (Pulse)', link: '/operators/events' },
           { text: 'Upgrades', link: '/operators/upgrades' },
           { text: 'Incident runbooks', link: '/operators/incidents' },
         ],

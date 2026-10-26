@@ -75,6 +75,11 @@ Example: [`deploy/examples/hallpass.example.yaml`](../../deploy/examples/hallpas
 | `telemetry.otlp_endpoint` | — | Optional OTLP/HTTP endpoint for traces. Metrics are exported only through Prometheus `/metrics`. |
 | `telemetry.prometheus` | `true` | Expose Prometheus `/metrics`. |
 | `shutdown.drain_timeout` | `30s` | Graceful drain before channels are closed. |
+| `events.pulse.enabled` | `false` | Publish audit and session events to Pulse. See [events.md](events.md). |
+| `events.pulse.url` | — | Pulse NATS endpoint, e.g. `tls://events.example.com:4222`. Production requires `tls://`. |
+| `events.pulse.creds_file` | — | Pulse client `.creds` file; required when enabled. Keep it readable only by HallPass. |
+| `events.pulse.ca_file` | — | Extra CA for the NATS TLS certificate. Empty uses the system roots. |
+| `events.pulse.source` | `hallpass` | CloudEvents source of published events. |
 | `console.terminal` | `true` | Administrators may open recorded web terminals on server roles from the console. `false` turns them off for everyone. |
 | `rbac.auditor_address_read` | `false` | Auditors may read destination addresses. |
 | `rbac.approver_recording_play` | `false` | Approvers may replay recordings. |

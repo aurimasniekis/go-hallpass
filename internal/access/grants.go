@@ -148,7 +148,7 @@ func (svc *Service) endGrantTx(ctx context.Context, tx *store.Tx, grantID, sessI
 		if state == GrantRevoked {
 			evType = EvGrantRevoked
 		}
-		if err := appendTimeline(ctx, tx, TimelineEvent{SessionID: sessID, Seq: seq, Type: evType, Data: map[string]any{"grant_id": grantID, "reason": reason}}); err != nil {
+		if err := svc.appendTimeline(ctx, tx, TimelineEvent{SessionID: sessID, Seq: seq, Type: evType, Data: map[string]any{"grant_id": grantID, "reason": reason}}); err != nil {
 			return false, err
 		}
 	}
@@ -407,7 +407,7 @@ func (svc *Service) CloseFinishedSessions(ctx context.Context) (int, error) {
 			}
 			n++
 			svc.publish(tx, eventbus.TopicSessionUpdated, r.ID, "closed")
-			return appendTimeline(ctx, tx, TimelineEvent{SessionID: r.ID, Seq: seq, Type: EvSessionClosed, Data: map[string]any{"reason": reason}})
+			return svc.appendTimeline(ctx, tx, TimelineEvent{SessionID: r.ID, Seq: seq, Type: EvSessionClosed, Data: map[string]any{"reason": reason}})
 		})
 		if err != nil {
 			return n, err

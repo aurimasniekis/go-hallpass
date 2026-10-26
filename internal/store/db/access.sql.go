@@ -1200,7 +1200,7 @@ func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) er
 	return err
 }
 
-const insertTimelineEvent = `-- name: InsertTimelineEvent :exec
+const insertTimelineEvent = `-- name: InsertTimelineEvent :execrows
 INSERT INTO timeline_events (id, access_session_id, request_id, seq, type, schema_version, at, connection_id, channel_id,
   segment_id, data_json, idempotency_key)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1222,8 +1222,8 @@ type InsertTimelineEventParams struct {
 	IdempotencyKey  string
 }
 
-func (q *Queries) InsertTimelineEvent(ctx context.Context, arg InsertTimelineEventParams) error {
-	_, err := q.db.ExecContext(ctx, insertTimelineEvent,
+func (q *Queries) InsertTimelineEvent(ctx context.Context, arg InsertTimelineEventParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, insertTimelineEvent,
 		arg.ID,
 		arg.AccessSessionID,
 		arg.RequestID,
@@ -1237,7 +1237,10 @@ func (q *Queries) InsertTimelineEvent(ctx context.Context, arg InsertTimelineEve
 		arg.DataJson,
 		arg.IdempotencyKey,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const interruptStaleChannels = `-- name: InterruptStaleChannels :many

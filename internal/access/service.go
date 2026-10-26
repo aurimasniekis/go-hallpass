@@ -14,6 +14,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/audit"
 	"github.com/aurimasniekis/go-hallpass/internal/clock"
 	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
+	"github.com/aurimasniekis/go-hallpass/internal/events"
 	"github.com/aurimasniekis/go-hallpass/internal/ids"
 	"github.com/aurimasniekis/go-hallpass/internal/keyring"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
@@ -38,6 +39,8 @@ type Options struct {
 	// StorageReserve, if set, is called before admitting a new channel; a non-nil result (free space below the
 	// storage reserve, HP-OPS-006) refuses the channel with ErrStorageUnavailable. Nil skips the check.
 	StorageReserve func() error
+	// Events publishes session lifecycle events to Pulse (ADR-0057). Nil disables.
+	Events *events.Recorder
 }
 
 // RequestHook runs inside the transaction that creates a pending request or records a decision, so notifications
@@ -222,11 +225,77 @@ func AppendTimeline(ctx context.Context, tx *store.Tx, ev TimelineEvent) error {
 }
 
 func appendTimeline(ctx context.Context, tx *store.Tx, ev TimelineEvent) error {
+	_, err := insertTimeline(ctx, tx, ev)
+	return err
+}
+
+// sessionEvents names the timeline events published to Pulse as evt.hallpass.session.<name> (ADR-0057). Request and
+// grant events are not among them: the audit log publishes those. Per-file operations and destination audit records
+// stay in HallPass.
+var sessionEvents = map[string]string{
+	EvConnOpened:      "connection.opened",
+	EvConnClosed:      "connection.closed",
+	EvChannelOpened:   "channel.opened",
+	EvChannelExited:   "channel.exited",
+	EvChannelFailed:   "channel.failed",
+	EvExecRequested:   "exec.requested",
+	EvGitRequested:    "git.requested",
+	EvGitPush:         "git.push",
+	EvGitPushRefused:  "git.push_refused",
+	EvGitTransferred:  "git.transferred",
+	EvFileSummary:     "file.summary",
+	EvRecordingFailed: "recording.failed",
+	EvSessionClosed:   "closed",
+}
+
+// SessionEvent is the payload of a session event published to Pulse: the timeline event (whose data never holds
+// command text or file contents) with the grant's agent, server and role.
+type SessionEvent struct {
+	ID           string         `json:"id"`
+	Type         string         `json:"type"`
+	At           int64          `json:"at"`
+	SessionID    string         `json:"session_id"`
+	GrantID      string         `json:"grant_id"`
+	AgentID      string         `json:"agent_id"`
+	ServerID     string         `json:"server_id"`
+	RoleID       string         `json:"role_id"`
+	OperatorID   string         `json:"operator_id,omitempty"`
+	ConnectionID string         `json:"connection_id,omitempty"`
+	ChannelID    string         `json:"channel_id,omitempty"`
+	SegmentID    string         `json:"segment_id,omitempty"`
+	Data         map[string]any `json:"data,omitempty"`
+}
+
+// appendTimeline writes ev and, for session lifecycle events, records it for Pulse in the same transaction.
+func (svc *Service) appendTimeline(ctx context.Context, tx *store.Tx, ev TimelineEvent) error {
+	name, publish := sessionEvents[ev.Type]
+	if !publish || svc.opts.Events == nil || ev.SessionID == "" {
+		return appendTimeline(ctx, tx, ev)
+	}
+	if ev.ID == "" {
+		ev.ID = ids.New(ids.Event)
+	}
+	if added, err := insertTimeline(ctx, tx, ev); err != nil || !added {
+		return err
+	}
+	sub, err := tx.Q.SessionSubjects(ctx, ev.SessionID)
+	if err != nil {
+		return fmt.Errorf("session event: %w", err)
+	}
+	return svc.opts.Events.Record(ctx, tx, events.Event{ID: ev.ID, Name: "session." + name, Payload: SessionEvent{
+		ID: ev.ID, Type: ev.Type, At: tx.NowMicros(), SessionID: ev.SessionID, GrantID: sub.GrantID, AgentID: sub.AgentID,
+		ServerID: sub.ServerID, RoleID: sub.RoleID, OperatorID: sub.OperatorID.String, ConnectionID: ev.ConnectionID,
+		ChannelID: ev.ChannelID, SegmentID: ev.SegmentID, Data: ev.Data,
+	}})
+}
+
+// insertTimeline writes ev and reports whether it was new (false: an event with its idempotency key exists).
+func insertTimeline(ctx context.Context, tx *store.Tx, ev TimelineEvent) (bool, error) {
 	data := "{}"
 	if len(ev.Data) > 0 {
 		b, err := json.Marshal(ev.Data)
 		if err != nil {
-			return err
+			return false, err
 		}
 		data = string(b)
 	}
@@ -238,7 +307,7 @@ func appendTimeline(ctx context.Context, tx *store.Tx, ev TimelineEvent) error {
 	if id == "" {
 		id = ids.New(ids.Event)
 	}
-	return tx.Q.InsertTimelineEvent(ctx, db.InsertTimelineEventParams{
+	n, err := tx.Q.InsertTimelineEvent(ctx, db.InsertTimelineEventParams{
 		ID:              id,
 		AccessSessionID: sql.NullString{String: ev.SessionID, Valid: ev.SessionID != ""},
 		RequestID:       sql.NullString{String: ev.RequestID, Valid: ev.RequestID != ""},
@@ -250,6 +319,7 @@ func appendTimeline(ctx context.Context, tx *store.Tx, ev TimelineEvent) error {
 		DataJson:       data,
 		IdempotencyKey: key,
 	})
+	return n > 0, err
 }
 
 // Sequencer assigns per-access-session sequence numbers (HP-REC-002). Numbers come from blocks reserved in the

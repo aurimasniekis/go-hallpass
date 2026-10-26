@@ -127,6 +127,9 @@ End reasons: `expired`, `operator`, `agent`, `policy_changed`, `agent_disabled`,
 |---|---|---|---|
 | `hallpass_outbox_pending` | gauge | – | Outbox messages queued or awaiting retry. |
 | `hallpass_outbox_dead` | gauge | – | Dead-lettered messages (exhausted 8 attempts). |
+| `hallpass_events_publish_total` | counter | `outcome` = `published`, `retry`, `dead`, `other` | Pulse event publish attempts ([events.md](events.md)). |
+| `hallpass_events_pending` | gauge | – | Pulse events waiting to be published. |
+| `hallpass_events_dead` | gauge | – | Pulse events dead-lettered (50 attempts or 24 hours) and still kept (7 days). |
 | `hallpass_notification_deliveries_total` | counter | `provider` = `slack`, `telegram`, `smtp`, `web`, `webhook`, `other`; `outcome` = `delivered`, `retry`, `dead`, `other` | Delivery attempts. |
 | `hallpass_job_runs_total` | counter | `job` (code-defined job name, at most 64 values); `result` = `ok`, `error` | Background job runs (retention, checkpoints, integrity checks, …). |
 | `hallpass_backup_remote_runs_total` | counter | `result` = `succeeded`, `failed` | Backups to object storage. |
@@ -236,6 +239,11 @@ groups:
         expr: hallpass_outbox_pending > 100
         for: 15m
         labels: {severity: warning}
+      - alert: HallpassEventsBacklog
+        expr: hallpass_events_pending > 1000
+        for: 15m
+        labels: {severity: warning}
+        annotations: {summary: "Events are not reaching Pulse"}
       - alert: HallpassDiskUsage80
         expr: 1 - hallpass_storage_filesystem_avail_bytes / hallpass_storage_filesystem_size_bytes > 0.80
         for: 10m

@@ -21,6 +21,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/destaudit"
 	"github.com/aurimasniekis/go-hallpass/internal/egress"
 	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
+	"github.com/aurimasniekis/go-hallpass/internal/events"
 	"github.com/aurimasniekis/go-hallpass/internal/ids"
 	"github.com/aurimasniekis/go-hallpass/internal/inventory"
 	"github.com/aurimasniekis/go-hallpass/internal/jobs"
@@ -53,12 +54,14 @@ type App struct {
 	Clock  clock.Clock
 	BootID string
 
-	Store       *store.Store
-	Keyring     *keyring.Keyring
-	Audit       *audit.Writer
-	Bus         *eventbus.Bus
-	Jobs        *jobs.Runner
-	Outbox      *outbox.Outbox
+	Store   *store.Store
+	Keyring *keyring.Keyring
+	Audit   *audit.Writer
+	Bus     *eventbus.Bus
+	Jobs    *jobs.Runner
+	Outbox  *outbox.Outbox
+	// Events records audit and session events for Pulse; nil when events.pulse is disabled (ADR-0057).
+	Events      *events.Recorder
 	Guard       *egress.Guard
 	Agents      *agents.Service
 	Inventory   *inventory.Service
@@ -145,6 +148,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 		a.auditFile = f
 		a.Audit.SetSink(audit.NewJSONSink(f))
 	}
+	a.Events = events.NewRecorder(cfg.Events.Pulse.Enabled)
+	a.Audit.SetEvents(a.Events)
 	a.Bus = eventbus.New()
 	a.Jobs = jobs.NewRunner(a.Store, jobs.Options{Logger: log, Clock: a.Clock, Metrics: a.Metrics})
 	a.Outbox = outbox.New(a.Store, a.Keyring, outbox.Options{Logger: log, Clock: a.Clock, Metrics: a.Metrics})
@@ -164,6 +169,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 		MaxPendingPerAgent: cfg.Access.MaxPendingPerAgent, MinRemainingToConnect: cfg.Access.MinRemainingToConnect.D(),
 		DefaultRetention: cfg.Recording.DefaultRetention.D(), BootID: a.BootID, Clock: a.Clock, Logger: log, Metrics: a.Metrics,
 		StorageReserve: fsstat.ReserveCheck(cfg.DataDir, cfg.Storage.MinFreeBytes, cfg.Storage.MinFreePercent),
+		Events:         a.Events,
 	})
 	a.Agents.OnDisable(a.Access.AgentDisabledHook)
 	a.Agents.OnKeyRevoke(a.Access.KeyRevokedHook)
@@ -251,6 +257,9 @@ func (a *App) RunBackground(ctx context.Context) (wait func()) {
 	log := a.Log
 	wg.Go(func() { a.Jobs.Run(ctx) })
 	wg.Go(func() { a.Outbox.Run(ctx, 4) })
+	if a.Cfg.Events.Pulse.Enabled {
+		wg.Go(func() { a.relayEvents(ctx) })
+	}
 	wg.Go(func() { a.Enforcer.Run(ctx) })
 	wg.Go(func() { a.Access.RunBackground(ctx, time.Second) })
 	wg.Go(func() {
@@ -307,6 +316,9 @@ func (a *App) RunBackground(ctx context.Context) (wait func()) {
 		jobs.Periodic(ctx, log, "store.purge_finished", time.Hour, false, func(ctx context.Context) error {
 			now := a.Clock.Now()
 			if _, err := a.Outbox.Purge(ctx, now.Add(-outbox.Retention)); err != nil {
+				return err
+			}
+			if _, err := events.Purge(ctx, a.Store, now.Add(-events.Retention)); err != nil {
 				return err
 			}
 			_, err := a.Jobs.Purge(ctx, now.Add(-jobs.Retention))

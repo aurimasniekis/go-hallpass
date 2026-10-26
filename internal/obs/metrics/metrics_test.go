@@ -48,6 +48,8 @@ func exercise(m *Metrics) {
 	m.SetStoreSizes(4096, 1024)
 	m.SetOutboxBacklog(2, 1)
 	m.NotificationDelivery(ProviderTelegram, DeliveryRetry)
+	m.EventPublish(EventPublished)
+	m.SetEventBacklog(3, 0)
 	m.JobRun("store.wal_checkpoint", nil)
 	m.BackupRun("succeeded", time.Second)
 	m.SetBackupLastSuccess(time.Now())
@@ -122,6 +124,9 @@ func TestCatalogGolden(t *testing.T) {
 		"hallpass_outbox_pending":                               "gauge:",
 		"hallpass_outbox_dead":                                  "gauge:",
 		"hallpass_notification_deliveries_total":                "counter:outcome,provider",
+		"hallpass_events_publish_total":                         "counter:outcome",
+		"hallpass_events_pending":                               "gauge:",
+		"hallpass_events_dead":                                  "gauge:",
 		"hallpass_job_runs_total":                               "counter:job,result",
 		"hallpass_backup_remote_runs_total":                     "counter:result",
 		"hallpass_backup_remote_last_success_timestamp_seconds": "gauge:",

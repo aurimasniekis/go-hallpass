@@ -26,6 +26,7 @@ here are the detailed reference.
 | [operator/recording.md](operator/recording.md) | Recording durability, verification, reconciliation and retention. |
 | [operator/logging.md](operator/logging.md) | Log format and fields. |
 | [operator/observability.md](operator/observability.md) | Metrics, health and readiness, tracing, alerts. |
+| [operator/events.md](operator/events.md) | Publishing audit and session events to Pulse (NATS JetStream). |
 | [operator/incidents.md](operator/incidents.md) | Incident runbooks: lockdown, compromise, host-key change, disk full, corruption, lost KEK, break-glass. |
 | [operator/remote-networks.md](operator/remote-networks.md) | Reaching servers behind NAT: Tailscale, WireGuard, reverse SSH tunnels. |
 | [security-guarantees.md](security-guarantees.md) | What HallPass does and does not guarantee, with current status. |

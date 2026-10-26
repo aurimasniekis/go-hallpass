@@ -191,3 +191,35 @@ func TestAgentSSHAddress(t *testing.T) {
 		}
 	}
 }
+
+func TestPulseEvents(t *testing.T) {
+	ok := minimalProd + "events:\n  pulse:\n    enabled: true\n    url: tls://events.example.com:4222\n    creds_file: /etc/hallpass/pulse.creds\n"
+	cfg, err := Load(writeFile(t, ok), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := cfg.Events.Pulse; !p.Enabled || p.Source != "hallpass" {
+		t.Fatalf("pulse config %+v", p)
+	}
+	cases := map[string]struct{ content, problem string }{
+		"plain nats in production": {minimalProd + "events:\n  pulse:\n    enabled: true\n    url: nats://events.example.com:4222\n    creds_file: /c\n", "must use tls://"},
+		"not a nats url":           {minimalProd + "events:\n  pulse:\n    enabled: true\n    url: https://events.example.com\n    creds_file: /c\n", "tls:// or nats://"},
+		"no creds":                 {minimalProd + "events:\n  pulse:\n    enabled: true\n    url: tls://events.example.com:4222\n", "creds_file is required"},
+		"empty source":             {ok + "    source: \" \"\n", "source must not be empty"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := Load(writeFile(t, c.content), nil)
+			if ps := problems(t, err); !hasProblem(ps, c.problem) {
+				t.Fatalf("problems %v, want %q", ps, c.problem)
+			}
+		})
+	}
+	dev := "mode: development\npublic_url: http://localhost:8080\nkek:\n  file: \"\"\nevents:\n  pulse:\n    enabled: true\n    url: nats://127.0.0.1:4222\n    creds_file: /c\n"
+	if _, err := Load(writeFile(t, dev), nil); err != nil {
+		t.Fatalf("development allows nats://: %v", err)
+	}
+	if _, err := Load(writeFile(t, minimalProd+"events:\n  pulse:\n    url: nats://x\n"), nil); err != nil {
+		t.Fatalf("disabled pulse is not validated: %v", err)
+	}
+}

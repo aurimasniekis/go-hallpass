@@ -1054,6 +1054,40 @@
   session that expires sends the browser through the provider again, which signs in silently while the provider
   session lasts.
 
+### ADR-0057 — Publish audit and session events to Pulse (security-relevant change)
+
+- **Status:** accepted (operator request, 2026-10-26). **Security-relevant change, flagged for operator review:** a new
+  outbound channel carries audit metadata and session lifecycle events off the host in plaintext (to the operator's
+  Pulse). Off by default.
+- **Context:** the operator's other services (Porch) publish their events to Pulse, an event bus on NATS JetStream, and
+  the operator asked HallPass to publish everything it decides to send in the same way.
+- **Decision:**
+  - `events.pulse` in the configuration file (`enabled`, `url`, `creds_file`, `ca_file`, `source`), mirroring Porch.
+    Production requires `tls://`. Authentication is the Pulse client `.creds` file; HallPass only publishes.
+  - A transactional outbox (`event_outbox`, migration 0030) written in the transaction of the change, only while
+    publishing is enabled. A relay (`internal/events`) publishes with the go-pulse SDK, waits for the JetStream
+    acknowledgement, uses the source event's ID as `Nats-Msg-Id` (JetStream deduplicates a re-publish after a crash),
+    retries with capped exponential backoff (1 s to 5 min, ±50 % jitter) and dead-letters after 50 attempts or
+    24 hours, like Porch. One failure ends the round, so an outage does not time out on every row. Rows are deleted
+    7 days after they were written.
+  - Every audit event is published as `evt.hallpass.<action>` with the record the audit file sink receives
+    (`log.audit_file`), never the sealed sensitive details. Session lifecycle events from the timeline
+    (connections, channels, exec, git, file-transfer summaries, recording failures, session closed) are published as
+    `evt.hallpass.session.<event>` with the grant's agent, server and role; their data already excludes command text
+    and content. Request and grant timeline events are not published again, single file operations and destination
+    audit records are not published.
+  - CloudEvents type `hallpass.<name>.v1`; the subject grammar of Pulse (four or more `[a-z0-9_-]` tokens) is enforced
+    when the event is recorded.
+- **Alternatives:** publishing from the audit chain with a cursor (session events have no global sequence, and two
+  sources would need two cursors); the notification outbox (encrypted bodies, per-attempt history rows and 8 attempts
+  are built for chat messages, not a high-volume feed); an HTTP webhook (no deduplication or replay, and the operator
+  already runs Pulse); replaying history when publishing is first enabled (could flood Pulse with years of audit
+  events; the audit log stays the complete record).
+- **Consequences:** whoever can subscribe to `evt.hallpass.>` sees what the audit file contains, including operator and
+  agent source IP addresses and plaintext audit details (THREAT_MODEL T-26). A Pulse outage longer than 24 hours loses
+  events from the feed, not from HallPass. Each audit event and published session event costs one more row in its
+  write transaction while publishing is enabled. New dependencies: go-pulse and nats.go (plus nats-server in tests).
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

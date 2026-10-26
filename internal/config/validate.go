@@ -163,6 +163,7 @@ func (c *Config) Validate() error {
 		}
 	}
 	v.durationRange("shutdown.drain_timeout", c.Shutdown.DrainTimeout, 0, 10*time.Minute)
+	c.validateEvents(v, prod)
 
 	if prod {
 		if c.Dev.InsecureHTTP {
@@ -176,6 +177,25 @@ func (c *Config) Validate() error {
 		}
 	}
 	return v.err()
+}
+
+func (c *Config) validateEvents(v *validator, prod bool) {
+	p := c.Events.Pulse
+	if !p.Enabled {
+		return
+	}
+	switch u, err := url.Parse(p.URL); {
+	case err != nil || (u.Scheme != "tls" && u.Scheme != "nats") || u.Host == "":
+		v.add("events.pulse.url must be a tls:// or nats:// URL")
+	case u.Scheme == "nats" && prod:
+		v.add("events.pulse.url must use tls:// in production")
+	}
+	if p.CredsFile == "" {
+		v.add("events.pulse.creds_file is required")
+	}
+	if strings.TrimSpace(p.Source) == "" {
+		v.add("events.pulse.source must not be empty")
+	}
 }
 
 func (c *Config) validatePublicURL(v *validator, prod bool) {

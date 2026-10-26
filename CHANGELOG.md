@@ -7,6 +7,15 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+### Added
+
+- **Events to Pulse.** With `events.pulse` configured, HallPass publishes every audit event (`evt.hallpass.<action>`,
+  for example `evt.hallpass.request.approved`) and agent session events (`evt.hallpass.session.*`: connections,
+  channels, exec, git and file-transfer summaries, session closed) to [Pulse](https://github.com/aurimasniekis/go-pulse)
+  over NATS JetStream. Events are written in the same transaction as the change, carry a stable ID for de-duplication
+  and wait while Pulse is unreachable; HallPass never blocks on it. Encrypted audit details, command text and terminal
+  content are never published. Off by default; see `docs/operator/events.md`.
+
 ## [0.3.0] - 2026-10-26
 
 > **Recording format, backup format and keyring not externally reviewed.** The known limitations of

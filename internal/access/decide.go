@@ -266,7 +266,7 @@ func (svc *Service) recordApproval(ctx context.Context, tx *store.Tx, r db.Acces
 			"approvals": len(approvals), "approvals_required": need}}); err != nil {
 		return nil, err
 	}
-	if err := appendTimeline(ctx, tx, TimelineEvent{RequestID: r.ID, Type: EvApprovalRecorded,
+	if err := svc.appendTimeline(ctx, tx, TimelineEvent{RequestID: r.ID, Type: EvApprovalRecorded,
 		Data: map[string]any{"actor_id": operatorID, "channel": in.Channel, "duration": dur.String(), "approvals": len(approvals),
 			"approvals_required": need}}); err != nil {
 		return nil, err
@@ -343,13 +343,13 @@ func (svc *Service) decideTx(ctx context.Context, tx *store.Tx, snap *policy.Sna
 		}
 		out.grant = g
 	}
-	if err := appendTimeline(ctx, tx, TimelineEvent{RequestID: r.ID, SessionID: sessionOf(out.grant), Seq: seqIf(out.grant, 1), Type: evType,
+	if err := svc.appendTimeline(ctx, tx, TimelineEvent{RequestID: r.ID, SessionID: sessionOf(out.grant), Seq: seqIf(out.grant, 1), Type: evType,
 		Data: map[string]any{"actor_type": p.actorType, "actor_id": p.actorID, "channel": p.channel, "duration": p.duration.String(),
 			"approvers": p.approvers}}); err != nil {
 		return nil, err
 	}
 	if out.grant != nil {
-		if err := appendTimeline(ctx, tx, TimelineEvent{RequestID: r.ID, SessionID: out.grant.SessionID, Seq: 2, Type: EvGrantActivated,
+		if err := svc.appendTimeline(ctx, tx, TimelineEvent{RequestID: r.ID, SessionID: out.grant.SessionID, Seq: 2, Type: EvGrantActivated,
 			Data: map[string]any{"grant_id": out.grant.ID, "starts_at": out.grant.StartsAt, "expires_at": out.grant.ExpiresAt}}); err != nil {
 			return nil, err
 		}

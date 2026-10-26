@@ -126,15 +126,15 @@ func (svc *Service) OpenConsole(ctx context.Context, in OpenConsoleInput) (*Gran
 				"remote_user": g.RemoteUser, "duration": dur.String(), "session_id": g.SessionID, "request_id": reqID}}); err != nil {
 			return err
 		}
-		if err := appendTimeline(ctx, tx, TimelineEvent{RequestID: reqID, Type: EvRequestCreated, Data: map[string]any{"duration": dur.String(),
+		if err := svc.appendTimeline(ctx, tx, TimelineEvent{RequestID: reqID, Type: EvRequestCreated, Data: map[string]any{"duration": dur.String(),
 			"has_reason": false, "operator_id": in.Operator.ID, "web_terminal": true}}); err != nil {
 			return err
 		}
-		if err := appendTimeline(ctx, tx, TimelineEvent{RequestID: reqID, SessionID: g.SessionID, Seq: 1, Type: EvRequestApproved,
+		if err := svc.appendTimeline(ctx, tx, TimelineEvent{RequestID: reqID, SessionID: g.SessionID, Seq: 1, Type: EvRequestApproved,
 			Data: map[string]any{"actor_type": "operator", "actor_id": in.Operator.ID, "channel": ChannelConsole, "duration": dur.String()}}); err != nil {
 			return err
 		}
-		if err := appendTimeline(ctx, tx, TimelineEvent{RequestID: reqID, SessionID: g.SessionID, Seq: 2, Type: EvGrantActivated,
+		if err := svc.appendTimeline(ctx, tx, TimelineEvent{RequestID: reqID, SessionID: g.SessionID, Seq: 2, Type: EvGrantActivated,
 			Data: map[string]any{"grant_id": g.ID, "starts_at": g.StartsAt, "expires_at": g.ExpiresAt}}); err != nil {
 			return err
 		}

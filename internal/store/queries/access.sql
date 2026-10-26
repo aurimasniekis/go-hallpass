@@ -172,7 +172,7 @@ UPDATE ssh_channels SET state = 'interrupted', closed_at = ?, close_reason = 'pr
 WHERE state IN ('opening', 'active') AND boot_id != ?
 RETURNING id, access_session_id, connection_id;
 
--- name: InsertTimelineEvent :exec
+-- name: InsertTimelineEvent :execrows
 INSERT INTO timeline_events (id, access_session_id, request_id, seq, type, schema_version, at, connection_id, channel_id,
   segment_id, data_json, idempotency_key)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

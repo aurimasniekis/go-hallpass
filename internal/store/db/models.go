@@ -286,6 +286,19 @@ type DestauditRecord struct {
 	PurgedAt        sql.NullInt64
 }
 
+type EventOutbox struct {
+	ID            string
+	Subject       string
+	Type          string
+	PayloadJson   string
+	CreatedAt     int64
+	Attempts      int64
+	NextAttemptAt int64
+	PublishedAt   sql.NullInt64
+	DeadAt        sql.NullInt64
+	LastError     sql.NullString
+}
+
 type GatewayHostKey struct {
 	ID                string
 	Algorithm         string

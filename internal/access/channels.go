@@ -61,7 +61,7 @@ func (svc *Service) CloseConnection(ctx context.Context, connID, reason string) 
 			return err
 		}
 		for _, sid := range sessions {
-			if err := appendTimeline(ctx, tx, TimelineEvent{SessionID: sid, Seq: seqs[sid], Type: EvConnClosed, ConnectionID: connID,
+			if err := svc.appendTimeline(ctx, tx, TimelineEvent{SessionID: sid, Seq: seqs[sid], Type: EvConnClosed, ConnectionID: connID,
 				Data: map[string]any{"reason": reason}}); err != nil {
 				return err
 			}
@@ -232,7 +232,7 @@ func (svc *Service) RegisterChannel(ctx context.Context, in RegisterInput) (*Cha
 			return err
 		}
 		if firstOnConn == 0 {
-			if err := appendTimeline(ctx, tx, TimelineEvent{SessionID: sess.ID, Seq: seq, Type: EvConnOpened, ConnectionID: in.ConnectionID,
+			if err := svc.appendTimeline(ctx, tx, TimelineEvent{SessionID: sess.ID, Seq: seq, Type: EvConnOpened, ConnectionID: in.ConnectionID,
 				Data: map[string]any{"key_id": in.KeyID}}); err != nil {
 				return err
 			}
@@ -263,7 +263,7 @@ func (svc *Service) ActivateChannel(ctx context.Context, reg *ChannelReg, creden
 			return ErrAccessEnded
 		}
 		svc.publish(tx, eventbus.TopicActivityStarted, reg.ChannelID, reg.SessionID)
-		return appendTimeline(ctx, tx, TimelineEvent{SessionID: reg.SessionID, Seq: seq, Type: EvChannelOpened, ChannelID: reg.ChannelID, Data: data})
+		return svc.appendTimeline(ctx, tx, TimelineEvent{SessionID: reg.SessionID, Seq: seq, Type: EvChannelOpened, ChannelID: reg.ChannelID, Data: data})
 	})
 }
 
@@ -320,7 +320,7 @@ func (svc *Service) CloseChannel(ctx context.Context, reg *ChannelReg, ci CloseI
 			data["exit_signal"] = ci.ExitSignal
 		}
 		svc.publish(tx, eventbus.TopicActivityEnded, reg.ChannelID, reg.SessionID)
-		return appendTimeline(ctx, tx, TimelineEvent{SessionID: reg.SessionID, Seq: seq, Type: evType, ChannelID: reg.ChannelID, Data: data})
+		return svc.appendTimeline(ctx, tx, TimelineEvent{SessionID: reg.SessionID, Seq: seq, Type: evType, ChannelID: reg.ChannelID, Data: data})
 	})
 }
 
@@ -331,7 +331,7 @@ func (svc *Service) AppendSessionEvent(ctx context.Context, reg *ChannelReg, typ
 		return err
 	}
 	return svc.s.W().TxNamed(ctx, "access.session_event", func(tx *store.Tx) error {
-		return appendTimeline(ctx, tx, TimelineEvent{SessionID: reg.SessionID, Seq: seq, Type: typ, ChannelID: reg.ChannelID, SegmentID: segmentID, Data: data})
+		return svc.appendTimeline(ctx, tx, TimelineEvent{SessionID: reg.SessionID, Seq: seq, Type: typ, ChannelID: reg.ChannelID, SegmentID: segmentID, Data: data})
 	})
 }
 

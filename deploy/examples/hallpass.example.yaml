@@ -34,3 +34,10 @@ access:
 recording:
   durability: group               # group (fsync <= 250ms) | strict (fsync before forwarding)
   default_retention: 2160h        # 90 days
+
+# Publish audit and session events to Pulse (NATS JetStream); see docs/operator/events.md.
+# events:
+#   pulse:
+#     enabled: true
+#     url: tls://events.example.com:4222
+#     creds_file: /etc/hallpass/pulse.creds   # 0400, owned by the hallpass user

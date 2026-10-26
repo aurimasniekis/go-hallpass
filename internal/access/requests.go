@@ -133,7 +133,7 @@ func (svc *Service) CreateRequest(ctx context.Context, in CreateRequestInput) (*
 				"duration": dur.String(), "key_id": in.KeyID, "policy_version": snap.Version}}); err != nil {
 			return err
 		}
-		if err := appendTimeline(ctx, tx, TimelineEvent{RequestID: id, Type: EvRequestCreated,
+		if err := svc.appendTimeline(ctx, tx, TimelineEvent{RequestID: id, Type: EvRequestCreated,
 			Data: map[string]any{"duration": dur.String(), "has_reason": reason != ""}}); err != nil {
 			return err
 		}
@@ -316,7 +316,7 @@ func (svc *Service) endRequestTx(ctx context.Context, tx *store.Tx, r db.AccessR
 		Details: map[string]any{"reason": reason, "agent_id": r.AgentID}}); err != nil {
 		return nil, err
 	}
-	if err := appendTimeline(ctx, tx, TimelineEvent{RequestID: r.ID, Type: evType, Data: map[string]any{"reason": reason}}); err != nil {
+	if err := svc.appendTimeline(ctx, tx, TimelineEvent{RequestID: r.ID, Type: evType, Data: map[string]any{"reason": reason}}); err != nil {
 		return nil, err
 	}
 	if err := svc.runHooks(ctx, tx, RequestEvent{Kind: kind, Request: req}); err != nil {

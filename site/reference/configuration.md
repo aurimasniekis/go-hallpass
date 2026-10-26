@@ -151,6 +151,16 @@ egress:
 | `telemetry.otlp_endpoint` | — | Optional OTLP/HTTP endpoint for traces. Metrics are exported only through Prometheus `/metrics`. |
 | `telemetry.prometheus` | `true` | Expose Prometheus `/metrics`. |
 
+## Events (`events`)
+
+| Key | Default | Description |
+|---|---|---|
+| `events.pulse.enabled` | `false` | Publish audit and session events to Pulse. See [Events](/operators/events). |
+| `events.pulse.url` | — | Pulse NATS endpoint, e.g. `tls://events.example.com:4222`. Production requires `tls://`. |
+| `events.pulse.creds_file` | — | Pulse client `.creds` file; required when enabled. Keep it readable only by HallPass. |
+| `events.pulse.ca_file` | — | Extra CA for the NATS TLS certificate. Empty uses the system roots. |
+| `events.pulse.source` | `hallpass` | CloudEvents source of published events. |
+
 ## Shutdown (`shutdown`)
 
 | Key | Default | Description |
