@@ -53,7 +53,7 @@ HallPass controls **who** gets a session, **when**, and records **what passed th
 
 ## Status
 
-The current release is **0.5.0**. Versions before 1.0 may change interfaces between minor releases
+The current release is **0.6.0**. Versions before 1.0 may change interfaces between minor releases
 ([versioning](https://github.com/aurimasniekis/go-hallpass/blob/main/docs/VERSIONING.md)). Read the
 [known limitations](/security/#release-status) before you deploy it.
 
