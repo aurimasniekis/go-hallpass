@@ -137,6 +137,8 @@ type Session struct {
 	FileTransfer bool
 	// OperatorID is the administrator of a web terminal (AgentID is access.ConsoleAgentID; ADR-0055).
 	OperatorID string
+	// AgentSession is the agent session of the connection; the grant must belong to it.
+	AgentSession string
 }
 
 // GitOp is a git operation on a git remote. The service runs on the upstream host with the forwarded path; only
@@ -170,7 +172,7 @@ func (p *Proxy) Run(ctx context.Context, s *Session) Result {
 	_, span := tracing.Start(ctx, tracing.SpanAuthorize, tracing.AgentID(s.AgentID), tracing.GrantID(s.Grant.ID),
 		tracing.ConnectionID(s.ConnectionID))
 	in := access.RegisterInput{ConnectionID: s.ConnectionID, AgentID: s.AgentID, KeyID: s.KeyID,
-		GrantID: s.Grant.ID, Kind: s.Kind, PTY: s.PTY != nil, OperatorID: s.OperatorID}
+		GrantID: s.Grant.ID, Kind: s.Kind, PTY: s.PTY != nil, OperatorID: s.OperatorID, AgentSession: s.AgentSession}
 	if s.Git != nil {
 		in.GitService, in.GitRepo = s.Git.Service, s.Git.Repo
 	}

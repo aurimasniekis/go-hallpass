@@ -114,6 +114,6 @@ func (s *session) gitOp(ctx context.Context, gc gitproto.Command) int {
 	}
 	return s.proxy(ctx, &sshproxy.Session{
 		ConnectionID: s.c.ID, AgentID: s.c.AgentID, KeyID: s.c.KeyID, SourceIP: s.c.SourceIP.String(), Grant: g,
-		Kind: access.KindExec, Env: s.env, Agent: s.ch, AgentReqs: s.reqs, Notify: s.notice, Git: op,
+		Kind: access.KindExec, Env: s.env, Agent: s.ch, AgentReqs: s.reqs, Notify: s.notice, Git: op, AgentSession: s.agentSession,
 	})
 }

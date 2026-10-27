@@ -42,8 +42,9 @@ Host center
   IdentitiesOnly yes
   StrictHostKeyChecking yes
   ForwardAgent no
-  ClearAllForwardings yes
+  ClearAllForwardings yes     # the API proxy tunnel overrides it with -o ClearAllForwardings=no
   ServerAliveInterval 30
+  SendEnv CLAUDE_CODE_SESSION_ID HALLPASS_SESSION   # one agent session per conversation
 ```
 
 The alias `center` is a convention used throughout these docs. Use any name you like.

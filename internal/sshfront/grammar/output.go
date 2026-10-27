@@ -354,19 +354,20 @@ func NewSessionsDoc(now time.Time, items []SessionItem) SessionsDoc {
 
 // WhoAmIDoc is hallpass.whoami/v1.
 type WhoAmIDoc struct {
-	Schema         string `json:"schema"`
-	AgentID        string `json:"agent_id"`
-	AgentName      string `json:"agent_name"`
-	KeyID          string `json:"key_id"`
-	KeyFingerprint string `json:"key_fingerprint"`
-	SourceIP       string `json:"source_ip"`
+	Schema         string     `json:"schema"`
+	AgentID        string     `json:"agent_id"`
+	AgentName      string     `json:"agent_name"`
+	KeyID          string     `json:"key_id"`
+	KeyFingerprint string     `json:"key_fingerprint"`
+	SourceIP       string     `json:"source_ip"`
+	AgentSession   NullString `json:"agent_session"`
 }
 
 // NewWhoAmIDoc builds hallpass.whoami/v1.
-func NewWhoAmIDoc(agentID, agentName, keyID, keyFingerprint, sourceIP string) WhoAmIDoc {
+func NewWhoAmIDoc(agentID, agentName, keyID, keyFingerprint, sourceIP, agentSession string) WhoAmIDoc {
 	return WhoAmIDoc{
 		Schema: SchemaWhoAmI, AgentID: agentID, AgentName: agentName, KeyID: keyID,
-		KeyFingerprint: keyFingerprint, SourceIP: sourceIP,
+		KeyFingerprint: keyFingerprint, SourceIP: sourceIP, AgentSession: NullString(agentSession),
 	}
 }
 

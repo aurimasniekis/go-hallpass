@@ -1212,6 +1212,32 @@
   use least-privilege tokens. Agents must trust the target CAs (`SSL_CERT_FILE` and friends, or the macOS keychain).
   A leaked target CA key lets its holder intercept only that target's hosts, for agents that trust it.
 
+### ADR-0061 — Agent sessions: grants per conversation of one agent
+
+- **Status:** accepted (operator decision, 2026-10-27: strict separation; commands without a session share a default).
+  Not a weakening: it only narrows who may use a grant. The session is stated by the agent and is **not** a security
+  boundary between conversations; flagged so nobody relies on it as one.
+- **Context:** one agent identity (one key, e.g. `claude-aurimas-mbp`) runs many Claude Code conversations at once. All
+  of them saw and reused each other's grants and pending requests, so access approved for one task served every other
+  task on the machine.
+- **Decision:**
+  - A command names its **agent session** with the `HALLPASS_SESSION` environment variable, else
+    `CLAUDE_CODE_SESSION_ID` (Claude Code sets it in every command; agents add `SendEnv CLAUDE_CODE_SESSION_ID
+    HALLPASS_SESSION` to the gateway's `Host` entry). API tunnels get it from `hallpass-api` (`Hallpass-Session`
+    header) or the proxy URL's password (`api env` writes it there). Format: 1-64 of `A-Z a-z 0-9 . _ : -`, starting
+    with a letter or digit; invalid values are refused (exit 81, HTTP 400). None: the shared default session `""`.
+  - Requests and grants carry the session (`agent_session`, migration 0033). The pending-request deduplication, grant
+    lookup (`connect`, `exec`, git, file transfer, API calls), `list`, `sessions` and channel registration are scoped to
+    agent + session; a channel under another session's grant is refused. Policy, visibility, rate and pending limits,
+    concurrency limits and the audit actor stay per agent.
+  - Approval messages (web, Slack, Telegram), the request list and page show the session; `whoami` reports it.
+- **Alternatives:** sub-agents with their own keys (real separation, but a key per conversation to register and
+  approve); a session that falls back to the agent's other grants (rejected: one conversation could act on access
+  approved for another).
+- **Consequences:** anything holding the agent's key can name any session, including another conversation's; the
+  separation prevents accidental reuse, not a determined process. `/clear` in Claude Code starts a new session, so its
+  earlier grants are no longer used. Subagents of a conversation share its session.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

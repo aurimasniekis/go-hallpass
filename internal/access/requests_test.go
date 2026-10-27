@@ -114,7 +114,7 @@ func TestApproveCreatesGrantAndSession(t *testing.T) {
 		t.Fatalf("timeline %+v", tl)
 	}
 	// Reconnect/reuse never extends (HP-GRT-003).
-	found, _ := f.svc.FindActiveGrant(f.ctx, f.agent.ID, f.srv.ID, f.role.ID)
+	found, _ := f.svc.FindActiveGrant(f.ctx, f.agent.ID, "", f.srv.ID, f.role.ID)
 	if found.ID != g.ID || !found.ExpiresAt.Equal(g.ExpiresAt) {
 		t.Fatal("active grant lookup")
 	}
@@ -193,7 +193,7 @@ func TestExpiry(t *testing.T) {
 	}
 	g1 := f.grant(15 * time.Minute)
 	f.clk.Advance(16 * time.Minute)
-	if g, _ := f.svc.FindActiveGrant(f.ctx, f.agent.ID, f.srv.ID, f.role.ID); g != nil {
+	if g, _ := f.svc.FindActiveGrant(f.ctx, f.agent.ID, "", f.srv.ID, f.role.ID); g != nil {
 		t.Fatal("expired grant still active (expiry must be time-authoritative)")
 	}
 	if _, grants, _ := f.svc.ExpireDue(f.ctx); grants != 1 {
@@ -214,11 +214,11 @@ func TestOverlappingGrantSelection(t *testing.T) {
 	f := newFx(t)
 	short := f.grant(15 * time.Minute)
 	long := f.grant(time.Hour)
-	if g, _ := f.svc.FindActiveGrant(f.ctx, f.agent.ID, f.srv.ID, f.role.ID); g.ID != long.ID || g.SessionID == short.SessionID {
+	if g, _ := f.svc.FindActiveGrant(f.ctx, f.agent.ID, "", f.srv.ID, f.role.ID); g.ID != long.ID || g.SessionID == short.SessionID {
 		t.Fatalf("selected %+v", g)
 	}
 	f.clk.Advance(59*time.Minute + 59*time.Second)
-	if g, _ := f.svc.FindActiveGrant(f.ctx, f.agent.ID, f.srv.ID, f.role.ID); g != nil {
+	if g, _ := f.svc.FindActiveGrant(f.ctx, f.agent.ID, "", f.srv.ID, f.role.ID); g != nil {
 		t.Fatal("grant with < min_remaining_to_connect must not be selected")
 	}
 }

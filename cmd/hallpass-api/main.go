@@ -13,6 +13,7 @@ package main
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -53,6 +54,7 @@ const maxWaitPerCall = 15 * time.Minute
 type options struct {
 	gateway string
 	role    string
+	session string
 	reason  string
 	wait    time.Duration
 	retries int
@@ -73,6 +75,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	var o options
 	fs.StringVar(&o.gateway, "gateway", os.Getenv("HALLPASS_GATEWAY"), "SSH host of the HallPass gateway, as in your ssh config (env HALLPASS_GATEWAY)")
 	fs.StringVar(&o.role, "role", os.Getenv("HALLPASS_ROLE"), "use only this access profile (env HALLPASS_ROLE); default: the proxy picks one")
+	fs.StringVar(&o.session, "session", cmp.Or(os.Getenv("HALLPASS_SESSION"), os.Getenv("CLAUDE_CODE_SESSION_ID")),
+		"agent session the access belongs to (env HALLPASS_SESSION, else Claude Code's CLAUDE_CODE_SESSION_ID)")
 	fs.StringVar(&o.reason, "reason", os.Getenv("HALLPASS_REASON"), "why you need the access, shown to approvers with the command (env HALLPASS_REASON)")
 	fs.DurationVar(&o.wait, "wait", 10*time.Minute, "how long to wait for approval of requests the proxy filed (0: do not wait)")
 	fs.IntVar(&o.retries, "retries", 2, "how many times to run the command again after approvals")
@@ -100,6 +104,9 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return exitUsage
 	case o.role != "" && !roleRE.MatchString(o.role):
 		fmt.Fprintf(stderr, "hallpass-api: invalid --role %q\n", o.role)
+		return exitUsage
+	case o.session != "" && !sessionRE.MatchString(o.session):
+		fmt.Fprintf(stderr, "hallpass-api: invalid --session %q\n", o.session)
 		return exitUsage
 	case o.wait < 0 || o.retries < 0:
 		fmt.Fprintln(stderr, "hallpass-api: --wait and --retries must not be negative")
@@ -183,7 +190,7 @@ func (s *session) run(ctx context.Context, argv []string) int {
 func (s *session) runOnce(ctx context.Context, argv []string, command, invocation string) (int, error) {
 	lp, err := startLocalProxy(ctx, s.tunnelPort, map[string]string{
 		apienv.HeaderCommand: apienv.Encode(command), apienv.HeaderReason: apienv.Encode(s.o.reason), apienv.HeaderInvocation: invocation,
-		apienv.HeaderRole: s.o.role,
+		apienv.HeaderRole: s.o.role, apienv.HeaderSession: s.o.session,
 	})
 	if err != nil {
 		return 0, err
@@ -192,7 +199,7 @@ func (s *session) runOnce(ctx context.Context, argv []string, command, invocatio
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // G204: running the user's command is the point
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = s.stdin, s.stdout, s.stderr
 	// The role travels in the CONNECT header the local proxy adds, so the child's proxy URL carries none.
-	cmd.Env = childEnv(os.Environ(), apienv.Vars(lp.Port(), "", filepath.Join(s.dir, "ca.pem"), filepath.Join(s.dir, "token")))
+	cmd.Env = childEnv(os.Environ(), apienv.Vars(lp.Port(), "", "", filepath.Join(s.dir, "ca.pem"), filepath.Join(s.dir, "token")))
 	s.logf("running %s", command)
 	err = cmd.Run()
 	var ee *exec.ExitError
@@ -258,12 +265,13 @@ func (s *session) gatewayOutput(ctx context.Context, args ...string) ([]byte, er
 }
 
 // openTunnel starts "ssh -N -L 127.0.0.1:<port>:hallpass:443 <gateway>" and waits until the port accepts.
+// ClearAllForwardings=no overrides the "ClearAllForwardings yes" agent ssh configs carry, which would drop the -L too.
 func (s *session) openTunnel(ctx context.Context) (func(), error) {
 	port, err := freePort(ctx)
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.CommandContext(ctx, s.o.ssh, "-N", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", //nolint:gosec // G204: the user's ssh and gateway
+	cmd := exec.CommandContext(ctx, s.o.ssh, "-N", "-o", "BatchMode=yes", "-o", "ClearAllForwardings=no", "-o", "ExitOnForwardFailure=yes", //nolint:gosec // G204: the user's ssh and gateway
 		"-L", fmt.Sprintf("127.0.0.1:%d:hallpass:443", port), s.o.gateway)
 	var errb strings.Builder
 	cmd.Stderr = &errb
@@ -317,8 +325,11 @@ func newInvocation() string {
 	return "inv_" + base64.RawURLEncoding.EncodeToString(b)
 }
 
-// roleRE is the access profile alias rule.
-var roleRE = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
+// roleRE is the access profile alias rule; sessionRE the agent session rule.
+var (
+	roleRE    = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
+	sessionRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$`)
+)
 
 // proxyVars are replaced in the child's environment, whatever case the parent used.
 var proxyVars = regexp.MustCompile(`(?i)^(https?_proxy|all_proxy|no_proxy|ssl_cert_file|ssl_cert_dir|node_extra_ca_certs|requests_ca_bundle|curl_ca_bundle|cloudsdk_.*|gh_token|github_token|gh_enterprise_token|cloudflare_api_token|cloudflare_api_key|node_use_env_proxy)=`)

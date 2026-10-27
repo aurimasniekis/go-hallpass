@@ -43,6 +43,19 @@ within 5 seconds, and **Enable** brings it back with its keys.
 cancels pending requests. A revoked key can never be registered again, on any agent, so a replacement agent needs a
 new key. The name can be used again, and past sessions and the audit log still show the deleted agent.
 
+## Agent sessions
+
+One agent often runs several conversations at once, for example several Claude Code sessions on one laptop that share
+the agent's key. Each command can name an **agent session** (`HALLPASS_SESSION`, or Claude Code's
+`CLAUDE_CODE_SESSION_ID` passed with `SendEnv`). Requests and grants then belong to that session:
+
+- a grant approved for one conversation cannot be used by another; each asks for its own access with its own reason;
+- approval messages, the request page and the request list show the session next to the agent;
+- policy, visibility, limits and the audit log stay per agent; commands without a session share a default session.
+
+The session is the agent's own claim. It keeps conversations apart, but anything with the agent's key can name any
+session. Register separate agents (keys) where that matters.
+
 ## Hand the agent its configuration
 
 Give the agent's owner:

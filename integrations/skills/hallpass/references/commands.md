@@ -104,9 +104,11 @@ Host center
   IdentitiesOnly yes
   StrictHostKeyChecking yes   # pin the gateway host key from `hallpass hostkey show`
   ForwardAgent no
-  ClearAllForwardings yes
+  ClearAllForwardings yes     # the API proxy tunnel overrides it with -o ClearAllForwardings=no
   ServerAliveInterval 30
+  SendEnv CLAUDE_CODE_SESSION_ID HALLPASS_SESSION   # one agent session per conversation
 ```
 
-Forwarding (`-L`, `-R`, `-D`, `-W`), agent forwarding and X11 are refused and audited. `scp` and `sftp` work only
+Forwarding (`-L`, `-R`, `-D`, `-W`), agent forwarding and X11 are refused and audited, except a local forward to
+`hallpass` for the API proxy (see the APIs section of SKILL.md). `scp` and `sftp` work only
 through roles with the `file-transfer` capability.

@@ -129,7 +129,12 @@ func writeApproval(t *textBuilder, m *chat.ApprovalMessage, l limits) {
 	t.untrusted(m.AgentName, l.name)
 	t.plain(" (")
 	t.untrusted(m.AgentID, 64)
-	t.plain(")\nKey: ")
+	t.plain(")")
+	if m.AgentSession != "" {
+		t.plain(" · session ")
+		t.untrusted(m.AgentSession, 64)
+	}
+	t.plain("\nKey: ")
 	t.untrusted(m.AgentKeyFingerprint, 100)
 	t.plain("\nServer: ")
 	t.untrusted(m.Server, l.name)

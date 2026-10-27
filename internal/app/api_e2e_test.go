@@ -46,6 +46,14 @@ func TestGatewayAPIProxyEndToEnd(t *testing.T) {
 		!strings.Contains(out, "export CLOUDSDK_PROXY_USERNAME=read") {
 		t.Fatalf("api env --role: %d %q", code, out)
 	}
+	if out, _, code := g.runEnv(map[string]string{"CLAUDE_CODE_SESSION_ID": "conv-1"}, "api env --role read"); code != 0 ||
+		!strings.Contains(out, "export HTTPS_PROXY=http://read:conv-1@127.0.0.1:18080") || !strings.Contains(out, "export CLOUDSDK_PROXY_PASSWORD=conv-1") {
+		t.Fatalf("api env in a session: %d %q", code, out)
+	}
+	if out, _, code := g.runEnv(map[string]string{"HALLPASS_SESSION": "conv-2"}, "api env"); code != 0 ||
+		!strings.Contains(out, "export HTTPS_PROXY=http://_:conv-2@127.0.0.1:18080") {
+		t.Fatalf("api env without a role: %d %q", code, out)
+	}
 	if _, stderr, code := g.run("connect gh"); code == 0 || !strings.Contains(stderr, "API proxy") {
 		t.Fatalf("connect to an API target: %d %q", code, stderr)
 	}
@@ -89,7 +97,7 @@ func TestGatewayAPIProxyEndToEnd(t *testing.T) {
 	if resp.StatusCode != http.StatusBadGateway || resp.Header.Get("X-Hallpass-Error") != "upstream" {
 		t.Fatalf("GET: %d %q", resp.StatusCode, resp.Header.Get("X-Hallpass-Error"))
 	}
-	grants, err := g.a.Access.ActiveGrantsForAgent(ctx, g.agentID())
+	grants, err := g.a.Access.ActiveGrantsForAgent(ctx, g.agentID(), "")
 	must(t, err)
 	if len(grants) != 1 || grants[0].RoleID != role.ID {
 		t.Fatalf("grants: %+v", grants)

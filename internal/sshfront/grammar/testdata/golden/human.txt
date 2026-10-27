@@ -82,6 +82,7 @@ agent:        agt_01jabcdefghjkmnpqrstvwxyz4 (ci-bot)
 key:          key_01jabcdefghjkmnpqrstvwxyz5
 fingerprint:  SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 source:       192.0.2.10
+session:      default (shared by commands that name no session)
 == version
 hallpass:  1.2.3 (abc1234)
 grammar:   1

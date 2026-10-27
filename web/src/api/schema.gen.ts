@@ -2845,6 +2845,8 @@ export interface components {
             has_reason: boolean;
             /** @description untrusted agent text; only with requests.reason.read */
             reason?: string | null;
+            /** @description Agent session (conversation) that asked, as stated by the agent; absent for the agent's shared default session. The grant belongs to it. */
+            agent_session?: string;
             /** @description Distinct approvers the role needs (1 unless the role asks for more). */
             approvals_required: number;
             /** @description Approvals recorded so far when the role needs several approvers. */
@@ -2881,6 +2883,8 @@ export interface components {
             ended_at?: components["schemas"]["Timestamp"];
             end_reason?: string;
             session_id?: string;
+            /** @description Agent session the grant belongs to; only its connections may use it. Absent for the shared default session. */
+            agent_session?: string;
         };
         GrantPage: {
             items: components["schemas"]["Grant"][];

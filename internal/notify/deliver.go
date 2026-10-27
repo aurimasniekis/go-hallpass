@@ -70,7 +70,8 @@ func (svc *Service) deliverPending(ctx context.Context, b pendingBody) (outbox.R
 // render builds the approval message: verified agent identity, server and role context, the untrusted reason,
 // expiry, duration buttons, deny and a dashboard link — never addresses, usernames or credentials (HP-NTF-002/004).
 func (svc *Service) render(ctx context.Context, r *access.Request, actions []chat.Action, validate bool) (chat.ApprovalMessage, error) {
-	msg := chat.ApprovalMessage{RequestID: r.ID, RequestedDuration: r.RequestedDuration, ExpiresAt: r.ExpiresAt, Actions: actions}
+	msg := chat.ApprovalMessage{RequestID: r.ID, RequestedDuration: r.RequestedDuration, ExpiresAt: r.ExpiresAt, Actions: actions,
+		AgentSession: r.AgentSession}
 	if svc.opts.PublicURL != "" {
 		msg.DetailsURL = svc.opts.PublicURL + "/requests/" + r.ID
 	}

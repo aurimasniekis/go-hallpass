@@ -90,7 +90,7 @@ API targets (marked `(api)` in `list`) are HTTPS APIs called with their usual to
 the operator's credential; you never hold it:
 
 ```sh
-ssh -fN -o ExitOnForwardFailure=yes -L 127.0.0.1:18080:hallpass:443 center   # proxy tunnel (keep it running)
+ssh -fN -o ClearAllForwardings=no -o ExitOnForwardFailure=yes -L 127.0.0.1:18080:hallpass:443 center   # proxy tunnel (keep it running)
 eval "$(ssh center api env)"     # CA bundle in ~/.hallpass/api-ca.pem, HTTPS_PROXY, CA variables, placeholder tokens
 gh pr list --repo acme/api
 ```
@@ -107,6 +107,13 @@ hallpass-api --gateway center --reason "Answer the customer on #42" -- gh issue 
 
 `--role <profile>` (or `api env --role <profile>`) makes the proxy use that access profile only, instead of picking
 one per call.
+
+## Agent sessions
+
+Requests and grants belong to the agent session a command names: `HALLPASS_SESSION`, else `CLAUDE_CODE_SESSION_ID`
+(add `SendEnv CLAUDE_CODE_SESSION_ID HALLPASS_SESSION` to the gateway's `Host` entry). Each Claude Code conversation
+then has its own access; commands that name no session share the agent's default session. `whoami` shows the session.
+It separates conversations, it is not a security boundary: anything with the key can name any session.
 
 ## Quoting
 

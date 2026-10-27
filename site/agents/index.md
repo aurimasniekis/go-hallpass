@@ -32,12 +32,32 @@ Host center
   IdentitiesOnly yes
   StrictHostKeyChecking yes
   ForwardAgent no
-  ClearAllForwardings yes
+  ClearAllForwardings yes     # the API proxy tunnel overrides it with -o ClearAllForwardings=no
   ServerAliveInterval 30
+  SendEnv CLAUDE_CODE_SESSION_ID HALLPASS_SESSION   # one agent session per conversation (see below)
 ```
 
-Forwarding (`-L`, `-R`, `-D`, `-W`), agent forwarding and X11 are refused and audited. `scp` and `sftp` work through
+Forwarding (`-L`, `-R`, `-D`, `-W`), agent forwarding and X11 are refused and audited, except a local forward to
+`hallpass` for the [API proxy](#apis). `scp` and `sftp` work through
 roles with the file-transfer capability; see [File transfer](#file-transfer).
+
+## Agent sessions
+
+One agent (one key) often runs several conversations at once, for example several Claude Code sessions on the same
+machine. Each command can name its **agent session**, and requests and grants belong to that session: access approved
+for one conversation is not visible to or usable by another, and approvers see which session asks.
+
+- Claude Code sets `CLAUDE_CODE_SESSION_ID` in every command it runs. With `SendEnv CLAUDE_CODE_SESSION_ID` in the
+  gateway's `Host` entry, ssh passes it on and every conversation is its own session. `/clear` starts a new one.
+- Other agents set `HALLPASS_SESSION` (it wins over `CLAUDE_CODE_SESSION_ID`): 1-64 characters from `A-Z a-z 0-9 . _ :
+  -`, starting with a letter or digit.
+- Commands that name no session share the agent's **default** session, as before.
+- `ssh center whoami` shows the session; `sessions` and `list` show that session's grants only.
+- `hallpass-api` reads the same variables (or `--session`), and `api env` puts the session into the proxy URL.
+
+The session is stated by the agent, not proven: it keeps conversations from using each other's access by accident,
+but anything holding the key can name any session. Use separate agents (keys) where conversations must not be able to
+act for each other.
 
 ## Commands
 
@@ -128,7 +148,7 @@ their usual tools through the gateway's API proxy, which adds the operator's cre
 every call is checked against your access profile and recorded.
 
 ```sh
-ssh -fN -o ExitOnForwardFailure=yes -L 127.0.0.1:18080:hallpass:443 center   # the proxy tunnel; keep it running
+ssh -fN -o ClearAllForwardings=no -o ExitOnForwardFailure=yes -L 127.0.0.1:18080:hallpass:443 center   # the proxy tunnel; keep it running
 eval "$(ssh center api env)"                     # CA bundle, HTTPS_PROXY, CA variables, placeholder tokens
 gh pr list --repo acme/api                        # gh, wrangler, gcloud, curl, …
 ```

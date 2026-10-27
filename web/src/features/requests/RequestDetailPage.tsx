@@ -13,6 +13,7 @@ import { DurationInput } from '../../ds/DurationInput';
 import { KeyValueGrid } from '../../ds/KeyValueGrid';
 import { PageHeader } from '../../ds/PageHeader';
 import { ErrorState, LoadingState, PermissionDenied } from '../../ds/states';
+import { revealControls } from '../../ds/untrusted';
 import { UntrustedText } from '../../ds/UntrustedText';
 import { formatDateTime, formatDuration, formatDurationLong } from '../../lib/format';
 import { usePermissions } from '../../lib/usePermissions';
@@ -280,6 +281,18 @@ export function RequestDetailPage({ id }: { id: string }) {
                 key: 'key',
                 label: 'Agent key',
                 value: r.agent_key_id ? <code className="hp-mono">{r.agent_key_id}</code> : '—',
+              },
+              {
+                span: 2,
+                key: 'agent-session',
+                label: 'Agent session',
+                value: r.agent_session ? (
+                  <code className="hp-mono" title="Stated by the agent, e.g. one Claude Code conversation">
+                    {revealControls(r.agent_session)}
+                  </code>
+                ) : (
+                  'Default (shared)'
+                ),
               },
               { key: 'server', label: 'Server', value: <ServerName id={r.server_id} /> },
               { key: 'role', label: 'Role', value: <RoleName id={r.role_id} /> },

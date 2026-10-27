@@ -63,6 +63,8 @@ type session struct {
 	plain bool // git, scp or sftp: errors as text lines the client shows to its user
 	// subsystem is "sftp" when the client asked for file transfer instead of shell or exec.
 	subsystem string
+	// agentSession is the agent session (conversation) of this command; requests and grants belong to it.
+	agentSession string
 }
 
 // HandleSession implements SessionHandler.
@@ -208,7 +210,32 @@ func publicMessage(err error) string {
 	return "unavailable"
 }
 
+// Environment variables naming the agent session, in order of precedence. Claude Code sets CLAUDE_CODE_SESSION_ID
+// in every command it runs; "SendEnv CLAUDE_CODE_SESSION_ID" in the agent's ssh config passes it on.
+var agentSessionVars = []string{"HALLPASS_SESSION", "CLAUDE_CODE_SESSION_ID"}
+
+// resolveAgentSession reads the agent session from the environment the client sent ("" when none).
+func (s *session) resolveAgentSession(ctx context.Context) error {
+	for _, name := range agentSessionVars {
+		for _, kv := range s.env {
+			if kv[0] != name || kv[1] == "" {
+				continue
+			}
+			if !access.ValidAgentSession(kv[1]) {
+				return grammar.Usage(name + " must be 1-64 characters from A-Z a-z 0-9 . _ : - starting with a letter or digit")
+			}
+			s.agentSession = kv[1]
+			s.h.Access.NoteConnectionSession(ctx, s.c.ID, s.agentSession)
+			return nil
+		}
+	}
+	return nil
+}
+
 func (s *session) run(ctx context.Context, command string) int {
+	if err := s.resolveAgentSession(ctx); err != nil {
+		return s.fail(err)
+	}
 	if s.subsystem == "sftp" {
 		s.plain = true
 		var err error
@@ -257,7 +284,7 @@ func (s *session) run(ctx context.Context, command string) int {
 	case grammar.Sessions:
 		return s.sessions(ctx, c)
 	case grammar.WhoAmI:
-		doc := grammar.NewWhoAmIDoc(s.c.AgentID, s.c.AgentName, s.c.KeyID, s.c.Fingerprint, s.c.SourceIP.String())
+		doc := grammar.NewWhoAmIDoc(s.c.AgentID, s.c.AgentName, s.c.KeyID, s.c.Fingerprint, s.c.SourceIP.String(), s.agentSession)
 		return s.emit(c.JSON, doc, grammar.RenderWhoAmI(doc))
 	case grammar.Version:
 		bi := buildinfo.Get()
@@ -311,7 +338,7 @@ func durs(ds []time.Duration) []grammar.Duration {
 // activeGrants maps roleID → the grant activity would use.
 func (s *session) activeGrants(ctx context.Context) map[string]*access.Grant {
 	out := map[string]*access.Grant{}
-	gs, err := s.h.Access.ActiveGrantsForAgent(ctx, s.c.AgentID)
+	gs, err := s.h.Access.ActiveGrantsForAgent(ctx, s.c.AgentID, s.agentSession)
 	if err != nil {
 		return out
 	}
@@ -471,7 +498,7 @@ func (s *session) createRequest(ctx context.Context, vs policy.VisibleServer, vr
 		}
 	}
 	res, err := s.h.Access.CreateRequest(ctx, access.CreateRequestInput{AgentID: s.c.AgentID, KeyID: s.c.KeyID, ServerID: vs.Server.ID,
-		RoleID: vr.Role.ID, Reason: reason, Duration: o.Duration, IdempotencyKey: o.IdempotencyKey})
+		RoleID: vr.Role.ID, Reason: reason, Duration: o.Duration, IdempotencyKey: o.IdempotencyKey, AgentSession: s.agentSession})
 	if err != nil {
 		return nil, s.fail(mapErr(err, ""))
 	}
@@ -589,9 +616,9 @@ func (s *session) sessions(ctx context.Context, c grammar.Sessions) int {
 	var grants []*access.Grant
 	var err error
 	if c.All {
-		grants, err = s.h.Access.RecentGrantsForAgent(ctx, s.c.AgentID, now.Add(-7*24*time.Hour))
+		grants, err = s.h.Access.RecentGrantsForAgent(ctx, s.c.AgentID, s.agentSession, now.Add(-7*24*time.Hour))
 	} else {
-		grants, err = s.h.Access.ActiveGrantsForAgent(ctx, s.c.AgentID)
+		grants, err = s.h.Access.ActiveGrantsForAgent(ctx, s.c.AgentID, s.agentSession)
 	}
 	if err != nil {
 		return s.fail(grammar.Internal())
@@ -642,14 +669,14 @@ func (s *session) connect(ctx context.Context, alias string, o grammar.Opts, wai
 	}
 	return s.proxy(ctx, &sshproxy.Session{
 		ConnectionID: s.c.ID, AgentID: s.c.AgentID, KeyID: s.c.KeyID, SourceIP: s.c.SourceIP.String(), Grant: g, Kind: kind,
-		Command: remote, PTY: s.pty, Env: s.env, Agent: s.ch, AgentReqs: s.reqs, Notify: s.notice,
+		Command: remote, PTY: s.pty, Env: s.env, Agent: s.ch, AgentReqs: s.reqs, Notify: s.notice, AgentSession: s.agentSession,
 	})
 }
 
 // obtainGrant reuses an active grant or requests access and waits for the decision (PLAN §7.6). It returns the
 // grant, or nil and the exit code after writing the error.
 func (s *session) obtainGrant(ctx context.Context, vs policy.VisibleServer, vr policy.VisibleRole, o grammar.Opts, wait bool) (*access.Grant, int) {
-	g, err := s.h.Access.FindActiveGrant(ctx, s.c.AgentID, vs.Server.ID, vr.Role.ID)
+	g, err := s.h.Access.FindActiveGrant(ctx, s.c.AgentID, s.agentSession, vs.Server.ID, vr.Role.ID)
 	if err != nil {
 		return nil, s.fail(grammar.Internal())
 	}

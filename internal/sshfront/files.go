@@ -66,6 +66,6 @@ func (s *session) fileTransfer(ctx context.Context) int {
 		alias, c.vr.Role.Name, g.ExpiresAt.UTC().Format(time.RFC3339)))
 	return s.proxy(ctx, &sshproxy.Session{
 		ConnectionID: s.c.ID, AgentID: s.c.AgentID, KeyID: s.c.KeyID, SourceIP: s.c.SourceIP.String(), Grant: g,
-		Kind: access.KindExec, Agent: s.ch, AgentReqs: s.reqs, Notify: s.notice, FileTransfer: true,
+		Kind: access.KindExec, Agent: s.ch, AgentReqs: s.reqs, Notify: s.notice, FileTransfer: true, AgentSession: s.agentSession,
 	})
 }

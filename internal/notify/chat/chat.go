@@ -68,6 +68,8 @@ type ApprovalMessage struct {
 	AgentName           string
 	AgentID             string
 	AgentKeyFingerprint string
+	// AgentSession is the agent session (conversation) asking; "" is the agent's shared default session.
+	AgentSession string
 
 	Server            string // server alias
 	ServerDescription string

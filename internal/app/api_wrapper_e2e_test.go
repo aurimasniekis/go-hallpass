@@ -118,8 +118,22 @@ func TestHallpassAPIWrapperEndToEnd(t *testing.T) {
 	must(t, os.WriteFile(keyFile, pem.EncodeToMemory(blk), 0o600))
 	host, gwPort, _ := net.SplitHostPort(g.addr)
 	must(t, os.WriteFile(knownHosts, fmt.Appendf(nil, "[%s]:%s %s\n", host, gwPort, strings.TrimSpace(string(ssh.MarshalAuthorizedKey(g.hostPK)))), 0o600))
-	must(t, os.WriteFile(sshScript, fmt.Appendf(nil, "#!/bin/sh\nexec ssh -F /dev/null -i %s -o IdentitiesOnly=yes -o UserKnownHostsFile=%s "+
-		"-o StrictHostKeyChecking=yes -p %s \"$@\"\n", keyFile, knownHosts, gwPort), 0o700))
+	// The ssh config the agent docs give, including ClearAllForwardings yes (the tunnel must override it) and SendEnv.
+	sshConfig := filepath.Join(dir, "config")
+	must(t, os.WriteFile(sshConfig, fmt.Appendf(nil, `Host center
+  HostName %s
+  Port %s
+  User agent
+  IdentityFile %s
+  IdentitiesOnly yes
+  UserKnownHostsFile %s
+  StrictHostKeyChecking yes
+  ForwardAgent no
+  ClearAllForwardings yes
+  ServerAliveInterval 30
+  SendEnv CLAUDE_CODE_SESSION_ID HALLPASS_SESSION
+`, host, gwPort, keyFile, knownHosts), 0o600))
+	must(t, os.WriteFile(sshScript, fmt.Appendf(nil, "#!/bin/sh\nexec ssh -F %s \"$@\"\n", sshConfig), 0o700))
 	bin := filepath.Join(dir, "hallpass-api")
 	if out, err := exec.Command("go", "build", "-o", bin, "../../cmd/hallpass-api").CombinedOutput(); err != nil {
 		t.Fatalf("build hallpass-api: %v\n%s", err, out)
@@ -134,6 +148,9 @@ func TestHallpassAPIWrapperEndToEnd(t *testing.T) {
 				continue
 			}
 			reason, _ := g.a.Access.Reason(ctx, id)
+			if r, err := g.a.Access.GetRequest(ctx, id); err == nil {
+				reason += " [session " + r.AgentSession + "]"
+			}
 			_, _ = g.a.Access.Decide(ctx, access.DecideInput{RequestID: id, Approve: true, Operator: policy.OperatorInfo{ID: opID,
 				Roles: []string{"approver"}, Enabled: true}, Channel: access.ChannelWeb})
 			approved <- reason
@@ -144,9 +161,10 @@ func TestHallpassAPIWrapperEndToEnd(t *testing.T) {
 
 	cctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(cctx, bin, "--gateway", "agent@"+host, "--ssh", sshScript, "--role", "issues", "--reason", "Answer the customer on #42",
+	cmd := exec.CommandContext(cctx, bin, "--gateway", "center", "--ssh", sshScript, "--role", "issues", "--reason", "Answer the customer on #42",
 		"--wait", "1m", "--", "curl", "-sS", "-f", "-X", "POST", "-H", "Authorization: Bearer agent-own-token",
 		"https://"+wrapperHost+"/repos/acme/api/issues/42/comments", "-d", `{"body":"Fixed"}`)
+	cmd.Env = append(os.Environ(), "CLAUDE_CODE_SESSION_ID=0a1b2c3d-1111-4222-8333-444455556666")
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	err = cmd.Run()
@@ -155,6 +173,7 @@ func TestHallpassAPIWrapperEndToEnd(t *testing.T) {
 	}
 	reason := <-approved
 	if !strings.Contains(reason, "Answer the customer on #42 | Command (reported by the agent): curl -sS -f -X POST") ||
+		!strings.HasSuffix(reason, "[session 0a1b2c3d-1111-4222-8333-444455556666]") ||
 		!strings.Contains(reason, "/repos/acme/api/issues/42/comments") {
 		t.Fatalf("request reason %q", reason)
 	}

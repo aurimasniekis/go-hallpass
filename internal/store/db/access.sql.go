@@ -140,7 +140,7 @@ func (q *Queries) ActiveGrantIDsForServer(ctx context.Context, serverID string) 
 }
 
 const activeGrants = `-- name: ActiveGrants :many
-SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at, operator_id FROM grants WHERE state = 'active' ORDER BY expires_at
+SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at, operator_id, agent_session FROM grants WHERE state = 'active' ORDER BY expires_at
 `
 
 func (q *Queries) ActiveGrants(ctx context.Context) ([]Grant, error) {
@@ -170,6 +170,7 @@ func (q *Queries) ActiveGrants(ctx context.Context) ([]Grant, error) {
 			&i.RevokedBy,
 			&i.UpdatedAt,
 			&i.OperatorID,
+			&i.AgentSession,
 		); err != nil {
 			return nil, err
 		}
@@ -185,11 +186,16 @@ func (q *Queries) ActiveGrants(ctx context.Context) ([]Grant, error) {
 }
 
 const activeGrantsForAgent = `-- name: ActiveGrantsForAgent :many
-SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at, operator_id FROM grants WHERE state = 'active' AND agent_id = ? ORDER BY expires_at
+SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at, operator_id, agent_session FROM grants WHERE state = 'active' AND agent_id = ? AND agent_session = ? ORDER BY expires_at
 `
 
-func (q *Queries) ActiveGrantsForAgent(ctx context.Context, agentID string) ([]Grant, error) {
-	rows, err := q.db.QueryContext(ctx, activeGrantsForAgent, agentID)
+type ActiveGrantsForAgentParams struct {
+	AgentID      string
+	AgentSession string
+}
+
+func (q *Queries) ActiveGrantsForAgent(ctx context.Context, arg ActiveGrantsForAgentParams) ([]Grant, error) {
+	rows, err := q.db.QueryContext(ctx, activeGrantsForAgent, arg.AgentID, arg.AgentSession)
 	if err != nil {
 		return nil, err
 	}
@@ -215,6 +221,7 @@ func (q *Queries) ActiveGrantsForAgent(ctx context.Context, agentID string) ([]G
 			&i.RevokedBy,
 			&i.UpdatedAt,
 			&i.OperatorID,
+			&i.AgentSession,
 		); err != nil {
 			return nil, err
 		}
@@ -583,21 +590,23 @@ func (q *Queries) EndGrant(ctx context.Context, arg EndGrantParams) (int64, erro
 }
 
 const findActiveGrant = `-- name: FindActiveGrant :one
-SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at, operator_id FROM grants
-WHERE agent_id = ? AND server_id = ? AND role_id = ? AND state = 'active' AND expires_at > ?
+SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at, operator_id, agent_session FROM grants
+WHERE agent_id = ? AND agent_session = ? AND server_id = ? AND role_id = ? AND state = 'active' AND expires_at > ?
 ORDER BY expires_at DESC, id ASC LIMIT 1
 `
 
 type FindActiveGrantParams struct {
-	AgentID   string
-	ServerID  string
-	RoleID    string
-	ExpiresAt int64
+	AgentID      string
+	AgentSession string
+	ServerID     string
+	RoleID       string
+	ExpiresAt    int64
 }
 
 func (q *Queries) FindActiveGrant(ctx context.Context, arg FindActiveGrantParams) (Grant, error) {
 	row := q.db.QueryRowContext(ctx, findActiveGrant,
 		arg.AgentID,
+		arg.AgentSession,
 		arg.ServerID,
 		arg.RoleID,
 		arg.ExpiresAt,
@@ -621,6 +630,7 @@ func (q *Queries) FindActiveGrant(ctx context.Context, arg FindActiveGrantParams
 		&i.RevokedBy,
 		&i.UpdatedAt,
 		&i.OperatorID,
+		&i.AgentSession,
 	)
 	return i, err
 }
@@ -660,7 +670,7 @@ func (q *Queries) GetChannel(ctx context.Context, id string) (SshChannel, error)
 }
 
 const getConnection = `-- name: GetConnection :one
-SELECT id, agent_id, agent_key_id, client_user, client_version, source_ip, state, opened_at, closed_at, close_reason, boot_id, operator_id FROM ssh_connections WHERE id = ?
+SELECT id, agent_id, agent_key_id, client_user, client_version, source_ip, state, opened_at, closed_at, close_reason, boot_id, operator_id, agent_session FROM ssh_connections WHERE id = ?
 `
 
 func (q *Queries) GetConnection(ctx context.Context, id string) (SshConnection, error) {
@@ -679,6 +689,7 @@ func (q *Queries) GetConnection(ctx context.Context, id string) (SshConnection, 
 		&i.CloseReason,
 		&i.BootID,
 		&i.OperatorID,
+		&i.AgentSession,
 	)
 	return i, err
 }
@@ -708,7 +719,7 @@ func (q *Queries) GetDecisionByRequest(ctx context.Context, requestID string) (A
 }
 
 const getGrant = `-- name: GetGrant :one
-SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at, operator_id FROM grants WHERE id = ?
+SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at, operator_id, agent_session FROM grants WHERE id = ?
 `
 
 func (q *Queries) GetGrant(ctx context.Context, id string) (Grant, error) {
@@ -732,12 +743,13 @@ func (q *Queries) GetGrant(ctx context.Context, id string) (Grant, error) {
 		&i.RevokedBy,
 		&i.UpdatedAt,
 		&i.OperatorID,
+		&i.AgentSession,
 	)
 	return i, err
 }
 
 const getGrantByRequest = `-- name: GetGrantByRequest :one
-SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at, operator_id FROM grants WHERE request_id = ?
+SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at, operator_id, agent_session FROM grants WHERE request_id = ?
 `
 
 func (q *Queries) GetGrantByRequest(ctx context.Context, requestID string) (Grant, error) {
@@ -761,22 +773,29 @@ func (q *Queries) GetGrantByRequest(ctx context.Context, requestID string) (Gran
 		&i.RevokedBy,
 		&i.UpdatedAt,
 		&i.OperatorID,
+		&i.AgentSession,
 	)
 	return i, err
 }
 
 const getPendingRequest = `-- name: GetPendingRequest :one
-SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at, operator_id FROM access_requests WHERE agent_id = ? AND server_id = ? AND role_id = ? AND state = 'pending'
+SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at, operator_id, agent_session FROM access_requests WHERE agent_id = ? AND agent_session = ? AND server_id = ? AND role_id = ? AND state = 'pending'
 `
 
 type GetPendingRequestParams struct {
-	AgentID  string
-	ServerID string
-	RoleID   string
+	AgentID      string
+	AgentSession string
+	ServerID     string
+	RoleID       string
 }
 
 func (q *Queries) GetPendingRequest(ctx context.Context, arg GetPendingRequestParams) (AccessRequest, error) {
-	row := q.db.QueryRowContext(ctx, getPendingRequest, arg.AgentID, arg.ServerID, arg.RoleID)
+	row := q.db.QueryRowContext(ctx, getPendingRequest,
+		arg.AgentID,
+		arg.AgentSession,
+		arg.ServerID,
+		arg.RoleID,
+	)
 	var i AccessRequest
 	err := row.Scan(
 		&i.ID,
@@ -795,12 +814,13 @@ func (q *Queries) GetPendingRequest(ctx context.Context, arg GetPendingRequestPa
 		&i.DecidedAt,
 		&i.UpdatedAt,
 		&i.OperatorID,
+		&i.AgentSession,
 	)
 	return i, err
 }
 
 const getRequest = `-- name: GetRequest :one
-SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at, operator_id FROM access_requests WHERE id = ?
+SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at, operator_id, agent_session FROM access_requests WHERE id = ?
 `
 
 func (q *Queries) GetRequest(ctx context.Context, id string) (AccessRequest, error) {
@@ -823,12 +843,13 @@ func (q *Queries) GetRequest(ctx context.Context, id string) (AccessRequest, err
 		&i.DecidedAt,
 		&i.UpdatedAt,
 		&i.OperatorID,
+		&i.AgentSession,
 	)
 	return i, err
 }
 
 const getRequestByIdempotencyKey = `-- name: GetRequestByIdempotencyKey :one
-SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at, operator_id FROM access_requests WHERE agent_id = ? AND idempotency_key = ?
+SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at, operator_id, agent_session FROM access_requests WHERE agent_id = ? AND idempotency_key = ?
 `
 
 type GetRequestByIdempotencyKeyParams struct {
@@ -856,6 +877,7 @@ func (q *Queries) GetRequestByIdempotencyKey(ctx context.Context, arg GetRequest
 		&i.DecidedAt,
 		&i.UpdatedAt,
 		&i.OperatorID,
+		&i.AgentSession,
 	)
 	return i, err
 }
@@ -1069,8 +1091,8 @@ func (q *Queries) InsertDecision(ctx context.Context, arg InsertDecisionParams) 
 
 const insertGrant = `-- name: InsertGrant :exec
 INSERT INTO grants (id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version,
-  starts_at, expires_at, state, updated_at, operator_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+  starts_at, expires_at, state, updated_at, operator_id, agent_session)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
 `
 
 type InsertGrantParams struct {
@@ -1087,6 +1109,7 @@ type InsertGrantParams struct {
 	ExpiresAt        int64
 	UpdatedAt        int64
 	OperatorID       sql.NullString
+	AgentSession     string
 }
 
 func (q *Queries) InsertGrant(ctx context.Context, arg InsertGrantParams) error {
@@ -1104,14 +1127,15 @@ func (q *Queries) InsertGrant(ctx context.Context, arg InsertGrantParams) error 
 		arg.ExpiresAt,
 		arg.UpdatedAt,
 		arg.OperatorID,
+		arg.AgentSession,
 	)
 	return err
 }
 
 const insertRequest = `-- name: InsertRequest :exec
 INSERT INTO access_requests (id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state,
-  idempotency_key, policy_version, created_at, expires_at, updated_at, operator_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
+  idempotency_key, policy_version, created_at, expires_at, updated_at, operator_id, agent_session)
+VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertRequestParams struct {
@@ -1128,6 +1152,7 @@ type InsertRequestParams struct {
 	ExpiresAt          int64
 	UpdatedAt          int64
 	OperatorID         sql.NullString
+	AgentSession       string
 }
 
 func (q *Queries) InsertRequest(ctx context.Context, arg InsertRequestParams) error {
@@ -1145,6 +1170,7 @@ func (q *Queries) InsertRequest(ctx context.Context, arg InsertRequestParams) er
 		arg.ExpiresAt,
 		arg.UpdatedAt,
 		arg.OperatorID,
+		arg.AgentSession,
 	)
 	return err
 }
@@ -1340,7 +1366,7 @@ func (q *Queries) ListRequestApprovals(ctx context.Context, requestID string) ([
 }
 
 const listRequestsForAgent = `-- name: ListRequestsForAgent :many
-SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at, operator_id FROM access_requests WHERE agent_id = ? AND created_at > ? ORDER BY created_at DESC LIMIT ?
+SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at, operator_id, agent_session FROM access_requests WHERE agent_id = ? AND created_at > ? ORDER BY created_at DESC LIMIT ?
 `
 
 type ListRequestsForAgentParams struct {
@@ -1375,6 +1401,7 @@ func (q *Queries) ListRequestsForAgent(ctx context.Context, arg ListRequestsForA
 			&i.DecidedAt,
 			&i.UpdatedAt,
 			&i.OperatorID,
+			&i.AgentSession,
 		); err != nil {
 			return nil, err
 		}
@@ -1440,7 +1467,7 @@ func (q *Queries) LiveChannels(ctx context.Context) ([]SshChannel, error) {
 }
 
 const pendingRequests = `-- name: PendingRequests :many
-SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at, operator_id FROM access_requests WHERE state = 'pending' ORDER BY created_at
+SELECT id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state, state_reason, idempotency_key, policy_version, created_at, expires_at, decided_at, updated_at, operator_id, agent_session FROM access_requests WHERE state = 'pending' ORDER BY created_at
 `
 
 func (q *Queries) PendingRequests(ctx context.Context) ([]AccessRequest, error) {
@@ -1469,6 +1496,7 @@ func (q *Queries) PendingRequests(ctx context.Context) ([]AccessRequest, error) 
 			&i.DecidedAt,
 			&i.UpdatedAt,
 			&i.OperatorID,
+			&i.AgentSession,
 		); err != nil {
 			return nil, err
 		}
@@ -1565,16 +1593,17 @@ func (q *Queries) PendingRequestsForServer(ctx context.Context, serverID string)
 }
 
 const recentGrantsForAgent = `-- name: RecentGrantsForAgent :many
-SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at, operator_id FROM grants WHERE agent_id = ? AND (state = 'active' OR ended_at > ?) ORDER BY starts_at DESC LIMIT 100
+SELECT id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version, starts_at, expires_at, state, ended_at, end_reason, revoked_by, updated_at, operator_id, agent_session FROM grants WHERE agent_id = ? AND agent_session = ? AND (state = 'active' OR ended_at > ?) ORDER BY starts_at DESC LIMIT 100
 `
 
 type RecentGrantsForAgentParams struct {
-	AgentID string
-	EndedAt sql.NullInt64
+	AgentID      string
+	AgentSession string
+	EndedAt      sql.NullInt64
 }
 
 func (q *Queries) RecentGrantsForAgent(ctx context.Context, arg RecentGrantsForAgentParams) ([]Grant, error) {
-	rows, err := q.db.QueryContext(ctx, recentGrantsForAgent, arg.AgentID, arg.EndedAt)
+	rows, err := q.db.QueryContext(ctx, recentGrantsForAgent, arg.AgentID, arg.AgentSession, arg.EndedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -1600,6 +1629,7 @@ func (q *Queries) RecentGrantsForAgent(ctx context.Context, arg RecentGrantsForA
 			&i.RevokedBy,
 			&i.UpdatedAt,
 			&i.OperatorID,
+			&i.AgentSession,
 		); err != nil {
 			return nil, err
 		}
@@ -1775,6 +1805,20 @@ func (q *Queries) SessionsForConnection(ctx context.Context, connectionID string
 		return nil, err
 	}
 	return items, nil
+}
+
+const setConnectionAgentSession = `-- name: SetConnectionAgentSession :exec
+UPDATE ssh_connections SET agent_session = ? WHERE id = ? AND agent_session = ''
+`
+
+type SetConnectionAgentSessionParams struct {
+	AgentSession string
+	ID           string
+}
+
+func (q *Queries) SetConnectionAgentSession(ctx context.Context, arg SetConnectionAgentSessionParams) error {
+	_, err := q.db.ExecContext(ctx, setConnectionAgentSession, arg.AgentSession, arg.ID)
+	return err
 }
 
 const setSessionState = `-- name: SetSessionState :execrows

@@ -233,7 +233,15 @@ func RenderWhoAmI(doc WhoAmIDoc) string {
 		{"key:", cell(doc.KeyID)},
 		{"fingerprint:", cell(doc.KeyFingerprint)},
 		{"source:", cell(doc.SourceIP)},
+		{"session:", sessionCell(string(doc.AgentSession))},
 	})
+}
+
+func sessionCell(s string) string {
+	if s == "" {
+		return "default (shared by commands that name no session)"
+	}
+	return cell(s)
 }
 
 // RenderVersion renders a VersionDoc.

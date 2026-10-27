@@ -10,7 +10,8 @@
     "agent_name",
     "key_id",
     "key_fingerprint",
-    "source_ip"
+    "source_ip",
+    "agent_session"
   ],
   "properties": {
     "schema": {
@@ -33,6 +34,13 @@
     },
     "source_ip": {
       "type": "string"
+    },
+    "agent_session": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The agent session of this command (HALLPASS_SESSION or CLAUDE_CODE_SESSION_ID); null for the shared default session. Requests and grants belong to it."
     }
   }
 }

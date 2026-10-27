@@ -430,7 +430,7 @@ func openRO(t testing.TB, dir string) *sql.DB {
 // activeGrants returns the agent's active grants.
 func (g *gw) activeGrants() []*access.Grant {
 	g.t.Helper()
-	gs, err := g.a.Access.ActiveGrantsForAgent(context.Background(), g.w.agentID)
+	gs, err := g.a.Access.ActiveGrantsForAgent(context.Background(), g.w.agentID, "")
 	must(g.t, err)
 	return gs
 }

@@ -255,18 +255,28 @@ type apiErr struct {
 
 func (f *fx) do(c *http.Client, method, path, body string, hdr ...string) (int, apiErr) {
 	f.t.Helper()
+	st, e, err := f.tryDo(c, method, path, body, hdr...)
+	must(f.t, err)
+	return st, e
+}
+
+// tryDo is do that returns transport errors (a tunnel the enforcer closes mid-request ends with EOF).
+func (f *fx) tryDo(c *http.Client, method, path, body string, hdr ...string) (int, apiErr, error) {
+	f.t.Helper()
 	req, err := http.NewRequest(method, "https://"+apiHost+path, strings.NewReader(body))
 	must(f.t, err)
 	for i := 0; i+1 < len(hdr); i += 2 {
 		req.Header.Set(hdr[i], hdr[i+1])
 	}
 	resp, err := c.Do(req)
-	must(f.t, err)
+	if err != nil {
+		return 0, apiErr{}, err
+	}
 	defer resp.Body.Close()
 	var e apiErr
 	b, _ := io.ReadAll(resp.Body)
 	_ = json.Unmarshal(b, &e)
-	return resp.StatusCode, e
+	return resp.StatusCode, e, nil
 }
 
 func (f *fx) last() seen {
@@ -297,7 +307,7 @@ func TestProxyInjectsCredentialAndEnforcesRules(t *testing.T) {
 	if got.Authorization != "Bearer read-secret-token-1234" || got.Cookie != "" || got.Path != "/repos/acme/api" || got.RawQuery != "access_token=leak&page=2" {
 		t.Fatalf("upstream saw %+v", got)
 	}
-	grants, err := f.acc.ActiveGrantsForAgent(f.ctx, f.agentID)
+	grants, err := f.acc.ActiveGrantsForAgent(f.ctx, f.agentID, "")
 	if err != nil || len(grants) != 1 || grants[0].RoleID != f.read.ID {
 		t.Fatalf("auto-approved grant: %v %v", grants, err)
 	}
@@ -346,8 +356,9 @@ func TestProxyInjectsCredentialAndEnforcesRules(t *testing.T) {
 	must(t, err)
 	deadline := time.Now().Add(access.EnforcementBound)
 	for {
-		st, e = f.do(c, "POST", "/repos/acme/api/issues", `{}`)
-		if st == 403 && e.HallPass.Code == "approval_required" {
+		var err error
+		st, e, err = f.tryDo(c, "POST", "/repos/acme/api/issues", `{}`)
+		if err == nil && st == 403 && e.HallPass.Code == "approval_required" {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -535,7 +546,9 @@ func TestProxyFilesRequestsForReportedCommands(t *testing.T) {
 
 func proxyURL(user string) *url.URL {
 	u := &url.URL{Scheme: "http", Host: "127.0.0.1:18080"}
-	if user != "" {
+	if name, pass, ok := strings.Cut(user, ":"); ok {
+		u.User = url.UserPassword(name, pass)
+	} else if user != "" {
 		u.User = url.User(user)
 	}
 	return u
@@ -553,7 +566,7 @@ func TestProxyNamedRole(t *testing.T) {
 	if st, e := f.do(write, "GET", "/repos/acme/api", ""); st != 403 || e.HallPass.Code != "rule" || !strings.Contains(e.Message, "access profile write on gh does not allow GET") {
 		t.Fatalf("GET as write: %d %+v", st, e)
 	}
-	if grants, _ := f.acc.ActiveGrantsForAgent(f.ctx, f.agentID); len(grants) != 0 {
+	if grants, _ := f.acc.ActiveGrantsForAgent(f.ctx, f.agentID, ""); len(grants) != 0 {
 		t.Fatalf("a grant was created for another profile: %+v", grants)
 	}
 	st, e := f.do(write, "POST", "/repos/acme/api/issues", `{}`)
@@ -589,5 +602,41 @@ func TestProxyNamedRole(t *testing.T) {
 	must(t, err)
 	if !strings.HasPrefix(string(resp), "HTTP/1.1 400") {
 		t.Fatalf("invalid role: %q", resp)
+	}
+}
+
+// Tunnels of different agent sessions get separate grants: the hallpass-api header or the proxy URL's password names
+// the session.
+func TestProxyAgentSessions(t *testing.T) {
+	f := newFx(t)
+	a := f.clientWith(http.Header{apienv.HeaderSession: {"conv-a"}})
+	b := f.clientAs(apienv.NoRole+":conv-b", nil)
+	if st, _ := f.do(a, "GET", "/repos/acme/api", ""); st != 200 {
+		t.Fatalf("GET a: %d", st)
+	}
+	ga, _ := f.acc.ActiveGrantsForAgent(f.ctx, f.agentID, "conv-a")
+	gb, _ := f.acc.ActiveGrantsForAgent(f.ctx, f.agentID, "conv-b")
+	if len(ga) != 1 || len(gb) != 0 {
+		t.Fatalf("after a: a=%d b=%d", len(ga), len(gb))
+	}
+	if st, _ := f.do(b, "GET", "/repos/acme/api", ""); st != 200 {
+		t.Fatalf("GET b: %d", st)
+	}
+	gb, _ = f.acc.ActiveGrantsForAgent(f.ctx, f.agentID, "conv-b")
+	if len(gb) != 1 || gb[0].ID == ga[0].ID {
+		t.Fatalf("session b reused a's grant: %+v", gb)
+	}
+	// Approving write for session a does not let session b write.
+	res, err := f.acc.CreateRequest(f.ctx, access.CreateRequestInput{AgentID: f.agentID, KeyID: f.keyID, ServerID: f.srv.ID,
+		RoleID: f.write.ID, Reason: "label issues", AgentSession: "conv-a"})
+	must(t, err)
+	_, err = f.acc.Decide(f.ctx, access.DecideInput{RequestID: res.Request.ID, Approve: true, Operator: f.approver, Channel: access.ChannelWeb})
+	must(t, err)
+	time.Sleep(candidateTTL + 100*time.Millisecond)
+	if st, e := f.do(b, "POST", "/repos/acme/api/issues", `{}`); st != 403 || e.HallPass.Code != "approval_required" {
+		t.Fatalf("session b wrote with a's grant: %d %+v", st, e)
+	}
+	if st, _ := f.do(a, "POST", "/repos/acme/api/issues", `{}`); st != 200 {
+		t.Fatalf("session a write: %d", st)
 	}
 }

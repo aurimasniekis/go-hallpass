@@ -85,6 +85,8 @@ type Request struct {
 	HasReason         bool          `json:"has_reason"`
 	// OperatorID names the administrator of a web terminal (agent is ConsoleAgentID); empty for agent access.
 	OperatorID string `json:"operator_id,omitempty"`
+	// AgentSession is the agent session that made the request ("" is the agent's shared default session).
+	AgentSession string `json:"agent_session,omitempty"`
 }
 
 // Terminal reports whether the request can no longer change.
@@ -109,6 +111,8 @@ type Grant struct {
 	SessionID     string     `json:"session_id,omitempty"`
 	// OperatorID names the administrator of a web terminal (agent is ConsoleAgentID); empty for agent access.
 	OperatorID string `json:"operator_id,omitempty"`
+	// AgentSession is the agent session the grant belongs to: only its connections may use it.
+	AgentSession string `json:"agent_session,omitempty"`
 }
 
 // Console reports whether the grant is a web terminal of an administrator (ADR-0055).
@@ -147,6 +151,7 @@ func requestFromRow(r db.AccessRequest) *Request {
 		RequestedDuration: time.Duration(r.RequestedDurationS) * time.Second, State: r.State, StateReason: r.StateReason.String,
 		PolicyVersion: r.PolicyVersion, CreatedAt: ts(r.CreatedAt), ExpiresAt: ts(r.ExpiresAt),
 		DecidedAt: tsPtr(r.DecidedAt.Int64, r.DecidedAt.Valid), HasReason: len(r.ReasonEnc) > 0, OperatorID: r.OperatorID.String,
+		AgentSession: r.AgentSession,
 	}
 }
 
@@ -155,7 +160,7 @@ func grantFromRow(r db.Grant) *Grant {
 		ID: r.ID, RequestID: r.RequestID, DecisionID: r.DecisionID, AgentID: r.AgentID, ServerID: r.ServerID, RoleID: r.RoleID,
 		RemoteUser: r.RemoteUser, PolicyVersion: r.PolicyVersion, StartsAt: ts(r.StartsAt), ExpiresAt: ts(r.ExpiresAt),
 		State: r.State, EndedAt: tsPtr(r.EndedAt.Int64, r.EndedAt.Valid), EndReason: r.EndReason.String,
-		OperatorID: r.OperatorID.String,
+		OperatorID: r.OperatorID.String, AgentSession: r.AgentSession,
 	}
 	_ = json.Unmarshal([]byte(r.CapabilitiesJson), &g.Capabilities)
 	return g

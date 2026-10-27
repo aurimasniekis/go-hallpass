@@ -8,7 +8,7 @@ replaces whatever credential the agent sent with the profile's credential, and r
 ## How it works
 
 ```
-ssh -fN -L 127.0.0.1:18080:hallpass:443 center      # the agent's proxy tunnel, over its normal SSH login
+ssh -fN -o ClearAllForwardings=no -L 127.0.0.1:18080:hallpass:443 center   # the agent's proxy tunnel
 eval "$(ssh center api env)"                       # CA bundle + HTTPS_PROXY and friends
 gh pr list --repo acme/api                          # a normal gh call
 ```
@@ -21,7 +21,8 @@ gh pr list --repo acme/api                          # a normal gh call
    name-constrained to the target's hosts, so it cannot be used to intercept anything else.
 4. For each request, HallPass picks the agent's access profile whose rules allow it: an active grant first, then an
    auto-approved profile (granted on first use), otherwise it answers **403** with the exact `request` command to run.
-   An agent that names a profile (`hallpass-api --role`, or the proxy URL's user name) gets only that one.
+   An agent that names a profile (`hallpass-api --role`, or the proxy URL's user name) gets only that one. Grants
+   belong to the agent session that asked (see [Agents and keys](/operators/agents#agent-sessions)).
 5. It removes the agent's `Authorization`, cookies and the credential header, adds the profile's credential, sends the
    request to the API, streams the answer back, and records the call in the session timeline.
 

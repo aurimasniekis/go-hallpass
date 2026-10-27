@@ -38,6 +38,8 @@ type tunnel struct {
 	command, reason, invocation string
 	// role, when set, is the only access profile the tunnel may use (hallpass-api --role, or the proxy URL's user).
 	role string
+	// agentSession is the agent session the tunnel's requests and grants belong to ("" = shared default).
+	agentSession string
 
 	mu        sync.Mutex
 	chans     map[string]*tunnelChannel // grant ID → channel
@@ -128,7 +130,7 @@ func (t *tunnel) candidates(ctx context.Context, fresh bool) ([]candidate, error
 	if err != nil || vs.Server.ID != t.srv.ID {
 		return nil, policy.ErrNotFoundOrForbidden
 	}
-	grants, err := t.p.o.Access.ActiveGrantsForAgent(ctx, t.cl.AgentID)
+	grants, err := t.p.o.Access.ActiveGrantsForAgent(ctx, t.cl.AgentID, t.agentSession)
 	if err != nil {
 		return nil, err
 	}
@@ -291,7 +293,7 @@ func (t *tunnel) choose(ctx context.Context, cands []candidate, rq apirules.Requ
 			_, _ = t.candidates(ctx, true)
 		case 1:
 			res, err := t.p.o.Access.CreateRequest(ctx, access.CreateRequestInput{AgentID: t.cl.AgentID, KeyID: t.cl.KeyID,
-				ServerID: t.srv.ID, RoleID: c.role.ID})
+				ServerID: t.srv.ID, RoleID: c.role.ID, AgentSession: t.agentSession})
 			if err == nil && res.Grant != nil {
 				c.grant = res.Grant
 				_, _ = t.candidates(ctx, true)
@@ -331,7 +333,7 @@ func (t *tunnel) fileRequest(ctx context.Context, c candidate, rq apirules.Reque
 		reason = strings.TrimSpace(reason + " | Command (reported by the agent): " + t.command)
 	}
 	res, err := t.p.o.Access.CreateRequest(ctx, access.CreateRequestInput{AgentID: t.cl.AgentID, KeyID: t.cl.KeyID,
-		ServerID: t.srv.ID, RoleID: c.role.ID, Reason: truncateRunes(reason, access.MaxReasonRunes)})
+		ServerID: t.srv.ID, RoleID: c.role.ID, Reason: truncateRunes(reason, access.MaxReasonRunes), AgentSession: t.agentSession})
 	if err != nil {
 		return &refusal{code: "request_failed", via: via, msg: "access could not be requested: " + publicMessage(err)}
 	}
@@ -352,7 +354,7 @@ func (t *tunnel) channel(ctx context.Context, g *access.Grant, cred *Credential)
 		return ch, nil
 	}
 	reg, err := t.p.o.Access.RegisterChannel(ctx, access.RegisterInput{ConnectionID: t.cl.ConnectionID, AgentID: t.cl.AgentID,
-		KeyID: t.cl.KeyID, GrantID: g.ID, Kind: access.KindExec, APIHost: t.host})
+		KeyID: t.cl.KeyID, GrantID: g.ID, Kind: access.KindExec, APIHost: t.host, AgentSession: t.agentSession})
 	if err != nil {
 		return nil, err
 	}

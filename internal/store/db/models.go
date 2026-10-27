@@ -25,6 +25,7 @@ type AccessRequest struct {
 	DecidedAt          sql.NullInt64
 	UpdatedAt          int64
 	OperatorID         sql.NullString
+	AgentSession       string
 }
 
 type AccessSession struct {
@@ -342,6 +343,7 @@ type Grant struct {
 	RevokedBy        sql.NullString
 	UpdatedAt        int64
 	OperatorID       sql.NullString
+	AgentSession     string
 }
 
 type Group struct {
@@ -868,6 +870,7 @@ type SshConnection struct {
 	CloseReason   sql.NullString
 	BootID        string
 	OperatorID    sql.NullString
+	AgentSession  string
 }
 
 type StoreSpaceProbe struct {

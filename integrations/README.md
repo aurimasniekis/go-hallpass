@@ -16,6 +16,9 @@ The agent still needs an SSH key registered in HallPass and a pinned gateway hos
 (see [docs/agent/guide.md](../docs/agent/guide.md)). The skill assumes the host alias `center`. Tell your agent if
 yours differs.
 
+Add `SendEnv CLAUDE_CODE_SESSION_ID HALLPASS_SESSION` to that host entry so each Claude Code conversation gets its own
+access (agent sessions). The plugin's version follows HallPass releases; update the plugin after upgrading HallPass.
+
 ## Claude Code (plugin)
 
 This repository is a plugin marketplace. In Claude Code:

@@ -291,7 +291,7 @@ func TestGatewayRevocationTerminates(t *testing.T) {
 	}
 	ags, err := g.a.Agents.List(context.Background())
 	must(t, err)
-	grants, err := g.a.Access.ActiveGrantsForAgent(context.Background(), ags[0].ID)
+	grants, err := g.a.Access.ActiveGrantsForAgent(context.Background(), ags[0].ID, "")
 	must(t, err)
 	if len(grants) != 1 {
 		t.Fatalf("grants %d", len(grants))

@@ -2871,6 +2871,7 @@ components:
         decided_at: {$ref: "#/components/schemas/Timestamp"}
         has_reason: {type: boolean}
         reason: {type: [string, "null"], description: "untrusted agent text; only with requests.reason.read"}
+        agent_session: {type: string, description: "Agent session (conversation) that asked, as stated by the agent; absent for the agent's shared default session. The grant belongs to it."}
         approvals_required: {type: integer, description: "Distinct approvers the role needs (1 unless the role asks for more)."}
         approvals:
           type: array
@@ -2914,6 +2915,7 @@ components:
         ended_at: {$ref: "#/components/schemas/Timestamp"}
         end_reason: {type: string}
         session_id: {type: string}
+        agent_session: {type: string, description: "Agent session the grant belongs to; only its connections may use it. Absent for the shared default session."}
     GrantPage:
       type: object
       required: [items, next_cursor]

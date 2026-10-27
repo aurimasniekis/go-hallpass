@@ -42,6 +42,17 @@ func (svc *Service) OpenConnection(ctx context.Context, in ConnectionInfo) (stri
 	return id, err
 }
 
+// NoteConnectionSession records the first agent session a connection names (for the activity views and audit).
+// Failures are ignored: the session is bookkeeping here, enforced on requests and grants.
+func (svc *Service) NoteConnectionSession(ctx context.Context, connID, agentSession string) {
+	if agentSession == "" {
+		return
+	}
+	_ = svc.s.W().TxNamed(ctx, "access.connection_session", func(tx *store.Tx) error {
+		return tx.Q.SetConnectionAgentSession(ctx, db.SetConnectionAgentSessionParams{AgentSession: agentSession, ID: connID})
+	})
+}
+
 // CloseConnection records the end of a connection and adds connection.closed to every session it touched.
 func (svc *Service) CloseConnection(ctx context.Context, connID, reason string) error {
 	sessions, err := svc.s.R().SessionsForConnection(ctx, connID)
@@ -94,6 +105,8 @@ type RegisterInput struct {
 	APIHost string
 	// OperatorID is the administrator of a web terminal (ADR-0055); it must match the grant's.
 	OperatorID string
+	// AgentSession is the connection's agent session; it must match the grant's.
+	AgentSession string
 }
 
 // ChannelReg is a registered (opening) channel.
@@ -140,7 +153,7 @@ func (svc *Service) RegisterChannel(ctx context.Context, in RegisterInput) (*Cha
 			return err
 		}
 		g := grantFromRow(gr)
-		if g.AgentID != in.AgentID || g.OperatorID != in.OperatorID {
+		if g.AgentID != in.AgentID || g.OperatorID != in.OperatorID || g.AgentSession != in.AgentSession {
 			return ErrNotFoundOrForbidden
 		}
 		if snap.Lockdown {

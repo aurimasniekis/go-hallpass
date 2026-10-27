@@ -17,11 +17,12 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/store/db"
 )
 
-// FindActiveGrant returns the grant to use for activity: among active grants for agent+server+role with at least
-// MinRemainingToConnect left, the latest expiry wins and ties go to the lowest ID (HP-GRT-005).
-func (svc *Service) FindActiveGrant(ctx context.Context, agentID, serverID, roleID string) (*Grant, error) {
+// FindActiveGrant returns the grant to use for activity: among the agent session's active grants for server+role
+// with at least MinRemainingToConnect left, the latest expiry wins and ties go to the lowest ID (HP-GRT-005).
+func (svc *Service) FindActiveGrant(ctx context.Context, agentID, agentSession, serverID, roleID string) (*Grant, error) {
 	cutoff := svc.opts.Clock.Now().Add(svc.opts.MinRemainingToConnect)
-	r, err := svc.s.R().FindActiveGrant(ctx, db.FindActiveGrantParams{AgentID: agentID, ServerID: serverID, RoleID: roleID, ExpiresAt: cutoff.UnixMicro()})
+	r, err := svc.s.R().FindActiveGrant(ctx, db.FindActiveGrantParams{AgentID: agentID, AgentSession: agentSession, ServerID: serverID,
+		RoleID: roleID, ExpiresAt: cutoff.UnixMicro()})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -51,9 +52,9 @@ func (svc *Service) GetGrant(ctx context.Context, id string) (*Grant, error) {
 	return g, nil
 }
 
-// ActiveGrantsForAgent lists an agent's active grants (for `sessions`).
-func (svc *Service) ActiveGrantsForAgent(ctx context.Context, agentID string) ([]*Grant, error) {
-	rows, err := svc.s.R().ActiveGrantsForAgent(ctx, agentID)
+// ActiveGrantsForAgent lists the active grants of one agent session (for `sessions`).
+func (svc *Service) ActiveGrantsForAgent(ctx context.Context, agentID, agentSession string) ([]*Grant, error) {
+	rows, err := svc.s.R().ActiveGrantsForAgent(ctx, db.ActiveGrantsForAgentParams{AgentID: agentID, AgentSession: agentSession})
 	if err != nil {
 		return nil, err
 	}
@@ -424,9 +425,10 @@ func b2i(b bool) int64 {
 	return 0
 }
 
-// RecentGrantsForAgent lists active grants and grants that ended after since (for `sessions --all`).
-func (svc *Service) RecentGrantsForAgent(ctx context.Context, agentID string, since time.Time) ([]*Grant, error) {
-	rows, err := svc.s.R().RecentGrantsForAgent(ctx, db.RecentGrantsForAgentParams{AgentID: agentID, EndedAt: sql.NullInt64{Int64: since.UnixMicro(), Valid: true}})
+// RecentGrantsForAgent lists an agent session's active grants and grants that ended after since (`sessions --all`).
+func (svc *Service) RecentGrantsForAgent(ctx context.Context, agentID, agentSession string, since time.Time) ([]*Grant, error) {
+	rows, err := svc.s.R().RecentGrantsForAgent(ctx, db.RecentGrantsForAgentParams{AgentID: agentID, AgentSession: agentSession,
+		EndedAt: sql.NullInt64{Int64: since.UnixMicro(), Valid: true}})
 	if err != nil {
 		return nil, err
 	}

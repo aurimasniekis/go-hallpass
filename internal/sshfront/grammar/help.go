@@ -49,7 +49,7 @@ their usual tools (gh, wrangler, gcloud, curl) through the gateway's API proxy, 
 hold the real token, and every call is checked against your access profile's rules and recorded.
 
 1. Open the proxy tunnel (keep it running):
-     ssh -fN -L 127.0.0.1:18080:hallpass:443 <gateway>
+     ssh -fN -o ClearAllForwardings=no -L 127.0.0.1:18080:hallpass:443 <gateway>
 2. Load the proxy settings (writes the CA bundle to ~/.hallpass/api-ca.pem and exports HTTPS_PROXY, CA file
    variables and placeholder tokens for gh and wrangler):
      eval "$(ssh <gateway> api env)"

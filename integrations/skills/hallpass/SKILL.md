@@ -129,7 +129,7 @@ the call (the proxy otherwise picks an active, then auto-approved, then requesta
 command needs approval. Exit 83 means denied: respect it. Without `hallpass-api`:
 
 ```sh
-ssh -fN -o ExitOnForwardFailure=yes -L 127.0.0.1:18080:hallpass:443 center   # once: the proxy tunnel
+ssh -fN -o ClearAllForwardings=no -o ExitOnForwardFailure=yes -L 127.0.0.1:18080:hallpass:443 center   # once: the proxy tunnel
 eval "$(ssh center api env)"     # CA bundle in ~/.hallpass, HTTPS_PROXY, CA variables, placeholder tokens
 gh pr list --repo acme/api
 ```
@@ -141,6 +141,18 @@ gh pr list --repo acme/api
   retry. "no access profile you can use … allows": the call is outside what you may do; tell the user.
 - Every call is recorded (method, path, status). Make only the calls the task needs.
 - `connect` and `exec` are refused on API targets.
+
+## Sessions (one conversation, one set of grants)
+
+HallPass keeps the access of each conversation separate when the gateway's `Host` entry has
+`SendEnv CLAUDE_CODE_SESSION_ID HALLPASS_SESSION`. Claude Code sets `CLAUDE_CODE_SESSION_ID` automatically.
+
+- Check it once: `ssh center whoami --json` shows `"agent_session"`. If it is `null`, this conversation shares the
+  agent's default session with every other one; tell the user that adding the `SendEnv` line separates them.
+- Access approved in another conversation (or before `/clear`) is not yours: request your own with your own reason.
+  `sessions` and `list` show only this session's grants.
+- Never set `HALLPASS_SESSION` or `--session` to another conversation's ID to borrow its access.
+- Subagents you start run in this session and share its grants.
 
 ## Exit codes
 

@@ -3,6 +3,7 @@
 package apienv
 
 import (
+	"cmp"
 	"encoding/base64"
 	"fmt"
 	"unicode/utf8"
@@ -17,7 +18,13 @@ const (
 	// HeaderRole names the only access profile the proxy may use (plain alias, not encoded). Tools configured without
 	// hallpass-api give it as the proxy URL's user name instead (http://<profile>@127.0.0.1:<port>).
 	HeaderRole = "Hallpass-Role"
+	// HeaderSession names the agent session (conversation) the tunnel's requests and grants belong to. Tools
+	// configured without hallpass-api give it as the proxy URL's password.
+	HeaderSession = "Hallpass-Session"
 )
+
+// NoRole is the proxy URL user name meaning "no named access profile", used when only a session is given.
+const NoRole = "_"
 
 // MaxTextRunes bounds the reported command and reason.
 const MaxTextRunes = 1000
@@ -41,11 +48,14 @@ func Decode(v string) string {
 }
 
 // Vars returns the environment for API tools using the proxy on 127.0.0.1:port, with caFile holding the CA bundle
-// and tokenFile the placeholder token (for gcloud). A non-empty role becomes the proxy URL's user name, which tools
-// send in Proxy-Authorization on every CONNECT. Values are literal (not shell-quoted).
-func Vars(port int, role, caFile, tokenFile string) [][2]string {
+// and tokenFile the placeholder token (for gcloud). A non-empty role becomes the proxy URL's user name and a session
+// its password; tools send both in Proxy-Authorization on every CONNECT. Values are literal (not shell-quoted).
+func Vars(port int, role, session, caFile, tokenFile string) [][2]string {
 	user := ""
-	if role != "" {
+	switch {
+	case session != "":
+		user = cmp.Or(role, NoRole) + ":" + session + "@"
+	case role != "":
 		user = role + "@"
 	}
 	proxy := fmt.Sprintf("http://%s127.0.0.1:%d", user, port)
@@ -57,8 +67,11 @@ func Vars(port int, role, caFile, tokenFile string) [][2]string {
 		{"CLOUDSDK_AUTH_ACCESS_TOKEN_FILE", tokenFile},
 		{"GH_TOKEN", Placeholder}, {"CLOUDFLARE_API_TOKEN", Placeholder},
 	}
-	if role != "" {
-		vars = append(vars, [2]string{"CLOUDSDK_PROXY_USERNAME", role})
+	if role != "" || session != "" {
+		vars = append(vars, [2]string{"CLOUDSDK_PROXY_USERNAME", cmp.Or(role, NoRole)})
+	}
+	if session != "" {
+		vars = append(vars, [2]string{"CLOUDSDK_PROXY_PASSWORD", session})
 	}
 	return vars
 }

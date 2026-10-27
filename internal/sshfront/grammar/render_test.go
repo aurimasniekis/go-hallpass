@@ -12,7 +12,7 @@ func TestRenderSanitizes(t *testing.T) {
 	out += RenderRoles(NewRolesDoc(now, ServerRef{Alias: "web1", Description: evil}, []RoleDetail{{Alias: "r", Description: evil, Capabilities: []string{evil}}}))
 	out += RenderStatus(NewStatusDoc(now, StatusInfo{ID: rid, State: "denied", StateReason: NullString(evil)}))
 	out += RenderSessions(NewSessionsDoc(now, []SessionItem{{GrantID: gid, State: "revoked", EndReason: NullString(evil)}}))
-	out += RenderWhoAmI(NewWhoAmIDoc("agt", evil, "", "", ""))
+	out += RenderWhoAmI(NewWhoAmIDoc("agt", evil, "", "", "", evil))
 	out += RenderVersion(NewVersionDoc(evil, evil))
 	for _, r := range out {
 		if r != '\n' && !printable(string(r)) {

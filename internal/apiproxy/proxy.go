@@ -2,6 +2,7 @@ package apiproxy
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -286,32 +287,40 @@ func (p *Proxy) open(ctx context.Context, cl Client, req *http.Request, conn io.
 	if inv := req.Header.Get(apienv.HeaderInvocation); invocationRE.MatchString(inv) {
 		t.invocation = inv
 	}
-	t.role = req.Header.Get(apienv.HeaderRole)
-	if t.role == "" {
-		t.role = proxyUser(req)
+	user, pass := proxyAuth(req)
+	t.role = cmp.Or(req.Header.Get(apienv.HeaderRole), user)
+	if t.role == apienv.NoRole {
+		t.role = ""
 	}
 	if t.role != "" && !alias.Syntax(t.role) {
 		cancel()
 		return refuse(http.StatusBadRequest, "hallpass: invalid access profile name "+strconv.Quote(truncate(t.role, 64)))
 	}
+	t.agentSession = cmp.Or(req.Header.Get(apienv.HeaderSession), pass)
+	if !access.ValidAgentSession(t.agentSession) {
+		cancel()
+		return refuse(http.StatusBadRequest, "hallpass: invalid agent session "+strconv.Quote(truncate(t.agentSession, 64)))
+	}
+	p.o.Access.NoteConnectionSession(ctx, cl.ConnectionID, t.agentSession)
 	return t, true
 }
 
 var invocationRE = regexp.MustCompile(`^[A-Za-z0-9_-]{16,64}$`)
 
-// proxyUser returns the user name of a Basic Proxy-Authorization header: the access profile a tool configured with
-// http://<profile>@127.0.0.1:<port> asks for. The password, if any, is ignored (identity comes from SSH).
-func proxyUser(req *http.Request) string {
+// proxyAuth returns the user name and password of a Basic Proxy-Authorization header: the access profile and agent
+// session a tool configured with http://<profile>:<session>@127.0.0.1:<port> asks for. They are not credentials:
+// identity comes from the SSH key.
+func proxyAuth(req *http.Request) (user, pass string) {
 	scheme, cred, ok := strings.Cut(req.Header.Get("Proxy-Authorization"), " ")
 	if !ok || !strings.EqualFold(scheme, "Basic") {
-		return ""
+		return "", ""
 	}
 	b, err := base64.StdEncoding.DecodeString(strings.TrimSpace(cred))
 	if err != nil {
-		return ""
+		return "", ""
 	}
-	user, _, _ := strings.Cut(string(b), ":")
-	return user
+	user, pass, _ = strings.Cut(string(b), ":")
+	return user, pass
 }
 
 // reportedText decodes and sanitizes a hallpass-api header, cutting it to apienv.MaxTextRunes.

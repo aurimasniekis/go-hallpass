@@ -1,7 +1,7 @@
 -- name: InsertRequest :exec
 INSERT INTO access_requests (id, agent_id, agent_key_id, server_id, role_id, reason_enc, requested_duration_s, state,
-  idempotency_key, policy_version, created_at, expires_at, updated_at, operator_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?);
+  idempotency_key, policy_version, created_at, expires_at, updated_at, operator_id, agent_session)
+VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetRequest :one
 SELECT * FROM access_requests WHERE id = ?;
@@ -10,7 +10,7 @@ SELECT * FROM access_requests WHERE id = ?;
 SELECT * FROM access_requests WHERE agent_id = ? AND idempotency_key = ?;
 
 -- name: GetPendingRequest :one
-SELECT * FROM access_requests WHERE agent_id = ? AND server_id = ? AND role_id = ? AND state = 'pending';
+SELECT * FROM access_requests WHERE agent_id = ? AND agent_session = ? AND server_id = ? AND role_id = ? AND state = 'pending';
 
 -- name: CountRecentRequests :one
 SELECT count(*) FROM access_requests WHERE agent_id = ? AND created_at > ?;
@@ -51,8 +51,8 @@ SELECT * FROM approval_decisions WHERE request_id = ?;
 
 -- name: InsertGrant :exec
 INSERT INTO grants (id, request_id, decision_id, agent_id, server_id, role_id, remote_user, capabilities_json, policy_version,
-  starts_at, expires_at, state, updated_at, operator_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?);
+  starts_at, expires_at, state, updated_at, operator_id, agent_session)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?);
 
 -- name: GetGrant :one
 SELECT * FROM grants WHERE id = ?;
@@ -62,14 +62,14 @@ SELECT * FROM grants WHERE request_id = ?;
 
 -- name: FindActiveGrant :one
 SELECT * FROM grants
-WHERE agent_id = ? AND server_id = ? AND role_id = ? AND state = 'active' AND expires_at > ?
+WHERE agent_id = ? AND agent_session = ? AND server_id = ? AND role_id = ? AND state = 'active' AND expires_at > ?
 ORDER BY expires_at DESC, id ASC LIMIT 1;
 
 -- name: ActiveGrants :many
 SELECT * FROM grants WHERE state = 'active' ORDER BY expires_at;
 
 -- name: ActiveGrantsForAgent :many
-SELECT * FROM grants WHERE state = 'active' AND agent_id = ? ORDER BY expires_at;
+SELECT * FROM grants WHERE state = 'active' AND agent_id = ? AND agent_session = ? ORDER BY expires_at;
 
 -- name: ActiveGrantIDsForAgent :many
 SELECT id FROM grants WHERE state = 'active' AND agent_id = ?;
@@ -124,6 +124,9 @@ LIMIT ?;
 -- name: InsertConnection :exec
 INSERT INTO ssh_connections (id, agent_id, agent_key_id, client_user, client_version, source_ip, state, opened_at, boot_id, operator_id)
 VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?);
+
+-- name: SetConnectionAgentSession :exec
+UPDATE ssh_connections SET agent_session = ? WHERE id = ? AND agent_session = '';
 
 -- name: CloseConnection :execrows
 UPDATE ssh_connections SET state = 'closed', closed_at = ?, close_reason = ? WHERE id = ? AND state = 'open';
@@ -197,7 +200,7 @@ SELECT count(*) FROM ssh_channels WHERE connection_id = ? AND access_session_id 
 SELECT DISTINCT access_session_id FROM ssh_channels WHERE connection_id = ?;
 
 -- name: RecentGrantsForAgent :many
-SELECT * FROM grants WHERE agent_id = ? AND (state = 'active' OR ended_at > ?) ORDER BY starts_at DESC LIMIT 100;
+SELECT * FROM grants WHERE agent_id = ? AND agent_session = ? AND (state = 'active' OR ended_at > ?) ORDER BY starts_at DESC LIMIT 100;
 
 -- name: CountChannelsForSession :one
 SELECT count(*) AS total, count(*) FILTER (WHERE state IN ('opening', 'active')) AS live

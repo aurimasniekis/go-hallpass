@@ -28,6 +28,8 @@ type CreateRequestInput struct {
 	Reason         string
 	Duration       time.Duration // 0 = policy default
 	IdempotencyKey string
+	// AgentSession is the agent session asking ("" = the agent's shared default session); the grant belongs to it.
+	AgentSession string
 }
 
 // CreateResult is the outcome of CreateRequest.
@@ -49,6 +51,9 @@ func (svc *Service) CreateRequest(ctx context.Context, in CreateRequestInput) (*
 	if err != nil {
 		return nil, err
 	}
+	if !ValidAgentSession(in.AgentSession) {
+		return nil, apperr.New(apperr.CodeInvalid, "invalid agent session")
+	}
 	if in.IdempotencyKey != "" && (len(in.IdempotencyKey) < 8 || len(in.IdempotencyKey) > 128) {
 		return nil, apperr.New(apperr.CodeInvalid, "idempotency key must be 8-128 characters")
 	}
@@ -64,7 +69,7 @@ func (svc *Service) CreateRequest(ctx context.Context, in CreateRequestInput) (*
 			r, err := tx.Q.GetRequestByIdempotencyKey(ctx, db.GetRequestByIdempotencyKeyParams{
 				AgentID: in.AgentID, IdempotencyKey: sql.NullString{String: in.IdempotencyKey, Valid: true}})
 			if err == nil {
-				if r.ServerID != in.ServerID || r.RoleID != in.RoleID {
+				if r.ServerID != in.ServerID || r.RoleID != in.RoleID || r.AgentSession != in.AgentSession {
 					return apperr.New(apperr.CodeConflict, "idempotency key was used for a different request")
 				}
 				res = &CreateResult{Request: requestFromRow(r), Deduplicated: true}
@@ -83,7 +88,8 @@ func (svc *Service) CreateRequest(ctx context.Context, in CreateRequestInput) (*
 		if !d.Requestable() {
 			return ErrNotFoundOrForbidden
 		}
-		if existing, err := tx.Q.GetPendingRequest(ctx, db.GetPendingRequestParams{AgentID: in.AgentID, ServerID: in.ServerID, RoleID: in.RoleID}); err == nil {
+		if existing, err := tx.Q.GetPendingRequest(ctx, db.GetPendingRequestParams{AgentID: in.AgentID, AgentSession: in.AgentSession,
+			ServerID: in.ServerID, RoleID: in.RoleID}); err == nil {
 			res = &CreateResult{Request: requestFromRow(existing), Deduplicated: true}
 			return nil
 		} else if !errors.Is(err, sql.ErrNoRows) {
@@ -124,17 +130,18 @@ func (svc *Service) CreateRequest(ctx context.Context, in CreateRequestInput) (*
 			ID: id, AgentID: in.AgentID, AgentKeyID: in.KeyID, ServerID: in.ServerID, RoleID: in.RoleID, ReasonEnc: reasonEnc,
 			RequestedDurationS: int64(dur / time.Second), IdempotencyKey: sql.NullString{String: in.IdempotencyKey, Valid: in.IdempotencyKey != ""},
 			PolicyVersion: snap.Version, CreatedAt: tx.NowMicros(), ExpiresAt: tx.Now.Add(svc.opts.PendingExpiry).UnixMicro(), UpdatedAt: tx.NowMicros(),
+			AgentSession: in.AgentSession,
 		}); err != nil {
 			return err
 		}
 		tx.AfterCommit(func() { svc.opts.Metrics.AccessRequest(metrics.RequestPending) })
 		if _, err := svc.audit.Append(ctx, tx, audit.Event{Actor: audit.Actor{Type: audit.ActorAgent, ID: in.AgentID}, Action: "request.created",
 			Target: audit.Target{Type: "request", ID: id}, Details: map[string]any{"server_id": in.ServerID, "role_id": in.RoleID,
-				"duration": dur.String(), "key_id": in.KeyID, "policy_version": snap.Version}}); err != nil {
+				"duration": dur.String(), "key_id": in.KeyID, "policy_version": snap.Version, "agent_session": in.AgentSession}}); err != nil {
 			return err
 		}
 		if err := svc.appendTimeline(ctx, tx, TimelineEvent{RequestID: id, Type: EvRequestCreated,
-			Data: map[string]any{"duration": dur.String(), "has_reason": reason != ""}}); err != nil {
+			Data: map[string]any{"duration": dur.String(), "has_reason": reason != "", "agent_session": in.AgentSession}}); err != nil {
 			return err
 		}
 		row, err := tx.Q.GetRequest(ctx, id)

@@ -7,6 +7,30 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-27
+
+> **Recording format, backup format and keyring not externally reviewed.** The known limitations of
+> [0.1.0](https://github.com/aurimasniekis/go-hallpass/releases/tag/v0.1.0) still apply.
+
+### Added
+
+- **Agent sessions.** Several conversations of one agent (for example several Claude Code sessions sharing a key) no
+  longer share access. A command names its session with `HALLPASS_SESSION` or Claude Code's `CLAUDE_CODE_SESSION_ID`
+  (add `SendEnv CLAUDE_CODE_SESSION_ID HALLPASS_SESSION` to the gateway's `Host` entry); requests and grants belong to
+  that session and another session cannot use them. Approval messages and the request pages show the session, and
+  `whoami` reports it. `hallpass-api` and `api env` carry it for API calls. Commands without a session share the
+  agent's default session, as before. The session is stated by the agent: it separates conversations, it is not a
+  security boundary.
+- Database migration 0033 (adds the session to requests, grants and connections).
+
+### Fixed
+
+- The API proxy tunnel (`hallpass-api`, and the documented `ssh -fN -L …:hallpass:443`) never opened with the
+  documented agent ssh configuration, whose `ClearAllForwardings yes` also drops forwards given on the command line.
+  The tunnel now passes `-o ClearAllForwardings=no`.
+- The Claude Code plugin version now follows HallPass releases (0.7.0), so installed plugins pick up skill updates; it
+  had stayed at 0.1.0 since the first release.
+
 ## [0.6.1] - 2026-10-27
 
 > **Recording format, backup format and keyring not externally reviewed.** The known limitations of
@@ -241,7 +265,8 @@ through it.
 - API tokens skip recent authentication and MFA on the operations they may use, because issuing one requires both.
   They cannot decide requests, revoke grants, read recordings, manage operators or tokens, or use lockdown.
 
-[Unreleased]: https://github.com/aurimasniekis/go-hallpass/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/aurimasniekis/go-hallpass/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/aurimasniekis/go-hallpass/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/aurimasniekis/go-hallpass/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/aurimasniekis/go-hallpass/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/aurimasniekis/go-hallpass/compare/v0.4.0...v0.5.0

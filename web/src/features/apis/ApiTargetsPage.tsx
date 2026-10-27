@@ -119,7 +119,7 @@ export function ApiTargetsPage() {
           description={
             <>
               Agents open a tunnel with{' '}
-              <code className="hp-mono">ssh -fN -L 127.0.0.1:18080:hallpass:443 center</code>, load the proxy
+              <code className="hp-mono">ssh -fN -o ClearAllForwardings=no -L 127.0.0.1:18080:hallpass:443 center</code>, load the proxy
               settings with <code className="hp-mono">eval &quot;$(ssh center api env)&quot;</code> and then
               run <code className="hp-mono">gh</code>, <code className="hp-mono">wrangler</code>,{' '}
               <code className="hp-mono">gcloud</code> or <code className="hp-mono">curl</code> as usual. Every

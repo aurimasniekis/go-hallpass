@@ -13,6 +13,7 @@ import { formatDateTime, formatDuration, formatRelative } from '../../lib/format
 import { useCursorPager } from '../../lib/useCursorPager';
 import { useNow } from '../../lib/useNow';
 import { usePermissions } from '../../lib/usePermissions';
+import { revealControls } from '../../ds/untrusted';
 import { AgentName, RoleName, ServerName } from '../../shared/names';
 import { StateBadge } from '../../shared/StateBadge';
 import { stateDisplay } from '../../shared/states';
@@ -140,7 +141,24 @@ export function RequestsPage({ search, onSearchChange }: RequestsPageProps) {
                 </Link>
               ),
             },
-            { key: 'agent', title: 'Agent', render: (_v, r) => <AgentName id={r.agent_id} /> },
+            {
+              key: 'agent',
+              title: 'Agent',
+              render: (_v, r) => (
+                <>
+                  <AgentName id={r.agent_id} />
+                  {r.agent_session ? (
+                    <span
+                      className="hp-legend"
+                      style={{ display: 'block' }}
+                      title={revealControls(r.agent_session)}
+                    >
+                      session {revealControls(r.agent_session).slice(0, 8)}
+                    </span>
+                  ) : null}
+                </>
+              ),
+            },
             { key: 'server', title: 'Server', render: (_v, r) => <ServerName id={r.server_id} /> },
             { key: 'role', title: 'Role', render: (_v, r) => <RoleName id={r.role_id} /> },
             {

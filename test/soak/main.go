@@ -579,7 +579,7 @@ func (h *harness) probe(ctx context.Context, a *app.App, k agentKey) error {
 	go func() { waited <- s.Wait() }()
 	var grantID string
 	for range 200 {
-		gs, err := a.Access.ActiveGrantsForAgent(ctx, k.id)
+		gs, err := a.Access.ActiveGrantsForAgent(ctx, k.id, "")
 		if err == nil && len(gs) > 0 {
 			var live int
 			if a.Store.ReadDB().QueryRowContext(ctx, `SELECT count(*) FROM ssh_channels WHERE grant_id = ? AND state = 'active'`,

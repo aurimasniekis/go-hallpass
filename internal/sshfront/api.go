@@ -64,21 +64,21 @@ func (s *session) api(ctx context.Context, c grammar.API) int {
 		_, _ = io.WriteString(s.out, bundle)
 		return 0
 	}
-	_, _ = io.WriteString(s.out, apiEnv(bundle, c.Port, c.Role))
+	_, _ = io.WriteString(s.out, apiEnv(bundle, c.Port, c.Role, s.agentSession))
 	return 0
 }
 
 // apiEnv renders shell lines (for eval) that install the CA bundle and point common API tools at the proxy tunnel.
-func apiEnv(bundle string, port int, role string) string {
+func apiEnv(bundle string, port int, role, agentSession string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, `# HallPass API proxy settings. The tunnel must be open first:
-#   ssh -fN -L 127.0.0.1:%d:%s:443 <gateway>
+#   ssh -fN -o ClearAllForwardings=no -o ExitOnForwardFailure=yes -L 127.0.0.1:%d:%s:443 <gateway>
 # Or run one command with hallpass-api, which needs neither: hallpass-api --gateway <gateway> -- gh ...
 (umask 077 && mkdir -p "$HOME/.hallpass" && cat > "$HOME/.hallpass/api-ca.pem" <<'HALLPASS_API_CA'
 %sHALLPASS_API_CA
 printf '%s\n' > "$HOME/.hallpass/placeholder-token")
 `, port, apiproxy.Host, bundle, apienv.Placeholder)
-	for _, kv := range apienv.Vars(port, role, `"$HOME/.hallpass/api-ca.pem"`, `"$HOME/.hallpass/placeholder-token"`) {
+	for _, kv := range apienv.Vars(port, role, agentSession, `"$HOME/.hallpass/api-ca.pem"`, `"$HOME/.hallpass/placeholder-token"`) {
 		fmt.Fprintf(&b, "export %s=%s\n", kv[0], kv[1])
 	}
 	b.WriteString("# Tokens above are placeholders: HallPass replaces them with each access profile's credential.\n")

@@ -81,7 +81,7 @@ func fixtures() map[string]any {
 			},
 		}),
 		"sessions-empty": NewSessionsDoc(now, nil),
-		"whoami":         NewWhoAmIDoc("agt_01jabcdefghjkmnpqrstvwxyz4", "ci-bot", "key_01jabcdefghjkmnpqrstvwxyz5", "SHA256:"+strings.Repeat("A", 43), "192.0.2.10"),
+		"whoami":         NewWhoAmIDoc("agt_01jabcdefghjkmnpqrstvwxyz4", "ci-bot", "key_01jabcdefghjkmnpqrstvwxyz5", "SHA256:"+strings.Repeat("A", 43), "192.0.2.10", ""),
 		"version":        NewVersionDoc("1.2.3", "abc1234"),
 		"version-dev":    NewVersionDoc("dev", ""),
 		"error":          NewErrorDoc(NotFoundOrForbidden()),

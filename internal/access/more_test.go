@@ -38,7 +38,7 @@ func TestServerDisableCascadeAndAgentViews(t *testing.T) {
 	f := newFx(t)
 	g := f.grant(time.Hour)
 	p := f.request("p", 15*time.Minute)
-	grants, err := f.svc.ActiveGrantsForAgent(f.ctx, f.agent.ID)
+	grants, err := f.svc.ActiveGrantsForAgent(f.ctx, f.agent.ID, "")
 	if err != nil || len(grants) != 1 || grants[0].SessionID == "" {
 		t.Fatalf("%+v %v", grants, err)
 	}
@@ -193,11 +193,11 @@ func TestRecentGrantsAndChannelCounts(t *testing.T) {
 	f.clk.Advance(2 * time.Hour)
 	_, _, err = f.svc.ExpireDue(f.ctx)
 	must(t, err)
-	gs, err := f.svc.RecentGrantsForAgent(f.ctx, f.agent.ID, f.svc.Clock().Now().Add(-24*time.Hour))
+	gs, err := f.svc.RecentGrantsForAgent(f.ctx, f.agent.ID, "", f.svc.Clock().Now().Add(-24*time.Hour))
 	if err != nil || len(gs) != 1 || gs[0].SessionID != g.SessionID {
 		t.Fatalf("%+v %v", gs, err)
 	}
-	if gs, _ = f.svc.RecentGrantsForAgent(f.ctx, f.agent.ID, f.svc.Clock().Now()); len(gs) != 0 {
+	if gs, _ = f.svc.RecentGrantsForAgent(f.ctx, f.agent.ID, "", f.svc.Clock().Now()); len(gs) != 0 {
 		t.Fatalf("ended grant listed as recent: %+v", gs)
 	}
 }

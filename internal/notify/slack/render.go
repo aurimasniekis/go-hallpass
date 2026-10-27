@@ -100,7 +100,7 @@ func renderApproval(m *chat.ApprovalMessage, withActions bool) []block {
 	blocks := []block{
 		{Type: "header", Text: &textObject{Type: "plain_text", Text: "HallPass access request", Emoji: false}},
 		{Type: "section", Fields: []textObject{
-			plainBounded("Agent: "+untrusted(m.AgentName, chat.MaxNameRunes)+" ("+untrusted(m.AgentID, 64)+")", maxFieldText),
+			plainBounded("Agent: "+untrusted(m.AgentName, chat.MaxNameRunes)+" ("+untrusted(m.AgentID, 64)+")"+sessionSuffix(m.AgentSession), maxFieldText),
 			plainBounded("Key: "+untrusted(m.AgentKeyFingerprint, 100), maxFieldText),
 			plainBounded("Server: "+untrusted(m.Server, chat.MaxNameRunes), maxFieldText),
 			plainBounded("Role: "+untrusted(m.Role, chat.MaxNameRunes), maxFieldText),
@@ -205,3 +205,11 @@ func renderReply(text string) (string, []block) {
 }
 
 func ptr(t textObject) *textObject { return &t }
+
+// sessionSuffix names the agent session in the agent line ("" for the shared default session).
+func sessionSuffix(session string) string {
+	if session == "" {
+		return ""
+	}
+	return " · session " + untrusted(session, 64)
+}
