@@ -124,7 +124,9 @@ your reason, waits for approval and runs the command again:
 hallpass-api --gateway center --reason "Answer the customer on #42 (ticket SUP-118)" -- gh issue comment 42 --body "Fixed in #43"
 ```
 
-Tell the user when it says a command needs approval. Exit 83 means denied: respect it. Without `hallpass-api`:
+Add `--role <profile>` when the user asks for a specific profile, or when a target has several profiles that allow
+the call (the proxy otherwise picks an active, then auto-approved, then requestable one). Tell the user when it says a
+command needs approval. Exit 83 means denied: respect it. Without `hallpass-api`:
 
 ```sh
 ssh -fN -o ExitOnForwardFailure=yes -L 127.0.0.1:18080:hallpass:443 center   # once: the proxy tunnel

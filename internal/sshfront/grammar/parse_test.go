@@ -88,6 +88,8 @@ func TestParse(t *testing.T) {
 		{"api env", API{Sub: APIEnv, Port: DefaultAPIProxyPort}},
 		{"api env --port 19000", API{Sub: APIEnv, Port: 19000}},
 		{"api env --port=19001", API{Sub: APIEnv, Port: 19001}},
+		{"api env --role aurimas", API{Sub: APIEnv, Port: DefaultAPIProxyPort, Role: "aurimas"}},
+		{"api env --role=read --port 19002", API{Sub: APIEnv, Port: 19002, Role: "read"}},
 		{"'list'", List{}},
 	}
 	for _, tt := range tests {
@@ -184,6 +186,8 @@ func TestParseErrors(t *testing.T) {
 		{"api ca --json", "unexpected argument"},
 		{"api env --port", "needs a value"},
 		{"api env --port 0", "invalid --port"},
+		{"api env --role Bad", "invalid --role"},
+		{"api env --role a --role b", "more than once"},
 		{"api env --port 70000", "invalid --port"},
 		{"api env -- x", "only valid with exec"},
 		{"list -- x", "-- is only valid with exec"},

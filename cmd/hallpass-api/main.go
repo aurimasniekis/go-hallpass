@@ -52,6 +52,7 @@ const maxWaitPerCall = 15 * time.Minute
 
 type options struct {
 	gateway string
+	role    string
 	reason  string
 	wait    time.Duration
 	retries int
@@ -71,6 +72,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	fs.SetOutput(stderr)
 	var o options
 	fs.StringVar(&o.gateway, "gateway", os.Getenv("HALLPASS_GATEWAY"), "SSH host of the HallPass gateway, as in your ssh config (env HALLPASS_GATEWAY)")
+	fs.StringVar(&o.role, "role", os.Getenv("HALLPASS_ROLE"), "use only this access profile (env HALLPASS_ROLE); default: the proxy picks one")
 	fs.StringVar(&o.reason, "reason", os.Getenv("HALLPASS_REASON"), "why you need the access, shown to approvers with the command (env HALLPASS_REASON)")
 	fs.DurationVar(&o.wait, "wait", 10*time.Minute, "how long to wait for approval of requests the proxy filed (0: do not wait)")
 	fs.IntVar(&o.retries, "retries", 2, "how many times to run the command again after approvals")
@@ -78,7 +80,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	fs.BoolVar(&o.verbose, "v", false, "print what hallpass-api does")
 	version := fs.Bool("version", false, "print the version")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "usage: hallpass-api --gateway <host> [--reason <why>] [--wait 10m] -- <command> [args…]")
+		fmt.Fprintln(stderr, "usage: hallpass-api --gateway <host> [--role <profile>] [--reason <why>] [--wait 10m] -- <command> [args…]")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -95,6 +97,9 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return exitUsage
 	case o.gateway == "":
 		fmt.Fprintln(stderr, "hallpass-api: --gateway (or HALLPASS_GATEWAY) is required")
+		return exitUsage
+	case o.role != "" && !roleRE.MatchString(o.role):
+		fmt.Fprintf(stderr, "hallpass-api: invalid --role %q\n", o.role)
 		return exitUsage
 	case o.wait < 0 || o.retries < 0:
 		fmt.Fprintln(stderr, "hallpass-api: --wait and --retries must not be negative")
@@ -178,6 +183,7 @@ func (s *session) run(ctx context.Context, argv []string) int {
 func (s *session) runOnce(ctx context.Context, argv []string, command, invocation string) (int, error) {
 	lp, err := startLocalProxy(ctx, s.tunnelPort, map[string]string{
 		apienv.HeaderCommand: apienv.Encode(command), apienv.HeaderReason: apienv.Encode(s.o.reason), apienv.HeaderInvocation: invocation,
+		apienv.HeaderRole: s.o.role,
 	})
 	if err != nil {
 		return 0, err
@@ -185,7 +191,8 @@ func (s *session) runOnce(ctx context.Context, argv []string, command, invocatio
 	defer lp.Close()
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // G204: running the user's command is the point
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = s.stdin, s.stdout, s.stderr
-	cmd.Env = childEnv(os.Environ(), apienv.Vars(lp.Port(), filepath.Join(s.dir, "ca.pem"), filepath.Join(s.dir, "token")))
+	// The role travels in the CONNECT header the local proxy adds, so the child's proxy URL carries none.
+	cmd.Env = childEnv(os.Environ(), apienv.Vars(lp.Port(), "", filepath.Join(s.dir, "ca.pem"), filepath.Join(s.dir, "token")))
 	s.logf("running %s", command)
 	err = cmd.Run()
 	var ee *exec.ExitError
@@ -309,6 +316,9 @@ func newInvocation() string {
 	_, _ = rand.Read(b)
 	return "inv_" + base64.RawURLEncoding.EncodeToString(b)
 }
+
+// roleRE is the access profile alias rule.
+var roleRE = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
 
 // proxyVars are replaced in the child's environment, whatever case the parent used.
 var proxyVars = regexp.MustCompile(`(?i)^(https?_proxy|all_proxy|no_proxy|ssl_cert_file|ssl_cert_dir|node_extra_ca_certs|requests_ca_bundle|curl_ca_bundle|cloudsdk_.*|gh_token|github_token|gh_enterprise_token|cloudflare_api_token|cloudflare_api_key|node_use_env_proxy)=`)

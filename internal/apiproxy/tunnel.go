@@ -36,6 +36,8 @@ type tunnel struct {
 	closeRaw func()
 	// command, reason and invocation are reported by hallpass-api in the CONNECT request ("" without it).
 	command, reason, invocation string
+	// role, when set, is the only access profile the tunnel may use (hallpass-api --role, or the proxy URL's user).
+	role string
 
 	mu        sync.Mutex
 	chans     map[string]*tunnelChannel // grant ID → channel
@@ -138,6 +140,9 @@ func (t *tunnel) candidates(ctx context.Context, fresh bool) ([]candidate, error
 		}
 		rules, err := role.API.Compile()
 		if err != nil {
+			continue
+		}
+		if t.role != "" && role.Alias != t.role {
 			continue
 		}
 		c := candidate{role: role, rules: rules, decision: vr.Decision}
@@ -305,6 +310,14 @@ func (t *tunnel) choose(ctx context.Context, cands []candidate, rq apirules.Requ
 				"%s %s needs access to %s as %s: run ssh <gateway> request %s --role %s --reason '<why>' --wait, then retry",
 				rq.Method, "/"+strings.Join(rq.Segments, "/"), t.srv.Alias, c.role.Alias, t.srv.Alias, c.role.Alias)}
 		}
+	}
+	if t.role != "" {
+		if len(cands) == 0 {
+			return candidate{}, apirules.Decision{Rule: -1}, &refusal{code: "role", msg: fmt.Sprintf(
+				"%s is not an access profile you can use on %s", t.role, t.srv.Alias)}
+		}
+		return candidate{}, apirules.Decision{Rule: -1}, &refusal{code: "rule", via: anyGrant, msg: fmt.Sprintf(
+			"access profile %s on %s does not allow %s %s", t.role, t.srv.Alias, rq.Method, "/"+strings.Join(rq.Segments, "/"))}
 	}
 	return candidate{}, apirules.Decision{Rule: -1}, &refusal{code: "rule", via: anyGrant, msg: fmt.Sprintf(
 		"no access profile you can use on %s allows %s %s", t.srv.Alias, rq.Method, "/"+strings.Join(rq.Segments, "/"))}

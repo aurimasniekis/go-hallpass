@@ -7,6 +7,19 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-27
+
+> **Recording format, backup format and keyring not externally reviewed.** The known limitations of
+> [0.1.0](https://github.com/aurimasniekis/go-hallpass/releases/tag/v0.1.0) still apply.
+
+### Added
+
+- `hallpass-api --role <profile>` and `api env --role <profile>`: use one API access profile only. Without it the
+  proxy picks a profile per call (active grant, then auto-approved, then requestable), so a target with an
+  auto-approved profile never asked for another one that allows the same call. With a named profile, calls it does not
+  allow are refused instead of falling back, and requests are filed for that profile. `api env --role` puts the
+  profile into the proxy URL (`http://<profile>@127.0.0.1:18080`).
+
 ## [0.6.0] - 2026-10-27
 
 > **Recording format, backup format and keyring not externally reviewed.** The known limitations of
@@ -228,7 +241,8 @@ through it.
 - API tokens skip recent authentication and MFA on the operations they may use, because issuing one requires both.
   They cannot decide requests, revoke grants, read recordings, manage operators or tokens, or use lockdown.
 
-[Unreleased]: https://github.com/aurimasniekis/go-hallpass/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/aurimasniekis/go-hallpass/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/aurimasniekis/go-hallpass/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/aurimasniekis/go-hallpass/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/aurimasniekis/go-hallpass/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/aurimasniekis/go-hallpass/compare/v0.3.0...v0.4.0

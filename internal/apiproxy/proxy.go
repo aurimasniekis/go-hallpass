@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -32,6 +33,7 @@ import (
 	"github.com/aurimasniekis/go-hallpass/internal/clock"
 	"github.com/aurimasniekis/go-hallpass/internal/egress"
 	"github.com/aurimasniekis/go-hallpass/internal/inventory"
+	"github.com/aurimasniekis/go-hallpass/internal/inventory/alias"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
 	"github.com/aurimasniekis/go-hallpass/internal/policy"
 )
@@ -284,10 +286,33 @@ func (p *Proxy) open(ctx context.Context, cl Client, req *http.Request, conn io.
 	if inv := req.Header.Get(apienv.HeaderInvocation); invocationRE.MatchString(inv) {
 		t.invocation = inv
 	}
+	t.role = req.Header.Get(apienv.HeaderRole)
+	if t.role == "" {
+		t.role = proxyUser(req)
+	}
+	if t.role != "" && !alias.Syntax(t.role) {
+		cancel()
+		return refuse(http.StatusBadRequest, "hallpass: invalid access profile name "+strconv.Quote(truncate(t.role, 64)))
+	}
 	return t, true
 }
 
 var invocationRE = regexp.MustCompile(`^[A-Za-z0-9_-]{16,64}$`)
+
+// proxyUser returns the user name of a Basic Proxy-Authorization header: the access profile a tool configured with
+// http://<profile>@127.0.0.1:<port> asks for. The password, if any, is ignored (identity comes from SSH).
+func proxyUser(req *http.Request) string {
+	scheme, cred, ok := strings.Cut(req.Header.Get("Proxy-Authorization"), " ")
+	if !ok || !strings.EqualFold(scheme, "Basic") {
+		return ""
+	}
+	b, err := base64.StdEncoding.DecodeString(strings.TrimSpace(cred))
+	if err != nil {
+		return ""
+	}
+	user, _, _ := strings.Cut(string(b), ":")
+	return user
+}
 
 // reportedText decodes and sanitizes a hallpass-api header, cutting it to apienv.MaxTextRunes.
 func reportedText(v string) string {

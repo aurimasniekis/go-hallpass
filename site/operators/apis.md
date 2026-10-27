@@ -21,6 +21,7 @@ gh pr list --repo acme/api                          # a normal gh call
    name-constrained to the target's hosts, so it cannot be used to intercept anything else.
 4. For each request, HallPass picks the agent's access profile whose rules allow it: an active grant first, then an
    auto-approved profile (granted on first use), otherwise it answers **403** with the exact `request` command to run.
+   An agent that names a profile (`hallpass-api --role`, or the proxy URL's user name) gets only that one.
 5. It removes the agent's `Authorization`, cookies and the credential header, adds the profile's credential, sends the
    request to the API, streams the answer back, and records the call in the session timeline.
 

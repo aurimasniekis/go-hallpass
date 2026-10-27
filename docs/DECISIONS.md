@@ -1198,6 +1198,10 @@
     filed (in memory, per agent, one hour). The wrapper waits with `status --wait` and runs the command again once
     approved. The command is the agent's claim and is labeled so; it never widens access. Values of secret-looking
     options are redacted by the wrapper before reporting.
+  - **Named profile (operator request, 2026-10-27):** `hallpass-api --role <profile>` sends `Hallpass-Role`, and
+    tools configured by `api env --role <profile>` send it as the proxy URL's user name (Basic `Proxy-Authorization`,
+    password ignored: identity is still the SSH key). The tunnel then considers only that profile: no fallback to an
+    auto-approved or other profile, and requests are filed for it. It can only narrow what policy already allows.
 - **Alternatives:** a short-lived token broker (GitHub App installation tokens, Cloudflare tokens with expiry, GCP
   impersonation) gives the agent a real, if scoped, token and records only issuance — possible later for APIs where
   interception is impractical; base-URL overrides (`GH_HOST`, `CLOUDFLARE_API_BASE_URL`) need no CA but cover few

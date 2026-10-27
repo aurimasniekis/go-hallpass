@@ -42,6 +42,10 @@ func TestGatewayAPIProxyEndToEnd(t *testing.T) {
 		!strings.Contains(out, "BEGIN CERTIFICATE") || strings.Contains(out, "github-pat") {
 		t.Fatalf("api env: %d %q", code, out)
 	}
+	if out, _, code := g.run("api env --role read"); code != 0 || !strings.Contains(out, "export HTTPS_PROXY=http://read@127.0.0.1:18080") ||
+		!strings.Contains(out, "export CLOUDSDK_PROXY_USERNAME=read") {
+		t.Fatalf("api env --role: %d %q", code, out)
+	}
 	if _, stderr, code := g.run("connect gh"); code == 0 || !strings.Contains(stderr, "API proxy") {
 		t.Fatalf("connect to an API target: %d %q", code, stderr)
 	}

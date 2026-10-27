@@ -149,6 +149,8 @@ type API struct {
 	Sub        string
 	Port       int
 	Invocation string
+	// Role is "api env --role": the only access profile the proxy may use for tools configured by these lines.
+	Role string
 }
 
 func (List) CommandName() string     { return "list" }
@@ -477,7 +479,7 @@ func (p *parser) api(rest []Token) (Command, error) {
 	if err := p.noSeparator("api"); err != nil {
 		return nil, err
 	}
-	const use = "use: api ca | api env [--port <port>] | api requests <invocation>"
+	const use = "use: api ca | api env [--port <port>] [--role <profile>] | api requests <invocation>"
 	if len(rest) == 0 {
 		return nil, usage("missing subcommand; " + use)
 	}
@@ -494,27 +496,39 @@ func (p *parser) api(rest []Token) (Command, error) {
 		}
 		return API{Sub: APICA}, nil
 	case APIEnv:
-		port := DefaultAPIProxyPort
+		c := API{Sub: APIEnv, Port: DefaultAPIProxyPort}
+		seen := map[string]bool{}
 		for i := 0; i < len(rest); i++ {
 			v := rest[i].Value
 			name, val, hasVal := strings.Cut(v, "=")
-			if name != "--port" {
+			if name != "--port" && name != "--role" {
 				return nil, usagef("unexpected argument %s; %s", quote(v), use)
 			}
+			if seen[name] {
+				return nil, usagef("%s given more than once", name)
+			}
+			seen[name] = true
 			if !hasVal {
 				if i+1 >= len(rest) {
-					return nil, usage("--port needs a value")
+					return nil, usagef("%s needs a value", name)
 				}
 				i++
 				val = rest[i].Value
+			}
+			if name == "--role" {
+				if !alias.Syntax(val) {
+					return nil, usagef("invalid --role %s", quote(val))
+				}
+				c.Role = val
+				continue
 			}
 			n, err := strconv.Atoi(val)
 			if err != nil || n < 1 || n > 65535 {
 				return nil, usagef("invalid --port %s: use 1-65535", quote(val))
 			}
-			port = n
+			c.Port = n
 		}
-		return API{Sub: APIEnv, Port: port}, nil
+		return c, nil
 	}
 	return nil, usagef("unknown subcommand %s; %s", quote(sub), use)
 }

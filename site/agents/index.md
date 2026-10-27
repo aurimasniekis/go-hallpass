@@ -174,10 +174,25 @@ that made other changes before the refused call repeats them (use `--retries 0` 
 | Option | Default | Meaning |
 |---|---|---|
 | `--gateway` | `$HALLPASS_GATEWAY` | ssh host of the gateway |
+| `--role` | `$HALLPASS_ROLE` | use only this access profile (see below) |
 | `--reason` | `$HALLPASS_REASON` | why you need the access; required for profiles that require a reason |
 | `--wait` | `10m` | how long to wait for approval (`0`: print the request IDs and exit) |
 | `--retries` | `2` | how many times to run the command again after approvals |
 | `--ssh` | `ssh` | ssh client to use |
+
+**Choosing the profile.** Without `--role`, the proxy picks one per call: a profile you already hold access to,
+then an auto-approved one, then the first requestable one whose rules allow the call. When a target has several
+profiles that allow the same call (say an auto-approved bot profile and a requestable personal one), name the one you
+need:
+
+```sh
+hallpass-api --gateway center --role aurimas --reason "Merge release PR #57" -- gh pr merge 57
+```
+
+The proxy then uses only that profile: your access to it if you have it, otherwise a request for it that shows the
+command. Calls the profile's rules do not allow are refused, never sent with another profile. Without the wrapper, `ssh
+center api env --role aurimas` puts the profile into the proxy URL (`http://aurimas@127.0.0.1:18080`), which `gh`,
+`curl` and Node tools send with every connection (`gcloud` gets `CLOUDSDK_PROXY_USERNAME`).
 
 Values of options that look like secrets (`--token x`, `--api-key=x`) are replaced by `[redacted]` in the reported
 command. The command is what you report: approvers see it labeled that way, and HallPass still checks every request.

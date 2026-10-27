@@ -208,6 +208,11 @@ func (f *fx) client() *http.Client { return f.clientWith(nil) }
 
 // clientWith is client with extra CONNECT headers (what hallpass-api sends).
 func (f *fx) clientWith(connectHeaders http.Header) *http.Client {
+	return f.clientAs("", connectHeaders)
+}
+
+// clientAs is clientWith with a proxy URL user name (http://<user>@127.0.0.1:18080).
+func (f *fx) clientAs(proxyUser string, connectHeaders http.Header) *http.Client {
 	f.t.Helper()
 	bundle, err := f.svc.CABundle(f.ctx, []string{f.srv.ID})
 	must(f.t, err)
@@ -222,7 +227,7 @@ func (f *fx) clientWith(connectHeaders http.Header) *http.Client {
 			f.mu.Unlock()
 		}}
 	tr := &http.Transport{
-		Proxy: http.ProxyURL(&url.URL{Scheme: "http", Host: "127.0.0.1:18080"}),
+		Proxy: http.ProxyURL(proxyURL(proxyUser)),
 		DialContext: func(context.Context, string, string) (net.Conn, error) {
 			a, b := net.Pipe()
 			go f.proxy.Serve(f.ctx, cl, b)
@@ -525,5 +530,64 @@ func TestProxyFilesRequestsForReportedCommands(t *testing.T) {
 	}
 	if !strings.HasPrefix(cmd, "gh issue comment 42") {
 		t.Fatalf("recorded command %q", cmd)
+	}
+}
+
+func proxyURL(user string) *url.URL {
+	u := &url.URL{Scheme: "http", Host: "127.0.0.1:18080"}
+	if user != "" {
+		u.User = url.User(user)
+	}
+	return u
+}
+
+// A named access profile is the only one a tunnel uses: no fallback to another profile, and requests are filed for it.
+func TestProxyNamedRole(t *testing.T) {
+	f := newFx(t)
+	write := f.clientWith(http.Header{
+		apienv.HeaderRole:       {"write"},
+		apienv.HeaderReason:     {apienv.Encode("Label the issue")},
+		apienv.HeaderInvocation: {"inv-test-invocation-role"},
+	})
+	// The auto-approved read profile would allow a GET, but the tunnel may only use write.
+	if st, e := f.do(write, "GET", "/repos/acme/api", ""); st != 403 || e.HallPass.Code != "rule" || !strings.Contains(e.Message, "access profile write on gh does not allow GET") {
+		t.Fatalf("GET as write: %d %+v", st, e)
+	}
+	if grants, _ := f.acc.ActiveGrantsForAgent(f.ctx, f.agentID); len(grants) != 0 {
+		t.Fatalf("a grant was created for another profile: %+v", grants)
+	}
+	st, e := f.do(write, "POST", "/repos/acme/api/issues", `{}`)
+	ids := f.proxy.Filed(f.agentID, "inv-test-invocation-role")
+	if st != 403 || e.HallPass.Code != "approval_pending" || len(ids) != 1 {
+		t.Fatalf("POST as write: %d %+v %v", st, e, ids)
+	}
+	r, err := f.acc.GetRequest(f.ctx, ids[0])
+	must(t, err)
+	if r.RoleID != f.write.ID {
+		t.Fatalf("request filed for role %s, want write", r.RoleID)
+	}
+
+	// The proxy URL's user name works the same way (tools configured by "api env --role").
+	read := f.clientAs("read", nil)
+	if st, _ := f.do(read, "GET", "/repos/acme/api", ""); st != 200 {
+		t.Fatalf("GET as read: %d", st)
+	}
+	if st, e := f.do(read, "POST", "/repos/acme/api/issues", `{}`); st != 403 || e.HallPass.Code != "rule" {
+		t.Fatalf("POST as read: %d %+v", st, e)
+	}
+	if st, e := f.do(f.clientAs("nope", nil), "GET", "/repos/acme/api", ""); st != 403 || e.HallPass.Code != "role" {
+		t.Fatalf("unknown role: %d %+v", st, e)
+	}
+
+	cl := Client{ConnectionID: f.connID, AgentID: f.agentID, KeyID: f.keyID}
+	a, b := net.Pipe()
+	go f.proxy.Serve(f.ctx, cl, b)
+	go func() {
+		_, _ = io.WriteString(a, "CONNECT "+apiHost+":443 HTTP/1.1\r\nHost: "+apiHost+":443\r\nHallpass-Role: Bad_Role\r\n\r\n")
+	}()
+	resp, err := io.ReadAll(a)
+	must(t, err)
+	if !strings.HasPrefix(string(resp), "HTTP/1.1 400") {
+		t.Fatalf("invalid role: %q", resp)
 	}
 }

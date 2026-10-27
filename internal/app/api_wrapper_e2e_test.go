@@ -144,7 +144,7 @@ func TestHallpassAPIWrapperEndToEnd(t *testing.T) {
 
 	cctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(cctx, bin, "--gateway", "agent@"+host, "--ssh", sshScript, "--reason", "Answer the customer on #42",
+	cmd := exec.CommandContext(cctx, bin, "--gateway", "agent@"+host, "--ssh", sshScript, "--role", "issues", "--reason", "Answer the customer on #42",
 		"--wait", "1m", "--", "curl", "-sS", "-f", "-X", "POST", "-H", "Authorization: Bearer agent-own-token",
 		"https://"+wrapperHost+"/repos/acme/api/issues/42/comments", "-d", `{"body":"Fixed"}`)
 	var out, errb bytes.Buffer

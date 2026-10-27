@@ -105,6 +105,9 @@ approvers see it, files and waits for the request and runs the command again onc
 hallpass-api --gateway center --reason "Answer the customer on #42" -- gh issue comment 42 --body "Fixed in #43"
 ```
 
+`--role <profile>` (or `api env --role <profile>`) makes the proxy use that access profile only, instead of picking
+one per call.
+
 ## Quoting
 
 The gateway splits its part of the command on spaces and tabs. `'…'` is literal, `"…"` is literal except for `\"` and

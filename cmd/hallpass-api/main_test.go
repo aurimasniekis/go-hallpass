@@ -33,7 +33,7 @@ func TestDisplayCommand(t *testing.T) {
 
 func TestChildEnvReplacesProxyAndTokens(t *testing.T) {
 	env := childEnv([]string{"PATH=/bin", "https_proxy=http://evil", "GH_TOKEN=real", "Ssl_Cert_File=/x", "HOME=/h"},
-		apienv.Vars(1234, "/tmp/ca.pem", "/tmp/token"))
+		apienv.Vars(1234, "", "/tmp/ca.pem", "/tmp/token"))
 	joined := strings.Join(env, "\n")
 	for _, bad := range []string{"http://evil", "GH_TOKEN=real", "/x"} {
 		if strings.Contains(joined, bad) {

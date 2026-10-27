@@ -64,12 +64,12 @@ func (s *session) api(ctx context.Context, c grammar.API) int {
 		_, _ = io.WriteString(s.out, bundle)
 		return 0
 	}
-	_, _ = io.WriteString(s.out, apiEnv(bundle, c.Port))
+	_, _ = io.WriteString(s.out, apiEnv(bundle, c.Port, c.Role))
 	return 0
 }
 
 // apiEnv renders shell lines (for eval) that install the CA bundle and point common API tools at the proxy tunnel.
-func apiEnv(bundle string, port int) string {
+func apiEnv(bundle string, port int, role string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, `# HallPass API proxy settings. The tunnel must be open first:
 #   ssh -fN -L 127.0.0.1:%d:%s:443 <gateway>
@@ -78,7 +78,7 @@ func apiEnv(bundle string, port int) string {
 %sHALLPASS_API_CA
 printf '%s\n' > "$HOME/.hallpass/placeholder-token")
 `, port, apiproxy.Host, bundle, apienv.Placeholder)
-	for _, kv := range apienv.Vars(port, `"$HOME/.hallpass/api-ca.pem"`, `"$HOME/.hallpass/placeholder-token"`) {
+	for _, kv := range apienv.Vars(port, role, `"$HOME/.hallpass/api-ca.pem"`, `"$HOME/.hallpass/placeholder-token"`) {
 		fmt.Fprintf(&b, "export %s=%s\n", kv[0], kv[1])
 	}
 	b.WriteString("# Tokens above are placeholders: HallPass replaces them with each access profile's credential.\n")

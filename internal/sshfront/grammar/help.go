@@ -18,7 +18,7 @@ var helpTopics = map[string]string{
   exec <server> [options] -- <command>  as connect, but run <command> on the server
   sessions [--json] [--all]             your active (and with --all, recent) grants
   whoami [--json]                       your agent identity and key
-  api ca | api env [--port <port>]      set up HTTPS API access through the API proxy (see help api)
+  api ca | env | requests                set up HTTPS API access through the API proxy (see help api)
   version [--json]                      gateway, grammar and schema versions
   help [topic]                          topics: ` + "%TOPICS%" + `
 
@@ -42,7 +42,7 @@ Git and file transfers use the standard tools, waiting for approval like connect
 APIs (marked (api) in list) are called with their usual tools through the API proxy; see help api.
 `,
 	"api": `api ca
-api env [--port <port>]
+api env [--port <port>] [--role <profile>]
 
 API targets (marked (api) in list) are HTTPS APIs such as GitHub, Cloudflare or Google Cloud. You call them with
 their usual tools (gh, wrangler, gcloud, curl) through the gateway's API proxy, which adds the credential: you never
@@ -60,6 +60,10 @@ hold the real token, and every call is checked against your access profile's rul
 Simpler: run each command through hallpass-api (shipped with HallPass), which opens the tunnel, sets the variables
 for that command only, reports the command so approvers see it, waits for approval and runs it again:
      hallpass-api --gateway <gateway> --reason '<why>' -- gh issue comment 42 --body 'Fixed in #43'
+
+By default the proxy picks the access profile for each call: one you hold access to, then an auto-approved one, then
+a requestable one. To use one profile only (no fallback), pass --role <profile> to hallpass-api, or to api env, which
+puts it in the proxy URL (http://<profile>@127.0.0.1:18080).
 
 api requests <invocation> lists the requests the proxy filed during a hallpass-api run (used by hallpass-api).
 api ca prints only the CA bundle (PEM). Its CAs can sign certificates for the API host names only. A refused call
