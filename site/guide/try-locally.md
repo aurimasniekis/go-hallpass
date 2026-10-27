@@ -12,7 +12,7 @@ Download the archive for your platform from the
 `darwin_arm64` (Apple silicon; for trying out and development only). The binary has the web UI embedded.
 
 ```sh
-V=0.6.1 PLATFORM=darwin_arm64      # or linux_amd64, linux_arm64
+V=0.7.0 PLATFORM=darwin_arm64      # or linux_amd64, linux_arm64
 curl -fLO "https://github.com/aurimasniekis/go-hallpass/releases/download/v$V/hallpass_${V}_${PLATFORM}.tar.gz"
 tar -xzf "hallpass_${V}_${PLATFORM}.tar.gz"
 export PATH="$PWD/hallpass_${V}_${PLATFORM}:$PATH"
