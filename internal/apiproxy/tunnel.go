@@ -34,6 +34,8 @@ type tunnel struct {
 	ctx      context.Context
 	cancel   func()
 	closeRaw func()
+	// command, reason and invocation are reported by hallpass-api in the CONNECT request ("" without it).
+	command, reason, invocation string
 
 	mu        sync.Mutex
 	chans     map[string]*tunnelChannel // grant ID → channel
@@ -184,6 +186,9 @@ func (t *tunnel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	start := t.p.o.Clock.Now()
 	ev := map[string]any{"method": r.Method, "host": t.host}
+	if t.command != "" {
+		ev["command"] = t.command
+	}
 	if r.Method == http.MethodConnect || r.Header.Get("Upgrade") != "" {
 		t.refuse(ctx, w, nil, ev, http.StatusNotImplemented, "upgrade", "protocol upgrades (WebSocket) and nested tunnels are not supported")
 		return
@@ -229,6 +234,10 @@ func (t *tunnel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	c, d, refusal := t.choose(ctx, cands, rq)
 	if refusal != nil {
+		if refusal.requestID != "" {
+			ev["request_id"] = refusal.requestID
+			w.Header().Set("X-Hallpass-Request", refusal.requestID)
+		}
 		t.refuse(ctx, w, refusal.via, ev, http.StatusForbidden, refusal.code, refusal.msg)
 		return
 	}
@@ -252,6 +261,7 @@ func (t *tunnel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type refusal struct {
 	code, msg string
 	via       *access.Grant // the grant whose timeline records the refusal, if any
+	requestID string        // the access request filed for it, if any
 }
 
 // choose picks the access profile for a request: the first (active grant, then auto-approved, then requestable)
@@ -288,6 +298,9 @@ func (t *tunnel) choose(ctx context.Context, cands []candidate, rq apirules.Requ
 			}
 			return c, d, &refusal{code: "request_failed", via: anyGrant, msg: "access could not be requested: " + publicMessage(err)}
 		default:
+			if t.invocation != "" && (t.reason != "" || !c.decision.RequireReason) {
+				return c, d, t.fileRequest(ctx, c, rq, anyGrant)
+			}
 			return c, d, &refusal{code: "approval_required", via: anyGrant, msg: fmt.Sprintf(
 				"%s %s needs access to %s as %s: run ssh <gateway> request %s --role %s --reason '<why>' --wait, then retry",
 				rq.Method, "/"+strings.Join(rq.Segments, "/"), t.srv.Alias, c.role.Alias, t.srv.Alias, c.role.Alias)}
@@ -295,6 +308,24 @@ func (t *tunnel) choose(ctx context.Context, cands []candidate, rq apirules.Requ
 	}
 	return candidate{}, apirules.Decision{Rule: -1}, &refusal{code: "rule", via: anyGrant, msg: fmt.Sprintf(
 		"no access profile you can use on %s allows %s %s", t.srv.Alias, rq.Method, "/"+strings.Join(rq.Segments, "/"))}
+}
+
+// fileRequest files (or reuses) the access request a hallpass-api call needs, with the agent's reason and the
+// command it reported, so approvers see what the access is for. hallpass-api waits for it and runs the command again.
+func (t *tunnel) fileRequest(ctx context.Context, c candidate, rq apirules.Request, via *access.Grant) *refusal {
+	reason := t.reason
+	if t.command != "" {
+		reason = strings.TrimSpace(reason + " | Command (reported by the agent): " + t.command)
+	}
+	res, err := t.p.o.Access.CreateRequest(ctx, access.CreateRequestInput{AgentID: t.cl.AgentID, KeyID: t.cl.KeyID,
+		ServerID: t.srv.ID, RoleID: c.role.ID, Reason: truncateRunes(reason, access.MaxReasonRunes)})
+	if err != nil {
+		return &refusal{code: "request_failed", via: via, msg: "access could not be requested: " + publicMessage(err)}
+	}
+	t.p.noteFiled(t.cl.AgentID, t.invocation, res.Request.ID)
+	return &refusal{code: "approval_pending", via: via, requestID: res.Request.ID, msg: fmt.Sprintf(
+		"%s %s needs approval of access to %s as %s: request %s is waiting for an approver",
+		rq.Method, "/"+strings.Join(rq.Segments, "/"), t.srv.Alias, c.role.Alias, res.Request.ID)}
 }
 
 // channel returns the tunnel's channel record for a grant, registering it (and the enforcer hook) on first use.
@@ -320,7 +351,11 @@ func (t *tunnel) channel(ctx context.Context, g *access.Grant, cred *Credential)
 		return nil, err
 	}
 	ch.registeredWithLive = true
-	if err := t.p.o.Access.ActivateChannel(ctx, reg, cred.Ref(), map[string]any{"api_host": t.host, "api_target": t.srv.Alias}); err != nil {
+	data := map[string]any{"api_host": t.host, "api_target": t.srv.Alias}
+	if t.command != "" {
+		data["command"] = t.command
+	}
+	if err := t.p.o.Access.ActivateChannel(ctx, reg, cred.Ref(), data); err != nil {
 		t.p.o.Enforcer.Unregister(reg.ChannelID)
 		_ = t.p.o.Access.CloseChannel(context.WithoutCancel(ctx), reg, access.CloseInfo{Failed: true, Reason: "access_ended"})
 		return nil, err
@@ -457,7 +492,9 @@ func (t *tunnel) respondError(w http.ResponseWriter, status int, code, msg strin
 	})
 	h := w.Header()
 	for k := range h {
-		delete(h, k)
+		if k != "X-Hallpass-Request" {
+			delete(h, k)
+		}
 	}
 	h.Set("Content-Type", "application/json; charset=utf-8")
 	h.Set("X-Hallpass-Error", code)

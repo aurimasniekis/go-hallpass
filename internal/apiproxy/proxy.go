@@ -16,14 +16,18 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/jwt"
 
 	"github.com/aurimasniekis/go-hallpass/internal/access"
+	"github.com/aurimasniekis/go-hallpass/internal/apienv"
 	"github.com/aurimasniekis/go-hallpass/internal/apirules"
 	"github.com/aurimasniekis/go-hallpass/internal/clock"
 	"github.com/aurimasniekis/go-hallpass/internal/egress"
@@ -75,6 +79,50 @@ type Proxy struct {
 	mu     sync.Mutex
 	leaves map[string]*leafCert          // server ID + host → cached leaf
 	tokens map[string]oauth2.TokenSource // credential ref → Google access tokens
+	filed  map[string]*filedRequests     // agent ID + invocation → requests the proxy filed for hallpass-api
+}
+
+// filedRequests are the access requests the proxy filed during one hallpass-api invocation.
+type filedRequests struct {
+	ids []string
+	at  time.Time
+}
+
+// filedTTL is how long "api requests <invocation>" can list what the proxy filed.
+const filedTTL = time.Hour
+
+// noteFiled remembers a request filed during an invocation (bounded: entries expire after filedTTL).
+func (p *Proxy) noteFiled(agentID, invocation, requestID string) {
+	if invocation == "" {
+		return
+	}
+	now := p.o.Clock.Now()
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for k, f := range p.filed {
+		if now.Sub(f.at) > filedTTL {
+			delete(p.filed, k)
+		}
+	}
+	f := p.filed[agentID+"|"+invocation]
+	if f == nil {
+		f = &filedRequests{}
+		p.filed[agentID+"|"+invocation] = f
+	}
+	f.at = now
+	if !slices.Contains(f.ids, requestID) && len(f.ids) < 20 {
+		f.ids = append(f.ids, requestID)
+	}
+}
+
+// Filed lists the requests the proxy filed for the agent during a hallpass-api invocation.
+func (p *Proxy) Filed(agentID, invocation string) []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if f := p.filed[agentID+"|"+invocation]; f != nil && p.o.Clock.Now().Sub(f.at) <= filedTTL {
+		return slices.Clone(f.ids)
+	}
+	return nil
 }
 
 // New returns a proxy.
@@ -93,7 +141,8 @@ func New(o Options) (*Proxy, error) {
 	if o.UpstreamPort != 0 {
 		port = o.UpstreamPort
 	}
-	p := &Proxy{o: o, log: obs.Component(o.Log, "apiproxy"), leafKey: key, leaves: map[string]*leafCert{}, tokens: map[string]oauth2.TokenSource{}}
+	p := &Proxy{o: o, log: obs.Component(o.Log, "apiproxy"), leafKey: key, leaves: map[string]*leafCert{}, tokens: map[string]oauth2.TokenSource{},
+		filed: map[string]*filedRequests{}}
 	p.transport = &http.Transport{
 		// Never an environment proxy: API hosts are dialed directly, through the egress policy.
 		Proxy: nil,
@@ -229,7 +278,31 @@ func (p *Proxy) open(ctx context.Context, cl Client, req *http.Request, conn io.
 	}
 	tctx, cancel := context.WithCancel(ctx)
 	t := &tunnel{p: p, cl: cl, srv: srv, host: host, ctx: tctx, cancel: cancel, chans: map[string]*tunnelChannel{}}
+	// hallpass-api reports the command it runs (and the agent's reason); both are the agent's own claims.
+	t.command = reportedText(req.Header.Get(apienv.HeaderCommand))
+	t.reason = reportedText(req.Header.Get(apienv.HeaderReason))
+	if inv := req.Header.Get(apienv.HeaderInvocation); invocationRE.MatchString(inv) {
+		t.invocation = inv
+	}
 	return t, true
+}
+
+var invocationRE = regexp.MustCompile(`^[A-Za-z0-9_-]{16,64}$`)
+
+// reportedText decodes and sanitizes a hallpass-api header, cutting it to apienv.MaxTextRunes.
+func reportedText(v string) string {
+	s, err := access.SanitizeReason(truncateRunes(apienv.Decode(v), apienv.MaxTextRunes))
+	if err != nil {
+		return ""
+	}
+	return s
+}
+
+func truncateRunes(s string, n int) string {
+	if utf8.RuneCountInString(s) <= n {
+		return s
+	}
+	return string([]rune(s)[:n-1]) + "…"
 }
 
 // target returns the visible API target covering host. When several do, the first by alias wins.

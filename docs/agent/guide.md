@@ -98,6 +98,13 @@ gh pr list --repo acme/api
 An `auto` profile is granted on the first call; a `requestable` one needs `request … --reason … --wait` first. Refused
 calls return HTTP 403 with a `hallpass:` message that names the request to make. `ssh center help api` has the details.
 
+Or run each command with `hallpass-api` (in the release archives), which needs no setup, reports the command so
+approvers see it, files and waits for the request and runs the command again once approved:
+
+```sh
+hallpass-api --gateway center --reason "Answer the customer on #42" -- gh issue comment 42 --body "Fixed in #43"
+```
+
 ## Quoting
 
 The gateway splits its part of the command on spaces and tabs. `'…'` is literal, `"…"` is literal except for `\"` and

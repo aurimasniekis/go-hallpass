@@ -256,7 +256,8 @@ function sentence(ev: TimelineEventInput, d: Data, ctx: TimelineContext, info: C
       }
       const apiHost = info?.api_host ?? str(d, 'api_host');
       if (apiHost !== null) {
-        return `API tunnel to ${apiHost} opened`;
+        const command = str(d, 'command');
+        return `API tunnel to ${apiHost} opened${command ? ` for: ${command}` : ''}`;
       }
       if (kind === 'exec') {
         return `Command started${pty ? ' with a PTY' : ''}${using}`;

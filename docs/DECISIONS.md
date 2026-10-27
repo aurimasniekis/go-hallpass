@@ -1188,6 +1188,16 @@
     (`api.connect.denied`, `api.request.denied`).
   - Refusals are JSON that `gh` (`message`), Cloudflare tools (`errors`) and Google tools (`error.message`) all show,
     with `X-Hallpass-Error`.
+  - **`hallpass-api` (operator request, 2026-10-27):** an agent-side wrapper shipped in the release archives runs one
+    tool with the tunnel (system `ssh`), the CA bundle and the proxy variables set for that process only. A local
+    pass-through proxy adds `Hallpass-Command`, `Hallpass-Reason` and `Hallpass-Invocation` headers to each CONNECT
+    (outside TLS; base64url, sanitized and bounded to 1000 characters). The command is recorded on the tunnel's
+    channel and every `api.request` event. When a call needs a requestable profile and the wrapper sent a reason (or
+    the profile needs none), the proxy files the request itself with the reason followed by `Command (reported by the
+    agent): …` and answers 403 `approval_pending` with `X-Hallpass-Request`; `api requests <invocation>` lists what it
+    filed (in memory, per agent, one hour). The wrapper waits with `status --wait` and runs the command again once
+    approved. The command is the agent's claim and is labeled so; it never widens access. Values of secret-looking
+    options are redacted by the wrapper before reporting.
 - **Alternatives:** a short-lived token broker (GitHub App installation tokens, Cloudflare tokens with expiry, GCP
   impersonation) gives the agent a real, if scoped, token and records only issuance — possible later for APIs where
   interception is impractical; base-URL overrides (`GH_HOST`, `CLOUDFLARE_API_BASE_URL`) need no CA but cover few

@@ -117,6 +117,15 @@ API targets (marked `(api)` in `list`) are HTTPS APIs such as GitHub, Cloudflare
 normal tool (`gh`, `wrangler`, `gcloud`, `curl`) through the gateway's API proxy, which adds the real credential.
 You never hold the token: do not ask the user for one.
 
+Prefer `hallpass-api` when it is installed: it sets everything up for one command, shows approvers the command with
+your reason, waits for approval and runs the command again:
+
+```sh
+hallpass-api --gateway center --reason "Answer the customer on #42 (ticket SUP-118)" -- gh issue comment 42 --body "Fixed in #43"
+```
+
+Tell the user when it says a command needs approval. Exit 83 means denied: respect it. Without `hallpass-api`:
+
 ```sh
 ssh -fN -o ExitOnForwardFailure=yes -L 127.0.0.1:18080:hallpass:443 center   # once: the proxy tunnel
 eval "$(ssh center api env)"     # CA bundle in ~/.hallpass, HTTPS_PROXY, CA variables, placeholder tokens

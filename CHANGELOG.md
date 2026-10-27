@@ -16,6 +16,11 @@ agent JSON schemas, the recording format and the database schema).
   and GraphQL query versus mutation). Every call is recorded in the session timeline (method, path, status, sizes;
   no bodies). Each target has its own CA, name-constrained to its hosts. New `api ca` and `api env` gateway commands,
   `kind: api` servers, `api` rules on roles and the `/roles/{id}/api-credential` and `/servers/{id}/api-ca` endpoints.
+- **`hallpass-api`**, an agent-side wrapper in the release archives:
+  `hallpass-api --gateway center --reason "…" -- gh issue comment 42 --body "…"` opens the tunnel and sets the proxy
+  variables for that one command, and reports the command line. A call that needs approval is filed as a request that
+  shows approvers the command next to the reason; `hallpass-api` waits for the decision and runs the command again.
+  The reported command is also recorded with every API call in the session timeline.
 - `api_proxy` configuration: `enabled` (default true), and the addresses API hosts may resolve to (public only by
   default).
 

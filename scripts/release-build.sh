@@ -111,12 +111,15 @@ for platform in "${platforms[@]}"; do
   # Destination-side audit collector (optional, installed on destinations).
   CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch GOFLAGS=-mod=readonly \
     "$go_cmd" build -trimpath -buildvcs="$buildvcs" -ldflags "$ldflags" -o "$stage/hallpass-collector" ./cmd/hallpass-collector
+  # Agent-side wrapper for API tools (optional, installed where agents run).
+  CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch GOFLAGS=-mod=readonly \
+    "$go_cmd" build -trimpath -buildvcs="$buildvcs" -ldflags "$ldflags" -o "$stage/hallpass-api" ./cmd/hallpass-api
   cp deploy/examples/hallpass.example.yaml "$stage/"
   [[ -f deploy/systemd/hallpass.service ]] && cp deploy/systemd/hallpass.service "$stage/"
   [[ -f CHANGELOG.md ]] && cp CHANGELOG.md "$stage/"
   cp LICENSE NOTICE "$stage/"
-  chmod 0755 "$stage/hallpass" "$stage/hallpass-collector"
-  find "$stage" -type f ! -name hallpass ! -name hallpass-collector -exec chmod 0644 {} +
+  chmod 0755 "$stage/hallpass" "$stage/hallpass-collector" "$stage/hallpass-api"
+  find "$stage" -type f ! -name hallpass ! -name hallpass-collector ! -name hallpass-api -exec chmod 0644 {} +
   find "$stage" -exec env TZ=UTC touch -h -t "$touch_stamp" {} +
 
   archive="$out/$name.tar.gz"

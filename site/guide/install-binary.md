@@ -25,7 +25,7 @@ tar -xzf "hallpass_${V}_linux_${ARCH}.tar.gz" && cd "hallpass_${V}_linux_${ARCH}
 ```
 
 The archive holds the static `hallpass` binary with the web UI embedded, the optional destination-side
-`hallpass-collector`, the example configuration, the systemd unit, the changelog, LICENSE and NOTICE.
+`hallpass-collector`, the optional agent-side `hallpass-api` (see [APIs](/agents/#apis)), the example configuration, the systemd unit, the changelog, LICENSE and NOTICE.
 
 To build from source instead (Go 1.27+, Node 24, pnpm):
 

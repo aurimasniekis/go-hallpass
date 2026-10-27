@@ -13,7 +13,7 @@ Each `vX.Y.Z` release provides:
 
 | Artifact | Content |
 |---|---|
-| `hallpass_X.Y.Z_linux_amd64.tar.gz`, `…_linux_arm64.tar.gz`, `…_darwin_arm64.tar.gz` | Static `hallpass` binary (`CGO_ENABLED=0`, web UI embedded), `hallpass-collector`, example config, systemd unit, changelog, LICENSE, NOTICE. darwin is for development only. |
+| `hallpass_X.Y.Z_linux_amd64.tar.gz`, `…_linux_arm64.tar.gz`, `…_darwin_arm64.tar.gz` | Static `hallpass` binary (`CGO_ENABLED=0`, web UI embedded), `hallpass-collector`, `hallpass-api` (agent-side wrapper for API tools), example config, systemd unit, changelog, LICENSE, NOTICE. darwin is for development only. |
 | `hallpass_X.Y.Z_binaries.spdx.json` | SBOM of the shipped binaries (syft, SPDX JSON). |
 | `hallpass_X.Y.Z_source.spdx.json` | SBOM of the source tree, including the web UI's locked dependencies. |
 | `SHA256SUMS` | SHA-256 of every archive and SBOM. |

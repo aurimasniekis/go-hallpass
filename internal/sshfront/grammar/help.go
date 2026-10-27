@@ -57,6 +57,11 @@ hold the real token, and every call is checked against your access profile's rul
      ssh <gateway> request <api> --role <role> --reason '<why>' --wait
 4. Use the tool as usual, e.g. gh pr list.
 
+Simpler: run each command through hallpass-api (shipped with HallPass), which opens the tunnel, sets the variables
+for that command only, reports the command so approvers see it, waits for approval and runs it again:
+     hallpass-api --gateway <gateway> --reason '<why>' -- gh issue comment 42 --body 'Fixed in #43'
+
+api requests <invocation> lists the requests the proxy filed during a hallpass-api run (used by hallpass-api).
 api ca prints only the CA bundle (PEM). Its CAs can sign certificates for the API host names only. A refused call
 returns HTTP 403 with a "hallpass:" message that says why and what to request.
 `,

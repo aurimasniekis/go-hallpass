@@ -24,6 +24,7 @@ import (
 
 	"github.com/aurimasniekis/go-hallpass/internal/access"
 	"github.com/aurimasniekis/go-hallpass/internal/agents"
+	"github.com/aurimasniekis/go-hallpass/internal/apienv"
 	"github.com/aurimasniekis/go-hallpass/internal/apirules"
 	"github.com/aurimasniekis/go-hallpass/internal/audit"
 	"github.com/aurimasniekis/go-hallpass/internal/clock"
@@ -203,7 +204,10 @@ func insertOperator(t *testing.T, s *store.Store, roles ...string) string {
 }
 
 // client returns an HTTP client whose every connection is a new tunnel served by the proxy, trusting the target CA.
-func (f *fx) client() *http.Client {
+func (f *fx) client() *http.Client { return f.clientWith(nil) }
+
+// clientWith is client with extra CONNECT headers (what hallpass-api sends).
+func (f *fx) clientWith(connectHeaders http.Header) *http.Client {
 	f.t.Helper()
 	bundle, err := f.svc.CABundle(f.ctx, []string{f.srv.ID})
 	must(f.t, err)
@@ -224,7 +228,8 @@ func (f *fx) client() *http.Client {
 			go f.proxy.Serve(f.ctx, cl, b)
 			return a, nil
 		},
-		TLSClientConfig: &tls.Config{RootCAs: pool},
+		TLSClientConfig:    &tls.Config{RootCAs: pool},
+		ProxyConnectHeader: connectHeaders,
 	}
 	f.t.Cleanup(tr.CloseIdleConnections)
 	return &http.Client{Transport: tr, Timeout: 10 * time.Second}
@@ -467,5 +472,58 @@ func TestCredentialValidation(t *testing.T) {
 	must(t, f.svc.DeleteCredential(f.ctx, admin, f.read.ID))
 	if _, err := f.svc.GetCredential(f.ctx, f.read.ID); err == nil {
 		t.Fatal("credential still present")
+	}
+}
+
+// hallpass-api reports the command and reason in the CONNECT: a call that needs a requestable profile files the
+// request itself, with the command in the reason, and "api requests <invocation>" finds it.
+func TestProxyFilesRequestsForReportedCommands(t *testing.T) {
+	f := newFx(t)
+	const inv = "inv_0123456789abcdefgh"
+	c := f.clientWith(http.Header{
+		apienv.HeaderCommand:    {apienv.Encode("gh issue comment 42 --body 'Fixed in #43'")},
+		apienv.HeaderReason:     {apienv.Encode("Answer the customer on #42")},
+		apienv.HeaderInvocation: {inv},
+	})
+	req, err := http.NewRequest(http.MethodPost, "https://"+apiHost+"/repos/acme/api/issues/42/comments", strings.NewReader(`{}`))
+	must(t, err)
+	resp, err := c.Do(req)
+	must(t, err)
+	_ = resp.Body.Close()
+	reqID := resp.Header.Get("X-Hallpass-Request")
+	if resp.StatusCode != http.StatusForbidden || reqID == "" || resp.Header.Get("X-Hallpass-Error") != "approval_pending" {
+		t.Fatalf("status %d, request %q, error %q", resp.StatusCode, reqID, resp.Header.Get("X-Hallpass-Error"))
+	}
+	if got := f.proxy.Filed(f.agentID, inv); len(got) != 1 || got[0] != reqID {
+		t.Fatalf("filed %v, want %s", got, reqID)
+	}
+	if got := f.proxy.Filed("agt_other", inv); got != nil {
+		t.Fatalf("another agent sees the invocation: %v", got)
+	}
+	reason, err := f.acc.Reason(f.ctx, reqID)
+	must(t, err)
+	if reason != "Answer the customer on #42 | Command (reported by the agent): gh issue comment 42 --body 'Fixed in #43'" {
+		t.Fatalf("reason %q", reason)
+	}
+	// A second refused call in the same run reuses the pending request.
+	resp, err = c.Do(req.Clone(f.ctx))
+	must(t, err)
+	_ = resp.Body.Close()
+	if resp.Header.Get("X-Hallpass-Request") != reqID || len(f.proxy.Filed(f.agentID, inv)) != 1 {
+		t.Fatalf("second call filed another request: %q", resp.Header.Get("X-Hallpass-Request"))
+	}
+	// Reads go through the auto-approved profile and carry the command in the timeline.
+	st, _ := f.do(c, "GET", "/repos/acme/api", "")
+	if st != 200 {
+		t.Fatalf("GET %d", st)
+	}
+	// The event is written after the response reaches the client.
+	var cmd string
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline) && cmd == ""; time.Sleep(20 * time.Millisecond) {
+		_ = f.s.ReadDB().QueryRowContext(f.ctx, `SELECT json_extract(data_json, '$.command') FROM timeline_events
+			WHERE type = 'api.request' AND json_extract(data_json, '$.status') = 200`).Scan(&cmd)
+	}
+	if !strings.HasPrefix(cmd, "gh issue comment 42") {
+		t.Fatalf("recorded command %q", cmd)
 	}
 }

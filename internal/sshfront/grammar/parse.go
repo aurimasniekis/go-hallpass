@@ -132,18 +132,23 @@ type WhoAmI struct {
 
 // API subcommands.
 const (
-	APICA  = "ca"
-	APIEnv = "env"
+	APICA       = "ca"
+	APIEnv      = "env"
+	APIRequests = "requests"
 )
+
+var invocationRE = regexp.MustCompile(`^[A-Za-z0-9_-]{16,64}$`)
 
 // DefaultAPIProxyPort is the local port "api env" assumes for the proxy tunnel.
 const DefaultAPIProxyPort = 18080
 
-// API is "api ca" (the CA bundle of the API targets visible to the agent) or "api env [--port n]" (shell lines that
-// install that bundle and point HTTPS clients at a local proxy tunnel).
+// API is "api ca" (the CA bundle of the API targets visible to the agent), "api env [--port n]" (shell lines that
+// install that bundle and point HTTPS clients at a local proxy tunnel) or "api requests <invocation>" (the access
+// requests the proxy filed during a hallpass-api run, one ID per line).
 type API struct {
-	Sub  string
-	Port int
+	Sub        string
+	Port       int
+	Invocation string
 }
 
 func (List) CommandName() string     { return "list" }
@@ -472,12 +477,17 @@ func (p *parser) api(rest []Token) (Command, error) {
 	if err := p.noSeparator("api"); err != nil {
 		return nil, err
 	}
-	const use = "use: api ca | api env [--port <port>]"
+	const use = "use: api ca | api env [--port <port>] | api requests <invocation>"
 	if len(rest) == 0 {
 		return nil, usage("missing subcommand; " + use)
 	}
 	sub, rest := rest[0].Value, rest[1:]
 	switch sub {
+	case APIRequests:
+		if len(rest) != 1 || !invocationRE.MatchString(rest[0].Value) {
+			return nil, usage("use: api requests <invocation> (16-64 characters from A-Z a-z 0-9 _ -)")
+		}
+		return API{Sub: APIRequests, Invocation: rest[0].Value}, nil
 	case APICA:
 		if len(rest) > 0 {
 			return nil, usagef("unexpected argument %s; %s", quote(rest[0].Value), use)

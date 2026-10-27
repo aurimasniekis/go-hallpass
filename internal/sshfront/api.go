@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/aurimasniekis/go-hallpass/internal/apienv"
 	"github.com/aurimasniekis/go-hallpass/internal/apiproxy"
 	"github.com/aurimasniekis/go-hallpass/internal/inventory"
 	"github.com/aurimasniekis/go-hallpass/internal/obs"
@@ -44,6 +45,12 @@ func (s *session) api(ctx context.Context, c grammar.API) int {
 	if s.h.API == nil || s.h.APIService == nil {
 		return s.fail(grammar.Usage("the API proxy is not enabled on this gateway"))
 	}
+	if c.Sub == grammar.APIRequests {
+		for _, id := range s.h.API.Filed(s.c.AgentID, c.Invocation) {
+			_, _ = io.WriteString(s.out, id+"\n")
+		}
+		return 0
+	}
 	targets := s.apiTargets(ctx)
 	if len(targets) == 0 {
 		return s.fail(grammar.NewError(grammar.ExitNotFoundOrForbidden, "no API targets are visible to you"))
@@ -63,23 +70,15 @@ func (s *session) api(ctx context.Context, c grammar.API) int {
 
 // apiEnv renders shell lines (for eval) that install the CA bundle and point common API tools at the proxy tunnel.
 func apiEnv(bundle string, port int) string {
-	proxy := fmt.Sprintf("http://127.0.0.1:%d", port)
 	var b strings.Builder
 	fmt.Fprintf(&b, `# HallPass API proxy settings. The tunnel must be open first:
 #   ssh -fN -L 127.0.0.1:%d:%s:443 <gateway>
+# Or run one command with hallpass-api, which needs neither: hallpass-api --gateway <gateway> -- gh ...
 (umask 077 && mkdir -p "$HOME/.hallpass" && cat > "$HOME/.hallpass/api-ca.pem" <<'HALLPASS_API_CA'
 %sHALLPASS_API_CA
-printf 'hallpass\n' > "$HOME/.hallpass/placeholder-token")
-`, port, apiproxy.Host, bundle)
-	ca := `"$HOME/.hallpass/api-ca.pem"`
-	for _, kv := range [][2]string{
-		{"HTTPS_PROXY", proxy}, {"https_proxy", proxy}, {"NO_PROXY", "localhost,127.0.0.1,::1"}, {"no_proxy", "localhost,127.0.0.1,::1"},
-		{"SSL_CERT_FILE", ca}, {"NODE_EXTRA_CA_CERTS", ca}, {"NODE_USE_ENV_PROXY", "1"}, {"REQUESTS_CA_BUNDLE", ca},
-		{"CURL_CA_BUNDLE", ca}, {"CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE", ca}, {"CLOUDSDK_PROXY_TYPE", "http"},
-		{"CLOUDSDK_PROXY_ADDRESS", "127.0.0.1"}, {"CLOUDSDK_PROXY_PORT", fmt.Sprint(port)},
-		{"CLOUDSDK_AUTH_ACCESS_TOKEN_FILE", `"$HOME/.hallpass/placeholder-token"`},
-		{"GH_TOKEN", "hallpass"}, {"CLOUDFLARE_API_TOKEN", "hallpass"},
-	} {
+printf '%s\n' > "$HOME/.hallpass/placeholder-token")
+`, port, apiproxy.Host, bundle, apienv.Placeholder)
+	for _, kv := range apienv.Vars(port, `"$HOME/.hallpass/api-ca.pem"`, `"$HOME/.hallpass/placeholder-token"`) {
 		fmt.Fprintf(&b, "export %s=%s\n", kv[0], kv[1])
 	}
 	b.WriteString("# Tokens above are placeholders: HallPass replaces them with each access profile's credential.\n")

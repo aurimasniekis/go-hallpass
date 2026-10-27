@@ -156,6 +156,33 @@ with a reason first. A call HallPass refuses returns **HTTP 403** with a message
 - `GET /repos/acme/api needs access to github as write: run ssh <gateway> request github --role write --reason '<why>' --wait, then retry`
 - `no access profile you can use on github allows DELETE /repos/acme/api`: the call is outside what you may do.
 
+### hallpass-api
+
+`hallpass-api` (in the release archives, including macOS) runs one command through the proxy without any setup:
+
+```sh
+hallpass-api --gateway center --reason "Answer the customer on #42" -- gh issue comment 42 --body "Fixed in #43"
+```
+
+It uses your `ssh` (config, key and pinned host key) to fetch the CA bundle and open the tunnel, and sets the proxy,
+CA and placeholder-token variables for that command only. It also reports the command line and your reason to the
+gateway. When a call needs a profile that requires approval, the gateway files the request itself, and approvers see
+the command next to your reason. `hallpass-api` then waits (`--wait`, default 10 minutes), and once approved runs the
+command again. A refused call never reached the API, so running it again is safe for single-call commands; a command
+that made other changes before the refused call repeats them (use `--retries 0` and run it again yourself).
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--gateway` | `$HALLPASS_GATEWAY` | ssh host of the gateway |
+| `--reason` | `$HALLPASS_REASON` | why you need the access; required for profiles that require a reason |
+| `--wait` | `10m` | how long to wait for approval (`0`: print the request IDs and exit) |
+| `--retries` | `2` | how many times to run the command again after approvals |
+| `--ssh` | `ssh` | ssh client to use |
+
+Values of options that look like secrets (`--token x`, `--api-key=x`) are replaced by `[redacted]` in the reported
+command. The command is what you report: approvers see it labeled that way, and HallPass still checks every request.
+Exit codes: the command's own, or 83 denied, 84 expired, 85 canceled, 86 still pending, 80 setup failed.
+
 `exec` and `connect` are refused on API targets.
 
 ## File transfer

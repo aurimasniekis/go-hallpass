@@ -130,5 +130,10 @@ roots.
 
 ## Agents
 
-Agents need the tunnel, the CA bundle and the proxy settings; see the [agent guide](/agents/#apis). Changing a target's
+Agents need the tunnel, the CA bundle and the proxy settings; see the [agent guide](/agents/#apis). Agents that run
+commands with `hallpass-api` report each command line: when a call needs a profile that requires approval, HallPass
+files the request with the agent's reason followed by `Command (reported by the agent): gh issue comment 42 …`, so you
+see what the access is for in the console, Slack or Telegram. The command is the agent's claim, not proof: HallPass
+still checks every request against the profile's rules, and the timeline records both the reported command and each
+actual request. Changing a target's
 hosts issues a new CA, so agents must fetch the bundle again.

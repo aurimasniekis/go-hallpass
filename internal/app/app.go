@@ -96,6 +96,7 @@ type App struct {
 	UI http.Handler
 
 	notifyOpts func(*notify.Options)
+	apiOpts    func(*apiproxy.Options)
 	auditFile  *os.File
 }
 
@@ -104,6 +105,9 @@ type Option func(*App)
 
 // WithNotifyOptions adjusts the notification core's options (tests: fake provider API endpoints).
 func WithNotifyOptions(f func(*notify.Options)) Option { return func(a *App) { a.notifyOpts = f } }
+
+// WithAPIProxyOptions adjusts the API proxy's options (tests: a local fake API, its CA and resolver).
+func WithAPIProxyOptions(f func(*apiproxy.Options)) Option { return func(a *App) { a.apiOpts = f } }
 
 // WithClock overrides the clock (tests).
 func WithClock(c clock.Clock) Option { return func(a *App) { a.Clock = c } }
@@ -185,8 +189,12 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 		if err != nil {
 			return nil, err
 		}
-		if a.APIProxy, err = apiproxy.New(apiproxy.Options{Service: a.APIService, Access: a.Access, Enforcer: a.Enforcer, Engine: a.Engine,
-			Inventory: a.Inventory, Guard: apiGuard, Log: log, Clock: a.Clock}); err != nil {
+		po := apiproxy.Options{Service: a.APIService, Access: a.Access, Enforcer: a.Enforcer, Engine: a.Engine,
+			Inventory: a.Inventory, Guard: apiGuard, Log: log, Clock: a.Clock}
+		if a.apiOpts != nil {
+			a.apiOpts(&po)
+		}
+		if a.APIProxy, err = apiproxy.New(po); err != nil {
 			return nil, err
 		}
 	}

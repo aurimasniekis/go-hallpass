@@ -63,7 +63,8 @@ flowchart LR
   force-pushes are refused unless allowed. Refused pushes never reach the host.
 - **API targets.** Agents call GitHub, Cloudflare, Google Cloud or any HTTPS API with their usual tools (`gh`,
   `wrangler`, `gcloud`, `curl`) through an API proxy reached over SSH. HallPass adds the token, so agents never hold
-  it, checks every request against method, path and GraphQL-operation rules, and records each call.
+  it, checks every request against method, path and GraphQL-operation rules, and records each call. The
+  `hallpass-api` wrapper shows approvers the exact command (`gh issue comment 42 …`) and re-runs it once approved.
 - **File transfer.** Roles with the file-transfer capability accept `scp` and `sftp`. Every upload, download,
   rename and deletion is recorded with its path, size and SHA-256.
 - **Hidden inventory.** Agents see aliases only. An unknown server and a forbidden one give the same answer.

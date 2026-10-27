@@ -59,6 +59,12 @@ type gw struct {
 // auto-approve exec on web1/inspect.
 func startGateway(t *testing.T, tweaks ...func(*config.Config)) *gw {
 	t.Helper()
+	return startGatewayWith(t, nil, tweaks...)
+}
+
+// startGatewayWith is startGateway with App options.
+func startGatewayWith(t *testing.T, opts []Option, tweaks ...func(*config.Config)) *gw {
+	t.Helper()
 	dir := t.TempDir()
 	cfg := config.Default()
 	cfg.Mode = "development"
@@ -72,7 +78,7 @@ func startGateway(t *testing.T, tweaks ...func(*config.Config)) *gw {
 		tw(cfg)
 	}
 	ctx := context.Background()
-	a, err := New(ctx, cfg, slog.New(slog.DiscardHandler))
+	a, err := New(ctx, cfg, slog.New(slog.DiscardHandler), opts...)
 	must(t, err)
 	g := &gw{t: t, a: a, key: sshkeys.Ed25519(t), dest: sshtest.Start(t), done: make(chan error, 1)}
 
