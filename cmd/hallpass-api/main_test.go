@@ -72,7 +72,7 @@ func TestLocalProxyTagsConnect(t *testing.T) {
 		_, _ = io.WriteString(c, "echo:"+line)
 	}()
 	lp, err := startLocalProxy(context.Background(), up.Addr().(*net.TCPAddr).Port, map[string]string{
-		apienv.HeaderCommand: apienv.Encode("gh issue comment 42"), apienv.HeaderInvocation: "inv_0123456789abcdef", apienv.HeaderReason: "",
+		apienv.HeaderCommand: apienv.Encode("gh issue comment 42"), apienv.HeaderInvocation: "inv-test-invocation-two", apienv.HeaderReason: "",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -87,7 +87,7 @@ func TestLocalProxyTagsConnect(t *testing.T) {
 	all, _ := io.ReadAll(io.LimitReader(c, 64))
 	req := <-got
 	if req.Host != "api.github.com:443" || apienv.Decode(req.Header.Get(apienv.HeaderCommand)) != "gh issue comment 42" ||
-		req.Header.Get(apienv.HeaderInvocation) != "inv_0123456789abcdef" || req.Header.Get(apienv.HeaderReason) != "" {
+		req.Header.Get(apienv.HeaderInvocation) != "inv-test-invocation-two" || req.Header.Get(apienv.HeaderReason) != "" {
 		t.Fatalf("upstream CONNECT: %s %v", req.Host, req.Header)
 	}
 	if !bytes.Contains(all, []byte("200 Connection established")) || !bytes.Contains(all, []byte("echo:hello")) {

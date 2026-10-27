@@ -84,7 +84,7 @@ func TestParse(t *testing.T) {
 		{"whoami", WhoAmI{}},
 		{"whoami --json", WhoAmI{JSON: true}},
 		{"api ca", API{Sub: APICA}},
-		{"api requests inv_0123456789abcdef", API{Sub: APIRequests, Invocation: "inv_0123456789abcdef"}},
+		{"api requests inv-test-invocation-two", API{Sub: APIRequests, Invocation: "inv-test-invocation-two"}},
 		{"api env", API{Sub: APIEnv, Port: DefaultAPIProxyPort}},
 		{"api env --port 19000", API{Sub: APIEnv, Port: 19000}},
 		{"api env --port=19001", API{Sub: APIEnv, Port: 19001}},

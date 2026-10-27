@@ -18,4 +18,6 @@ regexes = [
   '''test-signing-secret-0123456789abcdef''',
   # An algorithm name after the word "key" in docs (generic-api-key false positive in THREAT_MODEL T-24), not a secret.
   '''^ChaCha20-Poly1305$''',
+  # A hallpass-api invocation ID fixture (cmd/hallpass-api tests, commit 9f629c1), not a secret.
+  '''^inv_0123456789abcdef(gh)?$''',
 ]

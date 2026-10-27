@@ -479,7 +479,7 @@ func TestCredentialValidation(t *testing.T) {
 // request itself, with the command in the reason, and "api requests <invocation>" finds it.
 func TestProxyFilesRequestsForReportedCommands(t *testing.T) {
 	f := newFx(t)
-	const inv = "inv_0123456789abcdefgh"
+	const inv = "inv-test-invocation-one"
 	c := f.clientWith(http.Header{
 		apienv.HeaderCommand:    {apienv.Encode("gh issue comment 42 --body 'Fixed in #43'")},
 		apienv.HeaderReason:     {apienv.Encode("Answer the customer on #42")},
