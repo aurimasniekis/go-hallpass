@@ -48,15 +48,16 @@ func (s *Server) me(p *opauth.Principal) meDTO {
 		Session: meSession{ID: p.SessionID, Method: p.Method, AuthAt: p.AuthAt, MFAAt: p.MFAAt, ExpiresAt: p.ExpiresAt, Limited: p.Limited, NeedsEnroll: p.NeedsEnroll}}
 }
 
-// serverDTO redacts the destination address, port and host-CA binding (principals are destination host names)
-// without inventory.address.read (HP-SRV-010, HP-RBAC-002, SR-28).
+// serverDTO redacts the destination address, port, host-CA binding (principals are destination host names) and an
+// API target's hosts without inventory.address.read (HP-SRV-010, HP-RBAC-002, SR-28).
 type serverDTO struct {
 	*inventory.Server
-	Address         string   `json:"address"`
-	Port            int      `json:"port"`
-	HostCAID        string   `json:"host_ca_id,omitempty"`
-	Principals      []string `json:"host_ca_principals"`
-	AddressRedacted bool     `json:"address_redacted"`
+	Address         string               `json:"address"`
+	Port            int                  `json:"port"`
+	HostCAID        string               `json:"host_ca_id,omitempty"`
+	Principals      []string             `json:"host_ca_principals"`
+	API             *inventory.APITarget `json:"api,omitempty"`
+	AddressRedacted bool                 `json:"address_redacted"`
 }
 
 func (s *Server) canSeeAddress(c *gen.Call) bool {
@@ -69,7 +70,7 @@ func (s *Server) server(c *gen.Call, v *inventory.Server) serverDTO {
 		if principals == nil {
 			principals = []string{}
 		}
-		return serverDTO{Server: v, Address: v.Address, Port: v.Port, HostCAID: v.HostCAID, Principals: principals}
+		return serverDTO{Server: v, Address: v.Address, Port: v.Port, HostCAID: v.HostCAID, Principals: principals, API: v.API}
 	}
 	return serverDTO{Server: v, Principals: []string{}, AddressRedacted: true}
 }
@@ -317,6 +318,7 @@ type channelDTO struct {
 	GitService   string     `json:"git_service,omitempty"`
 	GitRepo      string     `json:"git_repo,omitempty"`
 	Subsystem    string     `json:"subsystem,omitempty"`
+	APIHost      string     `json:"api_host,omitempty"`
 }
 
 func channel(ch db.SshChannel) channelDTO {
@@ -324,7 +326,7 @@ func channel(ch db.SshChannel) channelDTO {
 		RoleID: ch.RoleID, Kind: ch.Kind, PTY: ch.Pty == 1, State: ch.State, OpenedAt: micros(ch.OpenedAt), ClosedAt: nullTime(ch.ClosedAt),
 		CloseReason: ch.CloseReason.String, CloseDetail: ch.CloseDetail.String, GatewayCode: nullInt(ch.GatewayExitCode),
 		ExitStatus: nullInt(ch.ExitStatus), ExitSignal: ch.ExitSignal.String, GitService: ch.GitService.String, GitRepo: ch.GitRepo.String,
-		Subsystem: ch.Subsystem.String}
+		Subsystem: ch.Subsystem.String, APIHost: ch.ApiHost.String}
 }
 
 type timelineDTO struct {

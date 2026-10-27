@@ -1,9 +1,11 @@
 package httpapi
 
 import (
+	"encoding/pem"
 	"time"
 
 	"github.com/aurimasniekis/go-hallpass/internal/agents"
+	"github.com/aurimasniekis/go-hallpass/internal/apiproxy"
 	"github.com/aurimasniekis/go-hallpass/internal/apperr"
 	"github.com/aurimasniekis/go-hallpass/internal/credentials"
 	"github.com/aurimasniekis/go-hallpass/internal/groups"
@@ -646,4 +648,49 @@ func (s *Server) PreviewPolicyChange(c *gen.Call) (*gen.Result, error) {
 		return nil, err
 	}
 	return ok(map[string]any{"before": b, "after": a})
+}
+
+// ---- API targets (ADR-0060)
+
+type apiTargetCADTO struct {
+	Certificate  string    `json:"certificate"`
+	Fingerprint  string    `json:"fingerprint"`
+	PermittedDNS []string  `json:"permitted_dns"`
+	NotAfter     time.Time `json:"not_after"`
+}
+
+func (s *Server) GetAPITargetCA(c *gen.Call) (*gen.Result, error) {
+	cert, err := s.d.APIService.CA(c.R.Context(), c.R.PathValue("id"))
+	if err != nil {
+		return nil, err
+	}
+	return ok(apiTargetCADTO{Certificate: string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})),
+		Fingerprint: apiproxy.Fingerprint(cert), PermittedDNS: cert.PermittedDNSDomains, NotAfter: cert.NotAfter.UTC()})
+}
+
+func (s *Server) GetAPICredential(c *gen.Call) (*gen.Result, error) {
+	v, err := s.d.APIService.GetCredential(c.R.Context(), c.R.PathValue("id"))
+	if err != nil {
+		return nil, err
+	}
+	return ok(v)
+}
+
+func (s *Server) SetAPICredential(c *gen.Call) (*gen.Result, error) {
+	var in apiproxy.CredentialInput
+	if err := decode(c, &in, false); err != nil {
+		return nil, err
+	}
+	v, err := s.d.APIService.SetCredential(c.R.Context(), actor(c), c.R.PathValue("id"), in)
+	if err != nil {
+		return nil, err
+	}
+	return ok(v)
+}
+
+func (s *Server) DeleteAPICredential(c *gen.Call) (*gen.Result, error) {
+	if err := s.d.APIService.DeleteCredential(c.R.Context(), actor(c), c.R.PathValue("id")); err != nil {
+		return nil, err
+	}
+	return noContent()
 }

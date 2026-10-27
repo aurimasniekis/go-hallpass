@@ -19,6 +19,7 @@ import (
 
 	"github.com/aurimasniekis/go-hallpass/internal/access"
 	"github.com/aurimasniekis/go-hallpass/internal/agents"
+	"github.com/aurimasniekis/go-hallpass/internal/apiproxy"
 	"github.com/aurimasniekis/go-hallpass/internal/apperr"
 	"github.com/aurimasniekis/go-hallpass/internal/audit"
 	"github.com/aurimasniekis/go-hallpass/internal/clock"
@@ -63,10 +64,12 @@ type Deps struct {
 	Proxy *sshproxy.Proxy
 	// RemoteBackup manages backups to object storage.
 	RemoteBackup *remotebackup.Service
-	Matrix       *rbac.Matrix
-	Metrics      *metrics.Metrics
-	BootID       string
-	Version      string
+	// APIService manages API target CAs and access profile credentials (ADR-0060).
+	APIService *apiproxy.Service
+	Matrix     *rbac.Matrix
+	Metrics    *metrics.Metrics
+	BootID     string
+	Version    string
 }
 
 // Options configure the HTTP layer.

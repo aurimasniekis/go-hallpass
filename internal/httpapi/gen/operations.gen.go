@@ -127,6 +127,9 @@ var Operations = []Operation{
 	{ID: "getRole", Method: "GET", Path: "/api/v1/roles/{id}", Permission: "inventory.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"inventory"}},
 	{ID: "updateRole", Method: "PATCH", Path: "/api/v1/roles/{id}", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"inventory"}},
 	{ID: "deleteRole", Method: "DELETE", Path: "/api/v1/roles/{id}", Permission: "inventory.write", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"inventory"}},
+	{ID: "getAPICredential", Method: "GET", Path: "/api/v1/roles/{id}/api-credential", Permission: "credentials.manage", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"credentials"}},
+	{ID: "setAPICredential", Method: "PUT", Path: "/api/v1/roles/{id}/api-credential", Permission: "credentials.manage", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"credentials"}},
+	{ID: "deleteAPICredential", Method: "DELETE", Path: "/api/v1/roles/{id}/api-credential", Permission: "credentials.manage", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"credentials"}},
 	{ID: "bindRoleCert", Method: "PUT", Path: "/api/v1/roles/{id}/cert-binding", Permission: "credentials.manage", Reauth: true, MFA: true, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"credentials"}},
 	{ID: "unbindRoleCert", Method: "DELETE", Path: "/api/v1/roles/{id}/cert-binding", Permission: "credentials.manage", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"credentials"}},
 	{ID: "listCredentials", Method: "GET", Path: "/api/v1/roles/{id}/credentials", Permission: "credentials.manage", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"credentials"}},
@@ -139,6 +142,7 @@ var Operations = []Operation{
 	{ID: "getServer", Method: "GET", Path: "/api/v1/servers/{id}", Permission: "inventory.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"inventory"}},
 	{ID: "updateServer", Method: "PATCH", Path: "/api/v1/servers/{id}", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"inventory"}},
 	{ID: "deleteServer", Method: "DELETE", Path: "/api/v1/servers/{id}", Permission: "inventory.write", Reauth: true, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"inventory"}},
+	{ID: "getAPITargetCA", Method: "GET", Path: "/api/v1/servers/{id}/api-ca", Permission: "inventory.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"inventory"}},
 	{ID: "disableServer", Method: "POST", Path: "/api/v1/servers/{id}/disable", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"inventory"}},
 	{ID: "getServerEffectiveAccess", Method: "GET", Path: "/api/v1/servers/{id}/effective-access", Permission: "policy.read", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"inventory", "policy"}},
 	{ID: "enableServer", Method: "POST", Path: "/api/v1/servers/{id}/enable", Permission: "inventory.write", Reauth: false, MFA: false, Idempotent: false, Stream: false, Redirect: false, Token: true, Tags: []string{"inventory"}},
@@ -422,6 +426,12 @@ type Server interface {
 	UpdateRole(c *Call) (*Result, error)
 	// DeleteRole DELETE /api/v1/roles/{id} (permission inventory.write)
 	DeleteRole(c *Call) (*Result, error)
+	// GetAPICredential GET /api/v1/roles/{id}/api-credential (permission credentials.manage)
+	GetAPICredential(c *Call) (*Result, error)
+	// SetAPICredential PUT /api/v1/roles/{id}/api-credential (permission credentials.manage)
+	SetAPICredential(c *Call) (*Result, error)
+	// DeleteAPICredential DELETE /api/v1/roles/{id}/api-credential (permission credentials.manage)
+	DeleteAPICredential(c *Call) (*Result, error)
 	// BindRoleCert PUT /api/v1/roles/{id}/cert-binding (permission credentials.manage)
 	BindRoleCert(c *Call) (*Result, error)
 	// UnbindRoleCert DELETE /api/v1/roles/{id}/cert-binding (permission credentials.manage)
@@ -446,6 +456,8 @@ type Server interface {
 	UpdateServer(c *Call) (*Result, error)
 	// DeleteServer DELETE /api/v1/servers/{id} (permission inventory.write)
 	DeleteServer(c *Call) (*Result, error)
+	// GetAPITargetCA GET /api/v1/servers/{id}/api-ca (permission inventory.read)
+	GetAPITargetCA(c *Call) (*Result, error)
 	// DisableServer POST /api/v1/servers/{id}/disable (permission inventory.write)
 	DisableServer(c *Call) (*Result, error)
 	// GetServerEffectiveAccess GET /api/v1/servers/{id}/effective-access (permission policy.read)
@@ -640,6 +652,9 @@ func Handlers(s Server) map[string]Handler {
 		"getRole":                       s.GetRole,
 		"updateRole":                    s.UpdateRole,
 		"deleteRole":                    s.DeleteRole,
+		"getAPICredential":              s.GetAPICredential,
+		"setAPICredential":              s.SetAPICredential,
+		"deleteAPICredential":           s.DeleteAPICredential,
 		"bindRoleCert":                  s.BindRoleCert,
 		"unbindRoleCert":                s.UnbindRoleCert,
 		"listCredentials":               s.ListCredentials,
@@ -652,6 +667,7 @@ func Handlers(s Server) map[string]Handler {
 		"getServer":                     s.GetServer,
 		"updateServer":                  s.UpdateServer,
 		"deleteServer":                  s.DeleteServer,
+		"getAPITargetCA":                s.GetAPITargetCA,
 		"disableServer":                 s.DisableServer,
 		"getServerEffectiveAccess":      s.GetServerEffectiveAccess,
 		"enableServer":                  s.EnableServer,

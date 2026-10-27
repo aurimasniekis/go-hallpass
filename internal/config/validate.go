@@ -139,6 +139,12 @@ func (c *Config) Validate() error {
 	for _, p := range c.Egress.AllowSpecialCIDRs {
 		v.prefix("egress.allow_special_cidrs", p)
 	}
+	for _, p := range c.APIProxy.AllowCIDRs {
+		v.prefix("api_proxy.allow_cidrs", p)
+	}
+	for _, p := range c.APIProxy.AllowSpecialCIDRs {
+		v.prefix("api_proxy.allow_special_cidrs", p)
+	}
 	for _, p := range c.Egress.SourceAddresses {
 		if _, err := netip.ParseAddr(p); err != nil {
 			v.prefix("egress.source_addresses", p)

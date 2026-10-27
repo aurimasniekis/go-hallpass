@@ -84,6 +84,20 @@ sftp web1+deploy@center                       # "+<role>" picks the role
 
 Neither git nor scp can send a reason: when one is required, `request … --reason … --wait` first, then retry.
 
+## APIs
+
+API targets (marked `(api)` in `list`) are HTTPS APIs called with their usual tools through the API proxy, which adds
+the operator's credential; you never hold it:
+
+```sh
+ssh -fN -o ExitOnForwardFailure=yes -L 127.0.0.1:18080:hallpass:443 center   # proxy tunnel (keep it running)
+eval "$(ssh center api env)"     # CA bundle in ~/.hallpass/api-ca.pem, HTTPS_PROXY, CA variables, placeholder tokens
+gh pr list --repo acme/api
+```
+
+An `auto` profile is granted on the first call; a `requestable` one needs `request … --reason … --wait` first. Refused
+calls return HTTP 403 with a `hallpass:` message that names the request to make. `ssh center help api` has the details.
+
 ## Quoting
 
 The gateway splits its part of the command on spaces and tabs. `'…'` is literal, `"…"` is literal except for `\"` and

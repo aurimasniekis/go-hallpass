@@ -47,6 +47,7 @@ export interface ChannelInfo {
   connection_id: string;
   git_service?: string | undefined;
   subsystem?: string | undefined;
+  api_host?: string | undefined;
 }
 
 export interface TimelineContext {
@@ -160,6 +161,9 @@ function channelNoun(info: ChannelInfo | undefined, d: Data): string {
   if (info?.git_service) {
     return 'Git operation';
   }
+  if (info?.api_host ?? str(d, 'api_host')) {
+    return 'API tunnel';
+  }
   if (kind === 'exec') {
     return 'Command';
   }
@@ -250,6 +254,10 @@ function sentence(ev: TimelineEventInput, d: Data, ctx: TimelineContext, info: C
       if (info?.git_service) {
         return `${GIT_SERVICES[info.git_service] ?? 'Git operation'} started${using}`;
       }
+      const apiHost = info?.api_host ?? str(d, 'api_host');
+      if (apiHost !== null) {
+        return `API tunnel to ${apiHost} opened`;
+      }
       if (kind === 'exec') {
         return `Command started${pty ? ' with a PTY' : ''}${using}`;
       }
@@ -325,6 +333,19 @@ function sentence(ev: TimelineEventInput, d: Data, ctx: TimelineContext, info: C
       const sent = num(d, 'bytes_in');
       const got = num(d, 'bytes_out');
       return `Git transfer finished (${formatBytes(sent ?? 0)} sent, ${formatBytes(got ?? 0)} received)`;
+    }
+    case 'api.request': {
+      const method = str(d, 'method') ?? 'request';
+      const host = str(d, 'host') ?? '';
+      const path = str(d, 'path') ?? '/';
+      const query = str(d, 'query');
+      const status = num(d, 'status');
+      const call = `${method} ${host}${path}${query ? `?${query}` : ''}`;
+      const refused = str(d, 'refused');
+      if (refused !== null) {
+        return `${call} refused (${refused})`;
+      }
+      return `${call} → ${status ?? '?'} (${formatBytes(num(d, 'bytes_out') ?? 0)})`;
     }
     case 'file.operation': {
       const op = str(d, 'op') ?? 'operation';
@@ -422,6 +443,14 @@ function tone(type: string, d: Data): StatusTone {
   }
   if (type === 'file.operation') {
     return d.ok === true ? (d.op === 'remove' || d.op === 'rmdir' ? 'warning' : 'info') : 'error';
+  }
+  if (type === 'api.request') {
+    const status = typeof d.status === 'number' ? d.status : 0;
+    return d.refused !== undefined || status >= 400
+      ? 'error'
+      : d.method === 'GET' || d.method === 'HEAD'
+        ? 'info'
+        : 'warning';
   }
   return timelineLabel(type).tone;
 }

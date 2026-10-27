@@ -46,7 +46,8 @@ func (a *App) Serve(ctx context.Context, sshLn net.Listener) error {
 		cancel()
 	}()
 	h := &sshfront.Handler{Access: a.Access, Engine: a.Engine, Inventory: a.Inventory, Proxy: a.Proxy, Bus: a.Bus, Log: a.Log,
-		WaitDefault: a.Cfg.Access.WaitTimeoutDefault.D(), WaitMax: a.Cfg.Access.WaitTimeoutMax.D(), Metrics: a.Metrics}
+		WaitDefault: a.Cfg.Access.WaitTimeoutDefault.D(), WaitMax: a.Cfg.Access.WaitTimeoutMax.D(), Metrics: a.Metrics,
+		API: a.APIProxy, APIService: a.APIService}
 	srv := sshfront.New(sshfront.Options{Config: a.Cfg.SSH, Agents: a.Agents, Access: a.Access, Audit: a.Audit, Store: a.Store,
 		Hosts: a.Credentials, Handler: h, Bans: a.Bans, Logger: a.Log, Metrics: a.Metrics, Bus: a.Bus})
 	var sshUp atomic.Bool
@@ -147,7 +148,7 @@ func (a *App) NewAPI() *httpapi.Server {
 		Matrix: rbac.New(rbac.Options{AuditorAddressRead: rc.AuditorAddressRead, ApproverRecordingPlay: rc.ApproverRecordingPlay,
 			AuditorRecordingExport: rc.AuditorRecordingExport, ApproversCanLockdown: rc.ApproversCanLockdown, WebTerminal: a.Cfg.Console.Terminal}),
 		Metrics: a.Metrics,
-		Notify:  a.Notify, Destaudit: a.Destaudit, Bans: a.Bans, RemoteBackup: a.RemoteBackup, Proxy: a.Proxy, BootID: a.BootID, Version: buildinfo.Get().Version},
+		Notify:  a.Notify, Destaudit: a.Destaudit, Bans: a.Bans, RemoteBackup: a.RemoteBackup, Proxy: a.Proxy, APIService: a.APIService, BootID: a.BootID, Version: buildinfo.Get().Version},
 		httpapi.Options{PublicURL: a.Cfg.PublicURL, Secure: strings.HasPrefix(a.Cfg.PublicURL, "https://"), TrustedProxies: proxies, UI: a.UI,
 			Clock: a.Clock, Logger: a.Log, AgentSSHHost: sshHost, AgentSSHPort: sshPort, EgressAllowCIDRs: a.Cfg.Egress.AllowCIDRs,
 			EgressAllowSpecialCIDRs: a.Cfg.Egress.AllowSpecialCIDRs, EgressSourceAddresses: a.Cfg.Egress.SourceAddresses})

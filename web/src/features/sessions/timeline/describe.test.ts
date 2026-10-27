@@ -20,6 +20,7 @@ const channels = new Map<string, ChannelInfo>([
   ['chn_pty', { kind: 'shell', pty: true, connection_id: 'con_2' }],
   ['chn_sftp', { kind: 'exec', pty: false, connection_id: 'con_3', subsystem: 'sftp' }],
   ['chn_git', { kind: 'exec', pty: false, connection_id: 'con_3', git_service: 'git-receive-pack' }],
+  ['chn_api', { kind: 'exec', pty: false, connection_id: 'con_4', api_host: 'api.github.com' }],
 ]);
 
 describe('describeTimeline', () => {
@@ -189,6 +190,22 @@ describe('describeTimeline', () => {
           repo: 'acme/api',
           refused: [{ ref: 'refs/heads/main', reason: 'protected branch' }],
         }),
+        ev('channel.opened', { api_host: 'api.github.com', api_target: 'github' }, { channel_id: 'chn_api' }),
+        ev('api.request', {
+          method: 'GET',
+          host: 'api.github.com',
+          path: '/repos/acme/api',
+          query: 'access_token=[redacted]',
+          status: 200,
+          bytes_out: 2048,
+        }),
+        ev('api.request', {
+          method: 'DELETE',
+          host: 'api.github.com',
+          path: '/repos/acme/api',
+          status: 403,
+          refused: 'rule',
+        }),
         ev('request.approval_recorded', {
           actor_id: 'opr_1',
           channel: 'web',
@@ -206,10 +223,15 @@ describe('describeTimeline', () => {
       'Push started',
       'Pushed to acme/api: refs/heads/agent/fix (update)',
       'Push to acme/api refused: refs/heads/main (protected branch)',
+      'API tunnel to api.github.com opened',
+      'GET api.github.com/repos/acme/api?access_token=[redacted] → 200 (2.0 KiB)',
+      'DELETE api.github.com/repos/acme/api refused (rule)',
       'Approval 1 of 2 recorded by Ana (web)',
     ]);
     expect(out[1]?.category).toBe('file');
     expect(out[2]?.tone).toBe('error');
     expect(out[5]?.category).toBe('git');
+    expect(out[8]?.tone).toBe('info');
+    expect(out[9]?.tone).toBe('error');
   });
 });

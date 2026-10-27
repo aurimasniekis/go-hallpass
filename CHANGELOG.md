@@ -7,6 +7,24 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+### Added
+
+- **API targets.** Agents call HTTPS APIs (GitHub, Cloudflare, Google Cloud, or any API with a bearer, header or Basic
+  credential) with their usual tools through the API proxy: `ssh -fN -L 18080:hallpass:443 <gateway>`, then
+  `eval "$(ssh <gateway> api env)"`. HallPass replaces the agent's token with the access profile's credential, which
+  agents never see, and allows each request only under a grant and the profile's rules (method, host, path patterns,
+  and GraphQL query versus mutation). Every call is recorded in the session timeline (method, path, status, sizes;
+  no bodies). Each target has its own CA, name-constrained to its hosts. New `api ca` and `api env` gateway commands,
+  `kind: api` servers, `api` rules on roles and the `/roles/{id}/api-credential` and `/servers/{id}/api-ca` endpoints.
+- `api_proxy` configuration: `enabled` (default true), and the addresses API hosts may resolve to (public only by
+  default).
+
+### Security
+
+- The gateway now accepts one kind of SSH forward: a local forward to the name `hallpass`, which reaches only the API
+  proxy. Every other forward is still refused. HallPass holds API tokens and can read the API responses it forwards;
+  give each access profile a least-privilege token.
+
 ## [0.5.0] - 2026-10-26
 
 > **Recording format, backup format and keyring not externally reviewed.** The known limitations of

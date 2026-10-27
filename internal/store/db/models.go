@@ -98,6 +98,19 @@ type AgentOwner struct {
 	OperatorID string
 }
 
+type ApiCredential struct {
+	RoleID     string
+	Type       string
+	Header     string
+	Username   string
+	ScopesJson string
+	SecretEnc  []byte
+	Hint       string
+	Version    int64
+	UpdatedAt  int64
+	UpdatedBy  string
+}
+
 type ApiIdempotency struct {
 	OperatorID  string
 	Key         string
@@ -757,6 +770,9 @@ type Server struct {
 	DeletedAt    sql.NullInt64
 	DeletedBy    sql.NullString
 	DeletedAlias sql.NullString
+	ApiHostsJson sql.NullString
+	ApiCaCert    sql.NullString
+	ApiCaKeyEnc  []byte
 }
 
 type ServerGroup struct {
@@ -792,6 +808,7 @@ type ServerRole struct {
 	DeletedAt             sql.NullInt64
 	DeletedBy             sql.NullString
 	DeletedAlias          sql.NullString
+	ApiRulesJson          sql.NullString
 }
 
 type Setting struct {
@@ -835,6 +852,7 @@ type SshChannel struct {
 	GitService      sql.NullString
 	GitRepo         sql.NullString
 	Subsystem       sql.NullString
+	ApiHost         sql.NullString
 }
 
 type SshConnection struct {

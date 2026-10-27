@@ -11,6 +11,7 @@ const PLAN_LIST_ROUTES = [
   '/agents',
   '/servers',
   '/git',
+  '/apis',
   '/groups',
   '/policy',
   '/operators',

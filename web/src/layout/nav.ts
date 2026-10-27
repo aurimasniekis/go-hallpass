@@ -30,6 +30,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
       { to: '/agents', label: 'Agents', permission: 'inventory.read' },
       { to: '/servers', label: 'Servers', permission: 'inventory.read' },
       { to: '/git', label: 'Git', permission: 'inventory.read' },
+      { to: '/apis', label: 'APIs', permission: 'inventory.read' },
       { to: '/groups', label: 'Groups', permission: 'inventory.read' },
     ],
   },

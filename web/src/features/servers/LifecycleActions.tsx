@@ -7,7 +7,8 @@ import { api } from '../../api/client';
 import { qk } from '../../api/queryKeys';
 import { ConfirmAction } from '../../ds/ConfirmAction';
 
-export type LifecycleKind = 'server' | 'git remote' | 'role' | 'access profile';
+export type LifecycleKind =
+  'server' | 'git remote' | 'API target' | 'role' | 'access profile' | 'API profile';
 
 export interface LifecycleTarget {
   id: string;
@@ -36,7 +37,8 @@ export function LifecycleActions({
   compact?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const isServer = kind === 'server' || kind === 'git remote';
+  const isServer = kind === 'server' || kind === 'git remote' || kind === 'API target';
+  const isAPI = kind === 'API target' || kind === 'API profile';
   const refresh = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: qk.servers }),
@@ -67,7 +69,7 @@ export function LifecycleActions({
           },
         }
       : { label: verb, buttonProps: { size } };
-  const scope = isServer ? `, through all of its ${kind === 'git remote' ? 'access profiles' : 'roles'}` : '';
+  const scope = isServer ? `, through all of its ${kind === 'server' ? 'roles' : 'access profiles'}` : '';
   const keyHome = kind === 'git remote' || kind === 'access profile' ? 'the git host' : 'the destination';
   return (
     <Space wrap size={8}>
@@ -102,8 +104,17 @@ export function LifecycleActions({
         description={
           <>
             <p>
-              Active access ends{scope}, pending requests are canceled and the login keys are revoked. Remove
-              the keys from {keyHome} as well.
+              {isAPI ? (
+                <>
+                  Active access ends{scope}, pending requests are canceled and the stored API credentials are
+                  destroyed. Revoke the tokens at the API provider as well.
+                </>
+              ) : (
+                <>
+                  Active access ends{scope}, pending requests are canceled and the login keys are revoked.
+                  Remove the keys from {keyHome} as well.
+                </>
+              )}
             </p>
             <p style={{ margin: 0 }}>
               This cannot be undone. Past sessions and the audit log keep its name, and the name can be used

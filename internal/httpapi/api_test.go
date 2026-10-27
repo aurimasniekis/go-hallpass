@@ -113,7 +113,7 @@ func newHarnessWith(t *testing.T, o harnessOptions) *harness {
 	}
 	h.api = httpapi.New(httpapi.Deps{Store: a.Store, Audit: a.Audit, Bus: a.Bus, Agents: a.Agents, Inventory: a.Inventory, Credentials: a.Credentials,
 		Engine: a.Engine, Policy: a.Policy, Access: a.Access, Enforcer: a.Enforcer, Recording: a.Recording, Auth: a.Auth, OIDC: a.OIDC, Notify: a.Notify, Destaudit: a.Destaudit, Bans: a.Bans, RemoteBackup: a.RemoteBackup,
-		Proxy: proxy, Matrix: h.matrix, BootID: a.BootID, Version: buildinfo.Get().Version},
+		Proxy: proxy, APIService: a.APIService, Matrix: h.matrix, BootID: a.BootID, Version: buildinfo.Get().Version},
 		httpapi.Options{PublicURL: cfg.PublicURL, Clock: clk, SessionRate: 100000, IPRate: 100000, AuthRate: 100000})
 	rctx, cancel := context.WithCancel(ctx)
 	h.cancel = cancel

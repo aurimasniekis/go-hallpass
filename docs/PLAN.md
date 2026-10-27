@@ -1338,7 +1338,7 @@ Graceful shutdown and draining are in §3.4. Destination firewalling: allow inbo
 
 ## 19. Work packages
 
-HallPass was built in 28 dependency-ordered work packages (WP00–WP27). Their status is below; the requirement IDs each
+HallPass was built in 28 dependency-ordered work packages (WP00–WP27); later features are added as further packages. Their status is below; the requirement IDs each
 one owns are checked in §21. The per-package plans (goals, files, design notes) and the build-time progress log were
 removed once the packages were delivered; they remain in git history (`git show b298d76:docs/PLAN.md`, §19.1 and §19.3).
 
@@ -1376,6 +1376,7 @@ Update this table at every WP commit. Status values: `planned`, `in-progress`, `
 | WP25 | Destination-side audit integration | WP12, WP21 | implemented | 1e93d1d |
 | WP26 | Hardening | WP01–WP25 | implemented | 3b246c0, ffeae3b, 6b62a86, ed5c39e, 7bf9c69, 2ddb598, 41b1db6 |
 | WP27 | Release-gate validation and RC | WP26 | in-progress | v0.1.0 released as pre-1.0 with known limitations; RG-1, RG-5, RG-6 fail |
+| WP28 | API targets through the API proxy (ADR-0060) | WP15, WP11 | implemented | feat(api): API targets commit |
 
 ---
 
@@ -1417,7 +1418,7 @@ check · R recovery drill · SR security review · D documentation review.
 - [x] `HP-SSH-004` Algorithm policy — WP10 — evidence: U, O — ✅ tested: sshalg allowlists; agents key tests; e2e SHA-1 ssh-rsa refused
 - [x] `HP-SSH-005` Gateway host key lifecycle — WP10 — evidence: U, O, D — ✅ tested: credentials host-key tests; hostkey CLI test; docs/agent/guide.md pinning
 - [x] `HP-SSH-006` Shell, exec, PTY completeness — WP11 — evidence: O — ✅ tested: shell/exec/PTY/env/signal/eof/exit in internal/app/e2e_test.go and test/openssh/gateway_test.go (real ssh + sshd)
-- [x] `HP-SSH-007` Forwarding and unknown channels denied — WP10 — evidence: O, I — ✅ tested: internal/app/e2e_test.go TestGatewayDeniesForwarding; test/openssh/gateway_test.go (real ssh + sshd) TestOpenSSHForwardingDenied; SFTP only for `file-transfer` roles (ADR-0049): test/openssh/files_test.go TestOpenSSHFileTransfer
+- [x] `HP-SSH-007` Forwarding and unknown channels denied — WP10 — evidence: O, I — ✅ tested: internal/app/e2e_test.go TestGatewayDeniesForwarding; test/openssh/gateway_test.go (real ssh + sshd) TestOpenSSHForwardingDenied; SFTP only for `file-transfer` roles (ADR-0049): test/openssh/files_test.go TestOpenSSHFileTransfer; only the API proxy forward is accepted (ADR-0060): internal/app/api_e2e_test.go TestGatewayAPIProxyEndToEnd, internal/apiproxy tests
 - [x] `HP-SSH-008` Environment allowlist — WP11 — evidence: U, O — ✅ tested: internal/app/e2e_test.go TestGatewayEnvAllowlist (per-role extension implemented, not separately tested)
 - [x] `HP-SSH-009` Stdout purity — WP10 — evidence: O — ✅ tested: byte-exact stdout in test/openssh/gateway_test.go (real ssh + sshd) TestOpenSSHExec
 - [x] `HP-SSH-010` Exit status and signal propagation — WP11 — evidence: O — ✅ tested: exit-status (test/openssh/gateway_test.go (real ssh + sshd)) and exit-signal (internal/app/e2e_test.go TestGatewayExitSignal)

@@ -18,6 +18,7 @@ var helpTopics = map[string]string{
   exec <server> [options] -- <command>  as connect, but run <command> on the server
   sessions [--json] [--all]             your active (and with --all, recent) grants
   whoami [--json]                       your agent identity and key
+  api ca | api env [--port <port>]      set up HTTPS API access through the API proxy (see help api)
   version [--json]                      gateway, grammar and schema versions
   help [topic]                          topics: ` + "%TOPICS%" + `
 
@@ -37,6 +38,27 @@ Git and file transfers use the standard tools, waiting for approval like connect
   git clone <gateway>:<remote>/<owner>/<repo>.git    git remotes, marked (git) in list
   scp <file> <server>@<gateway>:<path>              roles with the file-transfer capability
   sftp <server>+<role>@<gateway>                    "+<role>" picks the role
+
+APIs (marked (api) in list) are called with their usual tools through the API proxy; see help api.
+`,
+	"api": `api ca
+api env [--port <port>]
+
+API targets (marked (api) in list) are HTTPS APIs such as GitHub, Cloudflare or Google Cloud. You call them with
+their usual tools (gh, wrangler, gcloud, curl) through the gateway's API proxy, which adds the credential: you never
+hold the real token, and every call is checked against your access profile's rules and recorded.
+
+1. Open the proxy tunnel (keep it running):
+     ssh -fN -L 127.0.0.1:18080:hallpass:443 <gateway>
+2. Load the proxy settings (writes the CA bundle to ~/.hallpass/api-ca.pem and exports HTTPS_PROXY, CA file
+   variables and placeholder tokens for gh and wrangler):
+     eval "$(ssh <gateway> api env)"
+3. Get access like any other target, or rely on auto-approval:
+     ssh <gateway> request <api> --role <role> --reason '<why>' --wait
+4. Use the tool as usual, e.g. gh pr list.
+
+api ca prints only the CA bundle (PEM). Its CAs can sign certificates for the API host names only. A refused call
+returns HTTP 403 with a "hallpass:" message that says why and what to request.
 `,
 	"list": `list [--json] [--server <server>]   (alias: ls; also the default with no command)
 

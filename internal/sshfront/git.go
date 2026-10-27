@@ -22,11 +22,19 @@ func errRepoNotFound() *grammar.Error {
 
 // isGitRemote reports whether the server is a git remote.
 func (s *session) isGitRemote(ctx context.Context, serverID string) bool {
+	return s.serverKind(ctx, serverID) == inventory.KindGit
+}
+
+// serverKind returns the server's kind (ssh when unknown).
+func (s *session) serverKind(ctx context.Context, serverID string) string {
 	if s.h.Inventory == nil {
-		return false
+		return inventory.KindSSH
 	}
 	srv, err := s.h.Inventory.GetServer(ctx, serverID)
-	return err == nil && srv.Kind == inventory.KindGit
+	if err != nil {
+		return inventory.KindSSH
+	}
+	return srv.Kind
 }
 
 type accessCandidate struct {

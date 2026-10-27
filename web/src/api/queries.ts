@@ -213,6 +213,21 @@ export const credentialsQueryOptions = (roleId: string) =>
       api.call('get', '/api/v1/roles/{id}/credentials', { path: { id: roleId }, signal }),
   });
 
+export const apiCredentialQueryOptions = (roleId: string) =>
+  queryOptions({
+    queryKey: qk.apiCredential(roleId),
+    queryFn: ({ signal }) =>
+      api.call('get', '/api/v1/roles/{id}/api-credential', { path: { id: roleId }, signal }),
+    retry: false,
+  });
+
+export const apiTargetCAQueryOptions = (serverId: string) =>
+  queryOptions({
+    queryKey: qk.apiTargetCA(serverId),
+    queryFn: ({ signal }) =>
+      api.call('get', '/api/v1/servers/{id}/api-ca', { path: { id: serverId }, signal }),
+  });
+
 export const userCAsQueryOptions = () =>
   queryOptions({
     queryKey: qk.userCAs,

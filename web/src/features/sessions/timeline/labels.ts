@@ -27,6 +27,7 @@ const LABELS: Record<string, { label: string; tone: StatusTone }> = {
   'git.push_refused': { label: 'Git push refused', tone: 'error' },
   'git.transferred': { label: 'Git transfer finished', tone: 'neutral' },
   'file.operation': { label: 'File operation', tone: 'info' },
+  'api.request': { label: 'API call', tone: 'info' },
   'file.summary': { label: 'File transfer finished', tone: 'neutral' },
 };
 

@@ -198,6 +198,9 @@ const (
 	// File transfers (SFTP) record one event per file operation and a summary; no file content.
 	EvFileOperation = "file.operation"
 	EvFileSummary   = "file.summary"
+	// API calls through the API proxy record one event per HTTP request: method, host, path, redacted query, status,
+	// sizes and the deciding rule; never headers or bodies.
+	EvAPIRequest = "api.request"
 	// EvDestinationExec is a destination-reported exec record ingested from a signed collector (WP25, HP-REC-012).
 	// It is never verified by HallPass; its data carries provenance "destination-audit" and verified=false.
 	EvDestinationExec = "destination.exec"

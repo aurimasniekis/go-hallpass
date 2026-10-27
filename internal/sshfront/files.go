@@ -26,7 +26,7 @@ func (s *session) fileTransfer(ctx context.Context) int {
 		return s.fail(grammar.Usage(fileTransferUsage))
 	}
 	vs, err := s.snap.ResolveServer(s.c.AgentID, alias)
-	if err != nil || s.isGitRemote(ctx, vs.Server.ID) {
+	if err != nil || s.serverKind(ctx, vs.Server.ID) != inventory.KindSSH {
 		return s.fail(grammar.NotFoundOrForbidden())
 	}
 	active := s.activeGrants(ctx)

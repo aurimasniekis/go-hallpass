@@ -45,6 +45,8 @@ In scope for v1.0:
    container + Compose + standalone deployment, CI/CD with scanning, SBOM and provenance.
 10. Documentation: operator, agent, destination-hardening, architecture, API, formats, security guarantees.
 11. Optional destination-side audit integration (WP25) as a provenance-labeled supplementary source.
+12. API targets: HTTPS APIs called through a credential-injecting proxy reached over SSH, under the same request,
+    approval and grant model, with per-request rules and metadata recording (ADR-0060).
 
 ## 3. Non-goals (v1.0)
 
@@ -53,7 +55,8 @@ In scope for v1.0:
   ForceCommand, MAC policies, network egress rules) are required for reliable restriction.
 - **No port, agent, X11 or streamlocal forwarding, and no subsystems other than SFTP.** SFTP (and scp over SFTP) is
   served only for roles with the separately authorized `file-transfer` capability, with file operations recorded as
-  metadata (ADR-0049, resolving R-06). An allowed shell can still open network connections and transfer files by
+  metadata (ADR-0049, resolving R-06). The only forward accepted is a local forward to the API proxy (`hallpass`),
+  which carries HTTPS requests to API targets only (ADR-0060). An allowed shell can still open network connections and transfer files by
   other means. This is documented, not prevented.
 - **No high availability or active-active clustering.** HallPass runs as a single active instance with cold-standby recovery.
 - **No writable SQLite on network filesystems** (NFS, SMB/CIFS).
@@ -95,6 +98,8 @@ In scope for v1.0:
 - Closing SSH or expiring a grant does not kill detached destination processes.
 - Certificate expiry alone does not end established sessions. HallPass enforces deadlines itself.
 - Input recording, when enabled, may capture secrets, and redaction is not guaranteed.
+- API profile rules limit which API calls an agent makes, not what an allowed call does: the API token's own scopes
+  are the real boundary. HallPass also sees every API response it forwards (ADR-0060).
 - Slack, Telegram and the OIDC IdP are trusted to authenticate their own users. HallPass enforces only the mapping and scope.
 
 ### 4.3 Trust boundaries (summary; full model in `docs/THREAT_MODEL.md`)
@@ -139,7 +144,7 @@ Test layers are abbreviated in `docs/PLAN.md` §21 and in `docs/TEST_STRATEGY.md
 | HP-SSH-004 | **Algorithm policy.** Accepted agent key types: Ed25519, ECDSA P-256/P-384/P-521, and RSA ≥ 3072 bits with `rsa-sha2-256`/`rsa-sha2-512` signatures. DSA, RSA < 3072 and SHA-1 `ssh-rsa` signatures are rejected. KEX, cipher and MAC sets are restricted to a documented modern allowlist on both the inbound and outbound legs. |
 | HP-SSH-005 | **Gateway host key lifecycle.** The gateway's own Ed25519 host key is generated at initialization, encrypted at rest and shown as SHA-256 fingerprints in the UI and CLI. Operators get a documented procedure for agents to pin it (known_hosts line or an `@cert-authority` host certificate) and to rotate it with an announced overlap. |
 | HP-SSH-006 | **Shell, exec, PTY completeness.** `shell`, `exec`, `pty-req`, `window-change`, `env`, `signal`, `eof`, `close`, `exit-status` and `exit-signal` are handled end to end between agent and destination, matching OpenSSH semantics. |
-| HP-SSH-007 | **Forwarding and unknown channels denied.** Agent forwarding, `direct-tcpip`, `tcpip-forward`, `streamlocal`, X11, unknown channel types and all subsystems except `sftp` are rejected with an explicit SSH failure and an audit event. `sftp` is accepted only through a role with the `file-transfer` capability (ADR-0049, security-relevant change); the legacy scp protocol over exec is refused. |
+| HP-SSH-007 | **Forwarding and unknown channels denied.** Agent forwarding, `direct-tcpip`, `tcpip-forward`, `streamlocal`, X11, unknown channel types and all subsystems except `sftp` are rejected with an explicit SSH failure and an audit event. `sftp` is accepted only through a role with the `file-transfer` capability (ADR-0049, security-relevant change); the legacy scp protocol over exec is refused. A `direct-tcpip` forward to the name `hallpass` is accepted when the API proxy is enabled and carries only HTTPS requests to API targets, each authorized against a grant (ADR-0060, security-relevant change). |
 | HP-SSH-008 | **Environment allowlist.** Only allowlisted environment variables (default `TERM`, `LANG`, `LC_*`; extendable per role) are forwarded. Rejected variables are dropped and counted in metrics. |
 | HP-SSH-009 | **Stdout purity.** Destination stdout is forwarded byte-for-byte. For non-PTY sessions, gateway status and progress messages are written only to stderr. For PTY sessions, gateway messages appear only before the destination session starts or after it ends. |
 | HP-SSH-010 | **Exit status and signal propagation.** The destination `exit-status` is propagated unchanged and `exit-signal` is forwarded as `exit-signal`. Gateway-originated failures use exit codes 80–90 together with a single-line JSON error object on stderr carrying `"source":"gateway"`. |

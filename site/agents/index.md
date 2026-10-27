@@ -121,6 +121,43 @@ git push origin agent/fix-cart-timeout
 - `repository not found or not permitted` means no profile you can use covers that repository and operation.
 - `exec` and `connect` are refused on git remotes.
 
+## APIs
+
+API targets (marked `(api)` in `list`) are HTTPS APIs such as GitHub, Cloudflare or Google Cloud. You call them with
+their usual tools through the gateway's API proxy, which adds the operator's credential. You never hold the token, and
+every call is checked against your access profile and recorded.
+
+```sh
+ssh -fN -o ExitOnForwardFailure=yes -L 127.0.0.1:18080:hallpass:443 center   # the proxy tunnel; keep it running
+eval "$(ssh center api env)"                     # CA bundle, HTTPS_PROXY, CA variables, placeholder tokens
+gh pr list --repo acme/api                        # gh, wrangler, gcloud, curl, …
+```
+
+`api env` writes the CA bundle to `~/.hallpass/api-ca.pem` (the same as `ssh center api ca`) and exports:
+
+| Variable | For |
+|---|---|
+| `HTTPS_PROXY`, `https_proxy`, `NO_PROXY` | every tool that honors a proxy |
+| `SSL_CERT_FILE`, `CURL_CA_BUNDLE`, `REQUESTS_CA_BUNDLE` | Go tools (`gh`), curl, Python |
+| `NODE_EXTRA_CA_CERTS`, `NODE_USE_ENV_PROXY` | Node tools (`wrangler`) |
+| `CLOUDSDK_PROXY_*`, `CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE`, `CLOUDSDK_AUTH_ACCESS_TOKEN_FILE` | `gcloud` |
+| `GH_TOKEN`, `CLOUDFLARE_API_TOKEN` | placeholders, so the tools do not ask you to log in; HallPass replaces them |
+
+Use `--port <n>` with `api env` for another local port. The settings route all HTTPS of that shell through the gateway,
+which refuses hosts that are not API targets, so load them only where you call the API. On macOS, Go tools such as `gh`
+ignore `SSL_CERT_FILE`: add the CA to the login keychain once
+(`security add-trusted-cert -r trustRoot -k ~/Library/Keychains/login.keychain-db ~/.hallpass/api-ca.pem`). The CAs
+can sign certificates only for the API targets' host names.
+
+Access works like for servers: an `auto` profile is granted on your first call, a `requestable` one needs a request
+with a reason first. A call HallPass refuses returns **HTTP 403** with a message starting `hallpass:`, which `gh`,
+`wrangler` and `gcloud` show:
+
+- `GET /repos/acme/api needs access to github as write: run ssh <gateway> request github --role write --reason '<why>' --wait, then retry`
+- `no access profile you can use on github allows DELETE /repos/acme/api`: the call is outside what you may do.
+
+`exec` and `connect` are refused on API targets.
+
 ## File transfer
 
 Roles whose capabilities include `file-transfer` (see `ssh center roles web1`) accept `scp` and `sftp`. SFTP has no

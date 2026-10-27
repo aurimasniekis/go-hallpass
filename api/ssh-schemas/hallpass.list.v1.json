@@ -29,9 +29,10 @@
           "kind": {
             "enum": [
               "ssh",
-              "git"
+              "git",
+              "api"
             ],
-            "description": "ssh: a server for exec and connect; git: a git remote, used with plain git (git clone <gateway>:<alias>/<repository>.git)."
+            "description": "ssh: a server for exec and connect; git: a git remote, used with plain git (git clone <gateway>:<alias>/<repository>.git); api: an HTTPS API called through the API proxy (see help api)."
           },
           "description": {
             "type": "string"

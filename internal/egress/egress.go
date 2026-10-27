@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/netip"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -41,6 +42,19 @@ var DefaultDenied = mustPrefixes(
 	"2001::/32",          // Teredo (embeds arbitrary IPv4)
 )
 
+// PrivateRanges are also denied for public-only guards (NewPublic): private networks, shared address space and
+// benchmarking ranges, so a public API host name that resolves inside the network is refused.
+var PrivateRanges = mustPrefixes(
+	"10.0.0.0/8",
+	"172.16.0.0/12",
+	"192.168.0.0/16",
+	"100.64.0.0/10", // shared address space (CGNAT, Tailscale)
+	"198.18.0.0/15", // benchmarking
+	"192.0.0.0/24",  // IETF protocol assignments
+	"fc00::/7",      // unique local
+	"fec0::/10",     // deprecated site-local
+)
+
 func mustPrefixes(ss ...string) []netip.Prefix {
 	out := make([]netip.Prefix, len(ss))
 	for i, s := range ss {
@@ -58,13 +72,23 @@ type Resolver interface {
 type Guard struct {
 	allow    []netip.Prefix
 	special  []netip.Prefix
+	denied   []netip.Prefix // DefaultDenied, plus PrivateRanges for NewPublic
 	resolver Resolver
 	timeout  time.Duration
 }
 
 // New builds a guard from CIDR strings.
 func New(allowCIDRs, allowSpecial []string, r Resolver, dialTimeout time.Duration) (*Guard, error) {
-	g := &Guard{resolver: r, timeout: dialTimeout}
+	return newGuard(allowCIDRs, allowSpecial, DefaultDenied, r, dialTimeout)
+}
+
+// NewPublic builds a guard that also denies PrivateRanges unless allowSpecial re-allows them (API hosts, ADR-0060).
+func NewPublic(allowCIDRs, allowSpecial []string, r Resolver, dialTimeout time.Duration) (*Guard, error) {
+	return newGuard(allowCIDRs, allowSpecial, append(slices.Clone(DefaultDenied), PrivateRanges...), r, dialTimeout)
+}
+
+func newGuard(allowCIDRs, allowSpecial []string, denied []netip.Prefix, r Resolver, dialTimeout time.Duration) (*Guard, error) {
+	g := &Guard{resolver: r, timeout: dialTimeout, denied: denied}
 	if g.resolver == nil {
 		g.resolver = net.DefaultResolver
 	}
@@ -104,9 +128,9 @@ func (g *Guard) AllowedAddr(ip netip.Addr) error {
 	if !inAllow {
 		return fmt.Errorf("%w: %s is outside egress.allow_cidrs", ErrDenied, ip)
 	}
-	for _, d := range DefaultDenied {
+	for _, d := range g.denied {
 		if d.Contains(ip) && !containedIn(g.special, ip) {
-			return fmt.Errorf("%w: %s is in special-purpose range %s (re-allow with egress.allow_special_cidrs)", ErrDenied, ip, d)
+			return fmt.Errorf("%w: %s is in denied range %s (re-allow it with allow_special_cidrs)", ErrDenied, ip, d)
 		}
 	}
 	return nil

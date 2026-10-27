@@ -874,6 +874,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/servers/{id}/api-ca": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The API target's interception CA (PEM)
+         * @description The CA the API proxy presents for this target's hosts. Agents trust it for those hosts only: it is name constrained to them and cannot sign IP addresses. It is issued on first use and replaced when the hosts change.
+         */
+        get: operations["getAPITargetCA"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/roles/{id}/api-credential": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Describe an API access profile's credential (never the secret) */
+        get: operations["getAPICredential"];
+        /**
+         * Set or replace an API access profile's credential
+         * @description The secret is sealed and never returned; the next proxied request uses the new credential.
+         */
+        put: operations["setAPICredential"];
+        post?: never;
+        delete: operations["deleteAPICredential"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/servers/{id}/roles": {
         parameters: {
             query?: never;
@@ -2428,10 +2469,10 @@ export interface components {
         Server: {
             id: string;
             /**
-             * @description ssh: a destination for shell and exec; git: a git host agents reach with plain git
+             * @description ssh: a destination for shell and exec; git: a git host agents reach with plain git; api: an HTTPS API agents call through the API proxy
              * @enum {string}
              */
-            kind: "ssh" | "git";
+            kind: "ssh" | "git" | "api";
             alias: string;
             display_name: string;
             description?: string;
@@ -2453,6 +2494,62 @@ export interface components {
             active_host_identities?: number;
             /** @description Set when the server was deleted; alias is then the name it had. */
             deleted_at?: components["schemas"]["Timestamp"];
+            api?: components["schemas"]["APITarget"];
+        };
+        /** @description The HTTPS host names of an API target (kind api), exact (api.github.com) or a wildcard (*.googleapis.com). IP addresses are not allowed. The target's address is its first host and its port is always 443. */
+        APITarget: {
+            hosts: string[];
+        };
+        APITargetCA: {
+            /** @description PEM */
+            certificate: string;
+            /** @description SHA-256, colon-separated hex */
+            fingerprint: string;
+            permitted_dns: components["schemas"]["StringList"];
+            not_after: components["schemas"]["Timestamp"];
+        };
+        /** @description Which requests an access profile on an API target allows. A matching deny rule wins over every allow rule; a request no allow rule matches is refused. Matching is case-insensitive. */
+        APIRules: {
+            rules: components["schemas"]["APIRule"][];
+        };
+        APIRule: {
+            /** @enum {string} */
+            effect: "allow" | "deny";
+            /** @description Empty: every method. */
+            methods?: ("GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS")[];
+            /** @description Empty: every host of the target. */
+            hosts?: string[];
+            /** @description Empty: every path. Patterns start with "/"; "*" matches within one path segment, "**" any number of segments, {a,b} alternatives. An escaped slash (%2F) stays inside its segment. */
+            paths?: string[];
+            /** @description Match GraphQL requests by operation type. An allow rule matches only when every operation in the request is of a listed type; a deny rule matches when any is, or when the operations cannot be determined. */
+            graphql?: ("query" | "mutation" | "subscription")[];
+        };
+        APICredential: {
+            role_id: string;
+            /** @enum {string} */
+            type: "bearer" | "header" | "basic" | "google_service_account";
+            header?: string;
+            username?: string;
+            scopes: components["schemas"]["StringList"];
+            /** @description The secret's last four characters, or the service account's email */
+            hint: string;
+            version: number;
+            updated_at: components["schemas"]["Timestamp"];
+            updated_by: string;
+        };
+        APICredentialInput: {
+            /**
+             * @description bearer: Authorization: Bearer <secret>. header: <header>: <secret>. basic: HTTP Basic with username. google_service_account: a service account key (JSON); HallPass sends short-lived access tokens for scopes.
+             * @enum {string}
+             */
+            type: "bearer" | "header" | "basic" | "google_service_account";
+            /** @description type header only, e.g. X-Api-Key */
+            header?: string;
+            /** @description type basic only */
+            username?: string;
+            /** @description google_service_account only (default cloud-platform) */
+            scopes?: string[];
+            secret: string;
         };
         ServerInput: {
             version?: number;
@@ -2460,7 +2557,7 @@ export interface components {
              * @description Set on create only (default ssh); it cannot change later.
              * @enum {string}
              */
-            kind?: "ssh" | "git";
+            kind?: "ssh" | "git" | "api";
             alias?: string;
             display_name?: string;
             description?: string;
@@ -2475,6 +2572,7 @@ export interface components {
             labels?: {
                 [key: string]: string;
             };
+            api?: components["schemas"]["APITarget"];
         };
         Role: {
             id: string;
@@ -2502,6 +2600,7 @@ export interface components {
             created_at?: components["schemas"]["Timestamp"];
             updated_at?: components["schemas"]["Timestamp"];
             git?: components["schemas"]["GitRules"];
+            api?: components["schemas"]["APIRules"];
             /** @description Distinct approvers needed (1-5). Above 1, policy auto-approval does not apply. */
             approvals_required?: number;
             /** @description Set when the role was deleted; alias is then the name it had. */
@@ -2547,6 +2646,7 @@ export interface components {
             };
             enabled?: boolean;
             git?: components["schemas"]["GitRules"];
+            api?: components["schemas"]["APIRules"];
             approvals_required?: number;
         };
         HostIdentity: {
@@ -2858,6 +2958,8 @@ export interface components {
              * @enum {string}
              */
             subsystem?: "sftp";
+            /** @description API host of a tunnel through the API proxy; its requests are api.request timeline events. */
+            api_host?: string;
         };
         SSHBan: {
             id: string;
@@ -4758,6 +4860,100 @@ export interface operations {
         };
         responses: {
             /** @description added */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAPITargetCA: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APITargetCA"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAPICredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APICredential"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    setAPICredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["APICredentialInput"];
+            };
+        };
+        responses: {
+            /** @description ok */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APICredential"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteAPICredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
             204: {
                 headers: {
                     [name: string]: unknown;

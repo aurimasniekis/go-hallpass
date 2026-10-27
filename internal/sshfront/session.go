@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/aurimasniekis/go-hallpass/internal/access"
+	"github.com/aurimasniekis/go-hallpass/internal/apiproxy"
 	"github.com/aurimasniekis/go-hallpass/internal/apperr"
 	"github.com/aurimasniekis/go-hallpass/internal/buildinfo"
 	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
@@ -41,6 +42,10 @@ type Handler struct {
 	Deny func(ctx context.Context, c *Conn, action string, details map[string]any)
 	// Metrics counts refused session requests (subsystem, x11, agent forwarding; HP-SSH-007). Nil disables.
 	Metrics *metrics.Metrics
+	// API is the API proxy that tunnels to apiproxy.Host are handed to; nil disables it (ADR-0060).
+	API *apiproxy.Proxy
+	// APIService provides the CA bundle for "api ca" and "api env".
+	APIService *apiproxy.Service
 }
 
 // session is the per-channel state.
@@ -265,6 +270,8 @@ func (s *session) run(ctx context.Context, command string) int {
 		}
 		_, _ = io.WriteString(s.out, text)
 		return 0
+	case grammar.API:
+		return s.api(ctx, c)
 	case grammar.Connect:
 		return s.connect(ctx, c.Alias, c.Opts, c.EffectiveWait(), access.KindShell, "")
 	case grammar.Exec:
@@ -331,10 +338,7 @@ func (s *session) list(ctx context.Context, c grammar.List) int {
 		if c.Server != "" && vs.Server.Alias != c.Server {
 			continue
 		}
-		ls := grammar.ListServer{Alias: vs.Server.Alias, Description: vs.Server.Description, Kind: inventory.KindSSH}
-		if s.isGitRemote(ctx, vs.Server.ID) {
-			ls.Kind = inventory.KindGit
-		}
+		ls := grammar.ListServer{Alias: vs.Server.Alias, Description: vs.Server.Description, Kind: s.serverKind(ctx, vs.Server.ID)}
 		for _, r := range vs.Roles {
 			ls.Roles = append(ls.Roles, grammar.ListRole{Alias: r.Role.Name, Description: r.Role.Description, Level: level(r.Decision.Level),
 				ActiveGrant: activeOf(active[r.Role.ID])})
@@ -619,8 +623,11 @@ func (s *session) connect(ctx context.Context, alias string, o grammar.Opts, wai
 	if err != nil {
 		return s.fail(err)
 	}
-	if s.isGitRemote(ctx, vs.Server.ID) {
+	switch s.serverKind(ctx, vs.Server.ID) {
+	case inventory.KindGit:
 		return s.fail(grammar.Usage(alias + " is a git remote: use git with the remote " + alias + "/<repository>.git"))
+	case inventory.KindAPI:
+		return s.fail(grammar.Usage(alias + " is an API: call it through the API proxy (see help api)"))
 	}
 	g, code := s.obtainGrant(ctx, vs, vr, o, wait)
 	if g == nil {

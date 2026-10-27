@@ -41,15 +41,18 @@ const (
 	CapGitWrite = "git-write" // push
 	// CapFileTransfer allows SFTP (and scp, which uses SFTP) to the server. Every file operation is recorded.
 	CapFileTransfer = "file-transfer"
+	// CapAPI allows HTTPS requests to an API target through the API proxy, as the profile's rules permit.
+	CapAPI = "api"
 )
 
 // AllCapabilities lists valid capabilities.
-var AllCapabilities = []string{CapShell, CapExec, CapPTY, CapGitRead, CapGitWrite, CapFileTransfer}
+var AllCapabilities = []string{CapShell, CapExec, CapPTY, CapGitRead, CapGitWrite, CapFileTransfer, CapAPI}
 
 // Server kinds.
 const (
 	KindSSH = "ssh" // a destination host agents reach with shell and exec
 	KindGit = "git" // a git host agents reach with plain git through the gateway
+	KindAPI = "api" // an HTTPS API agents call through the gateway's API proxy
 )
 
 // Approval channels.
@@ -76,6 +79,8 @@ type Server struct {
 	UpdatedAt    time.Time         `json:"updated_at"`
 	UpdatedBy    string            `json:"updated_by"`
 	ActiveHostID int               `json:"active_host_identities"`
+	// API holds the host names of an API target; nil for other kinds.
+	API *APITarget `json:"api,omitempty"`
 	// DeletedAt is set for a deleted server, which is kept only so history can name it (Alias is its former name).
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
@@ -109,6 +114,8 @@ type Role struct {
 	UpdatedAt             time.Time         `json:"updated_at"`
 	// Git holds the repository and push rules of a git remote's access profile; nil for SSH roles.
 	Git *GitRules `json:"git,omitempty"`
+	// API holds the request rules of an API target's access profile; nil for other kinds.
+	API *APIRules `json:"api,omitempty"`
 	// ApprovalsRequired is how many distinct approvers must approve a request (1..5). Above 1, policy auto-approval
 	// does not apply to the role.
 	ApprovalsRequired int `json:"approvals_required"`
@@ -215,6 +222,8 @@ type ServerInput struct {
 	Metadata    *map[string]string `json:"metadata,omitempty"`
 	Groups      *[]string          `json:"groups,omitempty"`
 	Labels      *map[string]string `json:"labels,omitempty"`
+	// API sets the host names of an API target (kind api); its address and port follow from them.
+	API *APITarget `json:"api,omitempty"`
 }
 
 func deref[T any](p *T, def T) T {
@@ -225,8 +234,8 @@ func deref[T any](p *T, def T) T {
 }
 
 func (svc *Service) validateServer(v *apperr.Validation, s *Server) {
-	if s.Kind != KindSSH && s.Kind != KindGit {
-		v.Add("kind", "must be ssh or git")
+	if s.Kind != KindSSH && s.Kind != KindGit && s.Kind != KindAPI {
+		v.Add("kind", "must be ssh, git or api")
 	}
 	if !ValidAlias(s.Alias) {
 		v.Add("alias", "%s", AliasRule)
@@ -240,7 +249,12 @@ func (svc *Service) validateServer(v *apperr.Validation, s *Server) {
 	if len(s.Environment) > 64 {
 		v.Add("environment", "at most 64 bytes")
 	}
-	if svc.opts.Guard == nil {
+	if s.Kind == KindAPI {
+		// API hosts are reached through the API proxy's own egress policy, on port 443 only.
+		validateAPITarget(v, s)
+	} else if s.API != nil {
+		v.Add("api", "host names are only for API targets")
+	} else if svc.opts.Guard == nil {
 		v.Add("address", "egress policy not configured")
 	} else if err := svc.opts.Guard.ValidateDestination(s.Address, s.Port); err != nil {
 		v.Add("address", "%s", err.Error())
@@ -264,6 +278,9 @@ func (svc *Service) CreateServer(ctx context.Context, actor audit.Actor, in Serv
 	if srv.DisplayName == "" {
 		srv.DisplayName = srv.Alias
 	}
+	if srv.API = normalizeAPITarget(in.API); srv.Kind == KindAPI {
+		srv.Address, srv.Port = srv.API.PrimaryHost(), APIPort
+	}
 	v := &apperr.Validation{}
 	svc.validateServer(v, srv)
 	if err := v.Err(); err != nil {
@@ -285,6 +302,9 @@ func (svc *Service) CreateServer(ctx context.Context, actor audit.Actor, in Serv
 		}); err != nil {
 			return err
 		}
+		if err := tx.Q.SetServerAPIHosts(ctx, db.SetServerAPIHostsParams{ApiHostsJson: apiJSON(srv.API), ID: id}); err != nil {
+			return err
+		}
 		if err := svc.setServerGroupsLabels(ctx, tx, id, srv.Groups, srv.Labels); err != nil {
 			return err
 		}
@@ -292,7 +312,7 @@ func (svc *Service) CreateServer(ctx context.Context, actor audit.Actor, in Serv
 			return err
 		}
 		_, err := svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "server.created", Target: audit.Target{Type: "server", ID: id},
-			Details: map[string]any{"kind": srv.Kind, "alias": srv.Alias, "address": srv.Address, "port": srv.Port, "enabled": srv.Enabled}})
+			Details: map[string]any{"kind": srv.Kind, "alias": srv.Alias, "address": srv.Address, "port": srv.Port, "enabled": srv.Enabled, "api": srv.API}})
 		svc.publish(tx, eventbus.TopicInventoryChanged, id)
 		return err
 	})
@@ -339,6 +359,12 @@ func (svc *Service) UpdateServer(ctx context.Context, actor audit.Actor, id stri
 	next.Metadata = deref(in.Metadata, cur.Metadata)
 	next.Groups = deref(in.Groups, cur.Groups)
 	next.Labels = deref(in.Labels, cur.Labels)
+	if in.API != nil {
+		next.API = normalizeAPITarget(in.API)
+	}
+	if next.Kind == KindAPI {
+		next.Address, next.Port = next.API.PrimaryHost(), APIPort
+	}
 	v := &apperr.Validation{}
 	if in.Kind != nil && *in.Kind != cur.Kind {
 		v.Add("kind", "cannot be changed after the server is created")
@@ -365,6 +391,9 @@ func (svc *Service) UpdateServer(ctx context.Context, actor audit.Actor, id stri
 		if n == 0 {
 			return apperr.New(apperr.CodeConflict, "server was modified concurrently; reload and retry")
 		}
+		if err := tx.Q.SetServerAPIHosts(ctx, db.SetServerAPIHostsParams{ApiHostsJson: apiJSON(next.API), ID: id}); err != nil {
+			return err
+		}
 		var grps []string
 		var labels map[string]string
 		if in.Groups != nil {
@@ -382,6 +411,9 @@ func (svc *Service) UpdateServer(ctx context.Context, actor audit.Actor, id stri
 		details := map[string]any{"alias": next.Alias}
 		if next.Address != cur.Address || next.Port != cur.Port {
 			details["address"], details["port"], details["previous_address"] = next.Address, next.Port, cur.Address+":"+strconv.Itoa(cur.Port)
+		}
+		if next.API != nil && !slices.Equal(next.API.Hosts, cur.API.Hosts) {
+			details["api"], details["previous_api"] = next.API, cur.API
 		}
 		_, err = svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "server.updated", Target: audit.Target{Type: "server", ID: id}, Details: details})
 		svc.publish(tx, eventbus.TopicInventoryChanged, id)
@@ -584,6 +616,12 @@ func serverFromRow(r db.Server) *Server {
 		Metadata: map[string]string{}, Groups: []string{}, Labels: map[string]string{}, Principals: []string{},
 	}
 	_ = json.Unmarshal([]byte(r.MetadataJson), &s.Metadata)
+	if r.ApiHostsJson.Valid {
+		var a APITarget
+		if json.Unmarshal([]byte(r.ApiHostsJson.String), &a) == nil {
+			s.API = &a
+		}
+	}
 	if r.DeletedAt.Valid {
 		t := time.UnixMicro(r.DeletedAt.Int64).UTC()
 		s.DeletedAt, s.Alias, s.Enabled = &t, r.DeletedAlias.String, false

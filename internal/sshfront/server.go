@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/aurimasniekis/go-hallpass/internal/access"
 	"github.com/aurimasniekis/go-hallpass/internal/agents"
+	"github.com/aurimasniekis/go-hallpass/internal/apiproxy"
 	"github.com/aurimasniekis/go-hallpass/internal/audit"
 	"github.com/aurimasniekis/go-hallpass/internal/config"
 	"github.com/aurimasniekis/go-hallpass/internal/eventbus"
@@ -84,6 +86,13 @@ func (c *Conn) CloseReason() string {
 // SessionHandler serves one "session" channel of an authenticated connection.
 type SessionHandler interface {
 	HandleSession(ctx context.Context, c *Conn, ch ssh.Channel, reqs <-chan *ssh.Request)
+}
+
+// TunnelHandler serves "direct-tcpip" channels to the API proxy (ADR-0060). A SessionHandler that also implements
+// it, with the proxy enabled, receives the forwards an agent opens to apiproxy.Host; every other forward is refused.
+type TunnelHandler interface {
+	APIProxyEnabled() bool
+	HandleAPITunnel(ctx context.Context, c *Conn, ch ssh.Channel)
 }
 
 // HostKeySource provides the gateway host signers (credentials.Service).
@@ -434,16 +443,23 @@ func (s *Server) serveConn(ctx context.Context, nc net.Conn, signers []ssh.Signe
 	go s.globalRequests(cctx, c, reqs)
 	var wg sync.WaitGroup
 	for nch := range chans {
-		if !s.acceptChannel(cctx, c, nch) {
+		tunnel, ok := s.acceptChannel(cctx, c, nch)
+		if !ok {
 			continue
 		}
 		ch, creqs, err := nch.Accept()
 		if err != nil {
+			c.releaseChannel()
 			continue
 		}
 		wg.Go(func() {
 			defer c.releaseChannel()
 			defer ch.Close()
+			if tunnel {
+				go ssh.DiscardRequests(creqs)
+				s.handler.(TunnelHandler).HandleAPITunnel(cctx, c, ch)
+				return
+			}
 			s.handler.HandleSession(cctx, c, ch, creqs)
 		})
 	}
@@ -487,23 +503,51 @@ func (c *Conn) releaseChannel() {
 	c.mu.Unlock()
 }
 
-// acceptChannel admits only "session" channels within the per-connection limit; everything else — direct-tcpip,
-// forwarded-tcpip, x11, auth-agent, streamlocal and unknown types — is refused and audited (HP-SSH-007).
-func (s *Server) acceptChannel(ctx context.Context, c *Conn, nch ssh.NewChannel) bool {
-	if nch.ChannelType() != "session" {
+// acceptChannel admits "session" channels and, when the API proxy is enabled, "direct-tcpip" channels to
+// apiproxy.Host (tunnel is true), within the per-connection limit. Everything else — other forwards, forwarded-tcpip,
+// x11, auth-agent, streamlocal and unknown types — is refused and audited (HP-SSH-007, ADR-0060).
+func (s *Server) acceptChannel(ctx context.Context, c *Conn, nch ssh.NewChannel) (tunnel, ok bool) {
+	switch {
+	case nch.ChannelType() == "session":
+	case nch.ChannelType() == "direct-tcpip" && s.apiTunnel(nch.ExtraData()):
+		tunnel = true
+	default:
 		s.m.SSHRefused(metrics.RefusedChannelType)
 		_ = nch.Reject(ssh.Prohibited, "channel type not permitted by HallPass")
-		s.AuditDenied(ctx, c, "ssh.channel.denied", map[string]any{"channel_type": truncate(nch.ChannelType(), 64)})
-		return false
+		details := map[string]any{"channel_type": truncate(nch.ChannelType(), 64)}
+		var fwd directTCPIP
+		if nch.ChannelType() == "direct-tcpip" && ssh.Unmarshal(nch.ExtraData(), &fwd) == nil {
+			details["forward_host"], details["forward_port"] = truncate(fwd.Host, 253), fwd.Port
+		}
+		s.AuditDenied(ctx, c, "ssh.channel.denied", details)
+		return false, false
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.channels >= s.cfg.MaxChannelsPerConn {
 		_ = nch.Reject(ssh.ResourceShortage, "too many channels on this connection")
-		return false
+		return false, false
 	}
 	c.channels++
-	return true
+	return tunnel, true
+}
+
+// directTCPIP is the payload of a "direct-tcpip" channel open (RFC 4254 §7.2).
+type directTCPIP struct {
+	Host     string
+	Port     uint32
+	OrigIP   string
+	OrigPort uint32
+}
+
+// apiTunnel reports whether a direct-tcpip open asks for the API proxy (any port) and the proxy is enabled.
+func (s *Server) apiTunnel(payload []byte) bool {
+	th, ok := s.handler.(TunnelHandler)
+	if !ok || !th.APIProxyEnabled() {
+		return false
+	}
+	var fwd directTCPIP
+	return ssh.Unmarshal(payload, &fwd) == nil && strings.EqualFold(fwd.Host, apiproxy.Host)
 }
 
 // globalRequests refuses every global request (tcpip-forward, streamlocal-forward, …) and audits forwarding attempts.

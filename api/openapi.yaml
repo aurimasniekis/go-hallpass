@@ -835,6 +835,58 @@ paths:
       responses:
         "204": {description: added}
         default: {$ref: "#/components/responses/Problem"}
+  /api/v1/servers/{id}/api-ca:
+    get:
+      operationId: getAPITargetCA
+      tags: [inventory]
+      summary: The API target's interception CA (PEM)
+      description: >-
+        The CA the API proxy presents for this target's hosts. Agents trust it for those hosts only: it is name
+        constrained to them and cannot sign IP addresses. It is issued on first use and replaced when the hosts change.
+      x-permission: inventory.read
+      x-token: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/APITargetCA"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /api/v1/roles/{id}/api-credential:
+    get:
+      operationId: getAPICredential
+      tags: [credentials]
+      summary: Describe an API access profile's credential (never the secret)
+      x-permission: credentials.manage
+      x-token: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/APICredential"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    put:
+      operationId: setAPICredential
+      tags: [credentials]
+      summary: Set or replace an API access profile's credential
+      description: The secret is sealed and never returned; the next proxied request uses the new credential.
+      x-permission: credentials.manage
+      x-token: true
+      x-reauth: true
+      x-mfa: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/APICredentialInput"}}}
+      responses:
+        "200": {description: ok, content: {application/json: {schema: {$ref: "#/components/schemas/APICredential"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: deleteAPICredential
+      tags: [credentials]
+      x-permission: credentials.manage
+      x-token: true
+      x-reauth: true
+      x-mfa: true
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "204": {description: deleted}
+        default: {$ref: "#/components/responses/Problem"}
   /api/v1/servers/{id}/roles:
     get:
       operationId: listRoles
@@ -2422,7 +2474,7 @@ components:
       required: [id, kind, alias, display_name, enabled, groups, labels, version, created_at, updated_at, address_redacted]
       properties:
         id: {type: string}
-        kind: {type: string, enum: [ssh, git], description: "ssh: a destination for shell and exec; git: a git host agents reach with plain git"}
+        kind: {type: string, enum: [ssh, git, api], description: "ssh: a destination for shell and exec; git: a git host agents reach with plain git; api: an HTTPS API agents call through the API proxy"}
         alias: {type: string}
         display_name: {type: string}
         description: {type: string}
@@ -2441,11 +2493,82 @@ components:
         updated_at: {$ref: "#/components/schemas/Timestamp"}
         active_host_identities: {type: integer}
         deleted_at: {allOf: [{$ref: "#/components/schemas/Timestamp"}], description: "Set when the server was deleted; alias is then the name it had."}
+        api: {$ref: "#/components/schemas/APITarget"}
+    APITarget:
+      type: object
+      description: >-
+        The HTTPS host names of an API target (kind api), exact (api.github.com) or a wildcard (*.googleapis.com).
+        IP addresses are not allowed. The target's address is its first host and its port is always 443.
+      required: [hosts]
+      properties:
+        hosts: {type: array, items: {type: string}, minItems: 1, maxItems: 20}
+    APITargetCA:
+      type: object
+      required: [certificate, fingerprint, permitted_dns, not_after]
+      properties:
+        certificate: {type: string, description: PEM}
+        fingerprint: {type: string, description: "SHA-256, colon-separated hex"}
+        permitted_dns: {$ref: "#/components/schemas/StringList"}
+        not_after: {$ref: "#/components/schemas/Timestamp"}
+    APIRules:
+      type: object
+      description: >-
+        Which requests an access profile on an API target allows. A matching deny rule wins over every allow rule; a
+        request no allow rule matches is refused. Matching is case-insensitive.
+      required: [rules]
+      properties:
+        rules: {type: array, maxItems: 100, items: {$ref: "#/components/schemas/APIRule"}}
+    APIRule:
+      type: object
+      required: [effect]
+      properties:
+        effect: {type: string, enum: [allow, deny]}
+        methods: {type: array, items: {type: string, enum: [GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS]}, description: "Empty: every method."}
+        hosts: {type: array, items: {type: string}, description: "Empty: every host of the target."}
+        paths:
+          type: array
+          items: {type: string}
+          description: >-
+            Empty: every path. Patterns start with "/"; "*" matches within one path segment, "**" any number of
+            segments, {a,b} alternatives. An escaped slash (%2F) stays inside its segment.
+        graphql:
+          type: array
+          items: {type: string, enum: [query, mutation, subscription]}
+          description: >-
+            Match GraphQL requests by operation type. An allow rule matches only when every operation in the request
+            is of a listed type; a deny rule matches when any is, or when the operations cannot be determined.
+    APICredential:
+      type: object
+      required: [role_id, type, scopes, hint, version, updated_at, updated_by]
+      properties:
+        role_id: {type: string}
+        type: {type: string, enum: [bearer, header, basic, google_service_account]}
+        header: {type: string}
+        username: {type: string}
+        scopes: {$ref: "#/components/schemas/StringList"}
+        hint: {type: string, description: "The secret's last four characters, or the service account's email"}
+        version: {type: integer}
+        updated_at: {$ref: "#/components/schemas/Timestamp"}
+        updated_by: {type: string}
+    APICredentialInput:
+      type: object
+      required: [type, secret]
+      properties:
+        type:
+          type: string
+          enum: [bearer, header, basic, google_service_account]
+          description: >-
+            bearer: Authorization: Bearer <secret>. header: <header>: <secret>. basic: HTTP Basic with username.
+            google_service_account: a service account key (JSON); HallPass sends short-lived access tokens for scopes.
+        header: {type: string, description: "type header only, e.g. X-Api-Key"}
+        username: {type: string, description: "type basic only"}
+        scopes: {type: array, items: {type: string}, description: "google_service_account only (default cloud-platform)"}
+        secret: {type: string, writeOnly: true}
     ServerInput:
       type: object
       properties:
         version: {type: integer}
-        kind: {type: string, enum: [ssh, git], description: "Set on create only (default ssh); it cannot change later."}
+        kind: {type: string, enum: [ssh, git, api], description: "Set on create only (default ssh); it cannot change later."}
         alias: {type: string}
         display_name: {type: string}
         description: {type: string}
@@ -2456,6 +2579,7 @@ components:
         metadata: {type: object, additionalProperties: {type: string}}
         groups: {type: array, items: {type: string}}
         labels: {type: object, additionalProperties: {type: string}}
+        api: {$ref: "#/components/schemas/APITarget"}
     Role:
       type: object
       required: [id, server_id, alias, remote_user, capabilities, default_duration, max_duration, recording_mode, enabled, version]
@@ -2483,6 +2607,7 @@ components:
         created_at: {$ref: "#/components/schemas/Timestamp"}
         updated_at: {$ref: "#/components/schemas/Timestamp"}
         git: {$ref: "#/components/schemas/GitRules"}
+        api: {$ref: "#/components/schemas/APIRules"}
         approvals_required: {type: integer, description: "Distinct approvers needed (1-5). Above 1, policy auto-approval does not apply."}
         deleted_at: {allOf: [{$ref: "#/components/schemas/Timestamp"}], description: "Set when the role was deleted; alias is then the name it had."}
     GitRules:
@@ -2528,6 +2653,7 @@ components:
         labels: {type: object, additionalProperties: {type: string}}
         enabled: {type: boolean}
         git: {$ref: "#/components/schemas/GitRules"}
+        api: {$ref: "#/components/schemas/APIRules"}
         approvals_required: {type: integer, minimum: 1, maximum: 5}
     HostIdentity:
       type: object
@@ -2867,6 +2993,7 @@ components:
         git_service: {type: string, enum: [git-upload-pack, git-receive-pack, git-upload-archive], description: Git operation on a git remote.}
         git_repo: {type: string, description: Normalized repository of a git operation.}
         subsystem: {type: string, enum: [sftp], description: "SSH subsystem of a file transfer (scp or sftp)."}
+        api_host: {type: string, description: "API host of a tunnel through the API proxy; its requests are api.request timeline events."}
     SSHBan:
       type: object
       required: [id, address, failures, reason, banned_at, expires_at]

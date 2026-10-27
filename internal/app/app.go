@@ -14,6 +14,7 @@ import (
 
 	"github.com/aurimasniekis/go-hallpass/internal/access"
 	"github.com/aurimasniekis/go-hallpass/internal/agents"
+	"github.com/aurimasniekis/go-hallpass/internal/apiproxy"
 	"github.com/aurimasniekis/go-hallpass/internal/audit"
 	"github.com/aurimasniekis/go-hallpass/internal/clock"
 	"github.com/aurimasniekis/go-hallpass/internal/config"
@@ -79,6 +80,9 @@ type App struct {
 	Destaudit   *destaudit.Service
 	Bans        *sshban.Service
 	Proxy       *sshproxy.Proxy
+	// APIService holds API target CAs and credentials; APIProxy serves agents' tunnels (nil when disabled, ADR-0060).
+	APIService *apiproxy.Service
+	APIProxy   *apiproxy.Proxy
 	// RemoteBackup runs scheduled backups to object storage (ADR-0054).
 	RemoteBackup *remotebackup.Service
 
@@ -175,6 +179,17 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	a.Agents.OnKeyRevoke(a.Access.KeyRevokedHook)
 	a.Inventory.OnDisable(a.Access.TargetDisabledHook)
 	a.Enforcer = access.NewEnforcer(a.Access, a.Bus, cfg.Access.EnforcementTick.D())
+	a.APIService = apiproxy.NewService(a.Store, a.Keyring, a.Audit, a.Bus, a.Inventory, a.Clock)
+	if cfg.APIProxy.Enabled {
+		apiGuard, err := egress.NewPublic(cfg.APIProxy.AllowCIDRs, cfg.APIProxy.AllowSpecialCIDRs, nil, cfg.SSH.DialTimeout.D())
+		if err != nil {
+			return nil, err
+		}
+		if a.APIProxy, err = apiproxy.New(apiproxy.Options{Service: a.APIService, Access: a.Access, Enforcer: a.Enforcer, Engine: a.Engine,
+			Inventory: a.Inventory, Guard: apiGuard, Log: log, Clock: a.Clock}); err != nil {
+			return nil, err
+		}
+	}
 	rc := cfg.Recording
 	a.Recording = recording.New(a.Store, a.Keyring, a.Access.Sequencer(), recording.Options{
 		Durability: rc.Durability, FlushInterval: rc.FlushInterval.D(), SegmentMaxBytes: rc.SegmentMaxBytes, SegmentMaxAge: rc.SegmentMaxAge.D(),
@@ -383,6 +398,8 @@ func SealedColumns() []keyring.Column {
 		keyring.FieldColumn("user_cas", "id", "private_enc", keyring.PurposeCredential),
 		keyring.FieldColumn("gateway_host_keys", "id", "private_enc", keyring.PurposeCredential),
 		keyring.FieldColumn("destaudit_records", "id", "details_enc", keyring.PurposeField),
+		keyring.FieldColumn("servers", "id", "api_ca_key_enc", keyring.PurposeCredential),
+		keyring.FieldColumn("api_credentials", "role_id", "secret_enc", keyring.PurposeCredential),
 		{Table: "oidc_providers", IDColumn: "id", BlobColumn: "client_secret_enc", Purpose: keyring.PurposeField,
 			AAD: func(id string) []byte { return []byte("hallpass/oidc-client-secret/v1|" + id) }},
 	}

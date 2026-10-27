@@ -49,6 +49,7 @@ export default defineConfig({
           { text: 'Overview', link: '/operators/' },
           { text: 'Servers and roles', link: '/operators/servers' },
           { text: 'Git remotes', link: '/operators/git' },
+          { text: 'API targets', link: '/operators/apis' },
           { text: 'File transfer', link: '/operators/file-transfer' },
           { text: 'Agents and keys', link: '/operators/agents' },
           { text: 'Access policy', link: '/operators/policy' },

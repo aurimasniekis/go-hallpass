@@ -101,6 +101,18 @@ func (q *Queries) CountActiveHostIdentitiesByServer(ctx context.Context) ([]Coun
 	return items, nil
 }
 
+const deleteAPICredential = `-- name: DeleteAPICredential :execrows
+DELETE FROM api_credentials WHERE role_id = ?
+`
+
+func (q *Queries) DeleteAPICredential(ctx context.Context, roleID string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteAPICredential, roleID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteHostCAPrincipals = `-- name: DeleteHostCAPrincipals :exec
 DELETE FROM host_ca_principals WHERE server_id = ?
 `
@@ -157,6 +169,28 @@ DELETE FROM server_groups WHERE server_id = ?
 func (q *Queries) DeleteServerGroups(ctx context.Context, serverID string) error {
 	_, err := q.db.ExecContext(ctx, deleteServerGroups, serverID)
 	return err
+}
+
+const getAPICredential = `-- name: GetAPICredential :one
+SELECT role_id, type, header, username, scopes_json, secret_enc, hint, version, updated_at, updated_by FROM api_credentials WHERE role_id = ?
+`
+
+func (q *Queries) GetAPICredential(ctx context.Context, roleID string) (ApiCredential, error) {
+	row := q.db.QueryRowContext(ctx, getAPICredential, roleID)
+	var i ApiCredential
+	err := row.Scan(
+		&i.RoleID,
+		&i.Type,
+		&i.Header,
+		&i.Username,
+		&i.ScopesJson,
+		&i.SecretEnc,
+		&i.Hint,
+		&i.Version,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
+	)
+	return i, err
 }
 
 const getHostCA = `-- name: GetHostCA :one
@@ -236,7 +270,7 @@ func (q *Queries) GetHostIdentityByFingerprint(ctx context.Context, arg GetHostI
 }
 
 const getRole = `-- name: GetRole :one
-SELECT id, server_id, alias, display_name, description, remote_user, capabilities_json, default_duration_s, max_duration_s, max_concurrent, max_concurrent_per_agent, record_input, recording_mode, env_allow_json, approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by, git_rules_json, approvals_required, deleted_at, deleted_by, deleted_alias FROM server_roles WHERE id = ?
+SELECT id, server_id, alias, display_name, description, remote_user, capabilities_json, default_duration_s, max_duration_s, max_concurrent, max_concurrent_per_agent, record_input, recording_mode, env_allow_json, approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by, git_rules_json, approvals_required, deleted_at, deleted_by, deleted_alias, api_rules_json FROM server_roles WHERE id = ?
 `
 
 func (q *Queries) GetRole(ctx context.Context, id string) (ServerRole, error) {
@@ -270,12 +304,13 @@ func (q *Queries) GetRole(ctx context.Context, id string) (ServerRole, error) {
 		&i.DeletedAt,
 		&i.DeletedBy,
 		&i.DeletedAlias,
+		&i.ApiRulesJson,
 	)
 	return i, err
 }
 
 const getRoleByAlias = `-- name: GetRoleByAlias :one
-SELECT id, server_id, alias, display_name, description, remote_user, capabilities_json, default_duration_s, max_duration_s, max_concurrent, max_concurrent_per_agent, record_input, recording_mode, env_allow_json, approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by, git_rules_json, approvals_required, deleted_at, deleted_by, deleted_alias FROM server_roles WHERE server_id = ? AND alias = ?
+SELECT id, server_id, alias, display_name, description, remote_user, capabilities_json, default_duration_s, max_duration_s, max_concurrent, max_concurrent_per_agent, record_input, recording_mode, env_allow_json, approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by, git_rules_json, approvals_required, deleted_at, deleted_by, deleted_alias, api_rules_json FROM server_roles WHERE server_id = ? AND alias = ?
 `
 
 type GetRoleByAliasParams struct {
@@ -314,12 +349,13 @@ func (q *Queries) GetRoleByAlias(ctx context.Context, arg GetRoleByAliasParams) 
 		&i.DeletedAt,
 		&i.DeletedBy,
 		&i.DeletedAlias,
+		&i.ApiRulesJson,
 	)
 	return i, err
 }
 
 const getServer = `-- name: GetServer :one
-SELECT id, alias, display_name, description, environment, address, port, enabled, host_ca_id, metadata_json, version, created_at, created_by, updated_at, updated_by, kind, deleted_at, deleted_by, deleted_alias FROM servers WHERE id = ?
+SELECT id, alias, display_name, description, environment, address, port, enabled, host_ca_id, metadata_json, version, created_at, created_by, updated_at, updated_by, kind, deleted_at, deleted_by, deleted_alias, api_hosts_json, api_ca_cert, api_ca_key_enc FROM servers WHERE id = ?
 `
 
 func (q *Queries) GetServer(ctx context.Context, id string) (Server, error) {
@@ -345,12 +381,15 @@ func (q *Queries) GetServer(ctx context.Context, id string) (Server, error) {
 		&i.DeletedAt,
 		&i.DeletedBy,
 		&i.DeletedAlias,
+		&i.ApiHostsJson,
+		&i.ApiCaCert,
+		&i.ApiCaKeyEnc,
 	)
 	return i, err
 }
 
 const getServerByAlias = `-- name: GetServerByAlias :one
-SELECT id, alias, display_name, description, environment, address, port, enabled, host_ca_id, metadata_json, version, created_at, created_by, updated_at, updated_by, kind, deleted_at, deleted_by, deleted_alias FROM servers WHERE alias = ?
+SELECT id, alias, display_name, description, environment, address, port, enabled, host_ca_id, metadata_json, version, created_at, created_by, updated_at, updated_by, kind, deleted_at, deleted_by, deleted_alias, api_hosts_json, api_ca_cert, api_ca_key_enc FROM servers WHERE alias = ?
 `
 
 func (q *Queries) GetServerByAlias(ctx context.Context, alias string) (Server, error) {
@@ -376,6 +415,9 @@ func (q *Queries) GetServerByAlias(ctx context.Context, alias string) (Server, e
 		&i.DeletedAt,
 		&i.DeletedBy,
 		&i.DeletedAlias,
+		&i.ApiHostsJson,
+		&i.ApiCaCert,
+		&i.ApiCaKeyEnc,
 	)
 	return i, err
 }
@@ -627,7 +669,7 @@ func (q *Queries) InsertServerGroup(ctx context.Context, arg InsertServerGroupPa
 }
 
 const listAllRoles = `-- name: ListAllRoles :many
-SELECT id, server_id, alias, display_name, description, remote_user, capabilities_json, default_duration_s, max_duration_s, max_concurrent, max_concurrent_per_agent, record_input, recording_mode, env_allow_json, approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by, git_rules_json, approvals_required, deleted_at, deleted_by, deleted_alias FROM server_roles WHERE deleted_at IS NULL ORDER BY server_id, alias
+SELECT id, server_id, alias, display_name, description, remote_user, capabilities_json, default_duration_s, max_duration_s, max_concurrent, max_concurrent_per_agent, record_input, recording_mode, env_allow_json, approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by, git_rules_json, approvals_required, deleted_at, deleted_by, deleted_alias, api_rules_json FROM server_roles WHERE deleted_at IS NULL ORDER BY server_id, alias
 `
 
 func (q *Queries) ListAllRoles(ctx context.Context) ([]ServerRole, error) {
@@ -667,6 +709,7 @@ func (q *Queries) ListAllRoles(ctx context.Context) ([]ServerRole, error) {
 			&i.DeletedAt,
 			&i.DeletedBy,
 			&i.DeletedAlias,
+			&i.ApiRulesJson,
 		); err != nil {
 			return nil, err
 		}
@@ -819,7 +862,7 @@ func (q *Queries) ListHostIdentities(ctx context.Context, serverID string) ([]Ho
 }
 
 const listRoles = `-- name: ListRoles :many
-SELECT id, server_id, alias, display_name, description, remote_user, capabilities_json, default_duration_s, max_duration_s, max_concurrent, max_concurrent_per_agent, record_input, recording_mode, env_allow_json, approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by, git_rules_json, approvals_required, deleted_at, deleted_by, deleted_alias FROM server_roles WHERE server_id = ? AND deleted_at IS NULL ORDER BY alias
+SELECT id, server_id, alias, display_name, description, remote_user, capabilities_json, default_duration_s, max_duration_s, max_concurrent, max_concurrent_per_agent, record_input, recording_mode, env_allow_json, approval_channels_json, restriction_notes, retention_class, enabled, version, created_at, updated_at, updated_by, git_rules_json, approvals_required, deleted_at, deleted_by, deleted_alias, api_rules_json FROM server_roles WHERE server_id = ? AND deleted_at IS NULL ORDER BY alias
 `
 
 func (q *Queries) ListRoles(ctx context.Context, serverID string) ([]ServerRole, error) {
@@ -859,6 +902,7 @@ func (q *Queries) ListRoles(ctx context.Context, serverID string) ([]ServerRole,
 			&i.DeletedAt,
 			&i.DeletedBy,
 			&i.DeletedAlias,
+			&i.ApiRulesJson,
 		); err != nil {
 			return nil, err
 		}
@@ -901,7 +945,7 @@ func (q *Queries) ListServerGroupNames(ctx context.Context, serverID string) ([]
 }
 
 const listServers = `-- name: ListServers :many
-SELECT id, alias, display_name, description, environment, address, port, enabled, host_ca_id, metadata_json, version, created_at, created_by, updated_at, updated_by, kind, deleted_at, deleted_by, deleted_alias FROM servers WHERE deleted_at IS NULL ORDER BY alias
+SELECT id, alias, display_name, description, environment, address, port, enabled, host_ca_id, metadata_json, version, created_at, created_by, updated_at, updated_by, kind, deleted_at, deleted_by, deleted_alias, api_hosts_json, api_ca_cert, api_ca_key_enc FROM servers WHERE deleted_at IS NULL ORDER BY alias
 `
 
 func (q *Queries) ListServers(ctx context.Context) ([]Server, error) {
@@ -933,6 +977,9 @@ func (q *Queries) ListServers(ctx context.Context) ([]Server, error) {
 			&i.DeletedAt,
 			&i.DeletedBy,
 			&i.DeletedAlias,
+			&i.ApiHostsJson,
+			&i.ApiCaCert,
+			&i.ApiCaKeyEnc,
 		); err != nil {
 			return nil, err
 		}
@@ -948,7 +995,7 @@ func (q *Queries) ListServers(ctx context.Context) ([]Server, error) {
 }
 
 const listServersWithDeleted = `-- name: ListServersWithDeleted :many
-SELECT id, alias, display_name, description, environment, address, port, enabled, host_ca_id, metadata_json, version, created_at, created_by, updated_at, updated_by, kind, deleted_at, deleted_by, deleted_alias FROM servers ORDER BY deleted_at IS NOT NULL, alias
+SELECT id, alias, display_name, description, environment, address, port, enabled, host_ca_id, metadata_json, version, created_at, created_by, updated_at, updated_by, kind, deleted_at, deleted_by, deleted_alias, api_hosts_json, api_ca_cert, api_ca_key_enc FROM servers ORDER BY deleted_at IS NOT NULL, alias
 `
 
 func (q *Queries) ListServersWithDeleted(ctx context.Context) ([]Server, error) {
@@ -980,6 +1027,9 @@ func (q *Queries) ListServersWithDeleted(ctx context.Context) ([]Server, error) 
 			&i.DeletedAt,
 			&i.DeletedBy,
 			&i.DeletedAlias,
+			&i.ApiHostsJson,
+			&i.ApiCaCert,
+			&i.ApiCaKeyEnc,
 		); err != nil {
 			return nil, err
 		}
@@ -1044,6 +1094,20 @@ func (q *Queries) RetireHostIdentity(ctx context.Context, arg RetireHostIdentity
 	return result.RowsAffected()
 }
 
+const setRoleAPIRules = `-- name: SetRoleAPIRules :exec
+UPDATE server_roles SET api_rules_json = ? WHERE id = ?
+`
+
+type SetRoleAPIRulesParams struct {
+	ApiRulesJson sql.NullString
+	ID           string
+}
+
+func (q *Queries) SetRoleAPIRules(ctx context.Context, arg SetRoleAPIRulesParams) error {
+	_, err := q.db.ExecContext(ctx, setRoleAPIRules, arg.ApiRulesJson, arg.ID)
+	return err
+}
+
 const setRoleEnabled = `-- name: SetRoleEnabled :execrows
 UPDATE server_roles SET enabled = ?1, version = version + 1, updated_at = ?2, updated_by = ?3
 WHERE id = ?4 AND enabled != ?1
@@ -1067,6 +1131,35 @@ func (q *Queries) SetRoleEnabled(ctx context.Context, arg SetRoleEnabledParams) 
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const setServerAPICA = `-- name: SetServerAPICA :exec
+UPDATE servers SET api_ca_cert = ?, api_ca_key_enc = ? WHERE id = ?
+`
+
+type SetServerAPICAParams struct {
+	ApiCaCert   sql.NullString
+	ApiCaKeyEnc []byte
+	ID          string
+}
+
+func (q *Queries) SetServerAPICA(ctx context.Context, arg SetServerAPICAParams) error {
+	_, err := q.db.ExecContext(ctx, setServerAPICA, arg.ApiCaCert, arg.ApiCaKeyEnc, arg.ID)
+	return err
+}
+
+const setServerAPIHosts = `-- name: SetServerAPIHosts :exec
+UPDATE servers SET api_hosts_json = ? WHERE id = ?
+`
+
+type SetServerAPIHostsParams struct {
+	ApiHostsJson sql.NullString
+	ID           string
+}
+
+func (q *Queries) SetServerAPIHosts(ctx context.Context, arg SetServerAPIHostsParams) error {
+	_, err := q.db.ExecContext(ctx, setServerAPIHosts, arg.ApiHostsJson, arg.ID)
+	return err
 }
 
 const setServerEnabled = `-- name: SetServerEnabled :execrows
@@ -1215,4 +1308,39 @@ func (q *Queries) UpdateServer(ctx context.Context, arg UpdateServerParams) (int
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const upsertAPICredential = `-- name: UpsertAPICredential :exec
+INSERT INTO api_credentials (role_id, type, header, username, scopes_json, secret_enc, hint, version, updated_at, updated_by)
+VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+ON CONFLICT (role_id) DO UPDATE SET type = excluded.type, header = excluded.header, username = excluded.username,
+  scopes_json = excluded.scopes_json, secret_enc = excluded.secret_enc, hint = excluded.hint,
+  version = api_credentials.version + 1, updated_at = excluded.updated_at, updated_by = excluded.updated_by
+`
+
+type UpsertAPICredentialParams struct {
+	RoleID     string
+	Type       string
+	Header     string
+	Username   string
+	ScopesJson string
+	SecretEnc  []byte
+	Hint       string
+	UpdatedAt  int64
+	UpdatedBy  string
+}
+
+func (q *Queries) UpsertAPICredential(ctx context.Context, arg UpsertAPICredentialParams) error {
+	_, err := q.db.ExecContext(ctx, upsertAPICredential,
+		arg.RoleID,
+		arg.Type,
+		arg.Header,
+		arg.Username,
+		arg.ScopesJson,
+		arg.SecretEnc,
+		arg.Hint,
+		arg.UpdatedAt,
+		arg.UpdatedBy,
+	)
+	return err
 }

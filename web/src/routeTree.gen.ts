@@ -25,6 +25,8 @@ import { Route as LoginPasswordRouteImport } from './routes/login_.password'
 import { Route as ResetTokenRouteImport } from './routes/reset/$token'
 import { Route as AppAgentsIndexRouteImport } from './routes/_app/agents/index'
 import { Route as AppAgentsIdRouteImport } from './routes/_app/agents/$id'
+import { Route as AppApisIndexRouteImport } from './routes/_app/apis/index'
+import { Route as AppApisIdRouteImport } from './routes/_app/apis/$id'
 import { Route as AppGitIndexRouteImport } from './routes/_app/git/index'
 import { Route as AppGitIdRouteImport } from './routes/_app/git/$id'
 import { Route as AppOperatorsIndexRouteImport } from './routes/_app/operators/index'
@@ -121,6 +123,16 @@ const AppAgentsIndexRoute = AppAgentsIndexRouteImport.update({
 const AppAgentsIdRoute = AppAgentsIdRouteImport.update({
   id: '/agents/$id',
   path: '/agents/$id',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppApisIndexRoute = AppApisIndexRouteImport.update({
+  id: '/apis/',
+  path: '/apis/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppApisIdRoute = AppApisIdRouteImport.update({
+  id: '/apis/$id',
+  path: '/apis/$id',
   getParentRoute: () => AppRoute,
 } as any)
 const AppGitIndexRoute = AppGitIndexRouteImport.update({
@@ -229,6 +241,7 @@ export interface FileRoutesByFullPath {
   '/login/password': typeof LoginPasswordRoute
   '/reset/$token': typeof ResetTokenRoute
   '/agents/$id': typeof AppAgentsIdRoute
+  '/apis/$id': typeof AppApisIdRoute
   '/git/$id': typeof AppGitIdRoute
   '/operators/$id': typeof AppOperatorsIdRoute
   '/requests/$id': typeof AppRequestsIdRoute
@@ -243,6 +256,7 @@ export interface FileRoutesByFullPath {
   '/settings/storage': typeof AppSettingsStorageRoute
   '/settings/system': typeof AppSettingsSystemRoute
   '/agents/': typeof AppAgentsIndexRoute
+  '/apis/': typeof AppApisIndexRoute
   '/git/': typeof AppGitIndexRoute
   '/operators/': typeof AppOperatorsIndexRoute
   '/requests/': typeof AppRequestsIndexRoute
@@ -264,6 +278,7 @@ export interface FileRoutesByTo {
   '/reset/$token': typeof ResetTokenRoute
   '/': typeof AppIndexRoute
   '/agents/$id': typeof AppAgentsIdRoute
+  '/apis/$id': typeof AppApisIdRoute
   '/git/$id': typeof AppGitIdRoute
   '/operators/$id': typeof AppOperatorsIdRoute
   '/requests/$id': typeof AppRequestsIdRoute
@@ -278,6 +293,7 @@ export interface FileRoutesByTo {
   '/settings/storage': typeof AppSettingsStorageRoute
   '/settings/system': typeof AppSettingsSystemRoute
   '/agents': typeof AppAgentsIndexRoute
+  '/apis': typeof AppApisIndexRoute
   '/git': typeof AppGitIndexRoute
   '/operators': typeof AppOperatorsIndexRoute
   '/requests': typeof AppRequestsIndexRoute
@@ -301,6 +317,7 @@ export interface FileRoutesById {
   '/reset/$token': typeof ResetTokenRoute
   '/_app/': typeof AppIndexRoute
   '/_app/agents/$id': typeof AppAgentsIdRoute
+  '/_app/apis/$id': typeof AppApisIdRoute
   '/_app/git/$id': typeof AppGitIdRoute
   '/_app/operators/$id': typeof AppOperatorsIdRoute
   '/_app/requests/$id': typeof AppRequestsIdRoute
@@ -315,6 +332,7 @@ export interface FileRoutesById {
   '/_app/settings/storage': typeof AppSettingsStorageRoute
   '/_app/settings/system': typeof AppSettingsSystemRoute
   '/_app/agents/': typeof AppAgentsIndexRoute
+  '/_app/apis/': typeof AppApisIndexRoute
   '/_app/git/': typeof AppGitIndexRoute
   '/_app/operators/': typeof AppOperatorsIndexRoute
   '/_app/requests/': typeof AppRequestsIndexRoute
@@ -338,6 +356,7 @@ export interface FileRouteTypes {
     | '/login/password'
     | '/reset/$token'
     | '/agents/$id'
+    | '/apis/$id'
     | '/git/$id'
     | '/operators/$id'
     | '/requests/$id'
@@ -352,6 +371,7 @@ export interface FileRouteTypes {
     | '/settings/storage'
     | '/settings/system'
     | '/agents/'
+    | '/apis/'
     | '/git/'
     | '/operators/'
     | '/requests/'
@@ -373,6 +393,7 @@ export interface FileRouteTypes {
     | '/reset/$token'
     | '/'
     | '/agents/$id'
+    | '/apis/$id'
     | '/git/$id'
     | '/operators/$id'
     | '/requests/$id'
@@ -387,6 +408,7 @@ export interface FileRouteTypes {
     | '/settings/storage'
     | '/settings/system'
     | '/agents'
+    | '/apis'
     | '/git'
     | '/operators'
     | '/requests'
@@ -409,6 +431,7 @@ export interface FileRouteTypes {
     | '/reset/$token'
     | '/_app/'
     | '/_app/agents/$id'
+    | '/_app/apis/$id'
     | '/_app/git/$id'
     | '/_app/operators/$id'
     | '/_app/requests/$id'
@@ -423,6 +446,7 @@ export interface FileRouteTypes {
     | '/_app/settings/storage'
     | '/_app/settings/system'
     | '/_app/agents/'
+    | '/_app/apis/'
     | '/_app/git/'
     | '/_app/operators/'
     | '/_app/requests/'
@@ -553,6 +577,20 @@ declare module '@tanstack/react-router' {
       path: '/agents/$id'
       fullPath: '/agents/$id'
       preLoaderRoute: typeof AppAgentsIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/apis/': {
+      id: '/_app/apis/'
+      path: '/apis'
+      fullPath: '/apis/'
+      preLoaderRoute: typeof AppApisIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/apis/$id': {
+      id: '/_app/apis/$id'
+      path: '/apis/$id'
+      fullPath: '/apis/$id'
+      preLoaderRoute: typeof AppApisIdRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/git/': {
@@ -692,6 +730,7 @@ interface AppRouteChildren {
   AppPolicyRoute: typeof AppPolicyRoute
   AppIndexRoute: typeof AppIndexRoute
   AppAgentsIdRoute: typeof AppAgentsIdRoute
+  AppApisIdRoute: typeof AppApisIdRoute
   AppGitIdRoute: typeof AppGitIdRoute
   AppOperatorsIdRoute: typeof AppOperatorsIdRoute
   AppRequestsIdRoute: typeof AppRequestsIdRoute
@@ -706,6 +745,7 @@ interface AppRouteChildren {
   AppSettingsStorageRoute: typeof AppSettingsStorageRoute
   AppSettingsSystemRoute: typeof AppSettingsSystemRoute
   AppAgentsIndexRoute: typeof AppAgentsIndexRoute
+  AppApisIndexRoute: typeof AppApisIndexRoute
   AppGitIndexRoute: typeof AppGitIndexRoute
   AppOperatorsIndexRoute: typeof AppOperatorsIndexRoute
   AppRequestsIndexRoute: typeof AppRequestsIndexRoute
@@ -721,6 +761,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppPolicyRoute: AppPolicyRoute,
   AppIndexRoute: AppIndexRoute,
   AppAgentsIdRoute: AppAgentsIdRoute,
+  AppApisIdRoute: AppApisIdRoute,
   AppGitIdRoute: AppGitIdRoute,
   AppOperatorsIdRoute: AppOperatorsIdRoute,
   AppRequestsIdRoute: AppRequestsIdRoute,
@@ -735,6 +776,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSettingsStorageRoute: AppSettingsStorageRoute,
   AppSettingsSystemRoute: AppSettingsSystemRoute,
   AppAgentsIndexRoute: AppAgentsIndexRoute,
+  AppApisIndexRoute: AppApisIndexRoute,
   AppGitIndexRoute: AppGitIndexRoute,
   AppOperatorsIndexRoute: AppOperatorsIndexRoute,
   AppRequestsIndexRoute: AppRequestsIndexRoute,

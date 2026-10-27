@@ -159,7 +159,7 @@ type ListDoc struct {
 // ListServer is one visible server.
 type ListServer struct {
 	Alias       string     `json:"alias"`
-	Kind        string     `json:"kind"` // "ssh" or "git"
+	Kind        string     `json:"kind"` // "ssh", "git" or "api"
 	Description string     `json:"description"`
 	Roles       []ListRole `json:"roles"`
 }

@@ -48,6 +48,7 @@ type RoleInput struct {
 	Enabled               *bool              `json:"enabled,omitempty"`
 	Git                   *GitRules          `json:"git,omitempty"`
 	ApprovalsRequired     *int               `json:"approvals_required,omitempty"`
+	API                   *APIRules          `json:"api,omitempty"`
 }
 
 // MaxApprovalsRequired bounds RoleInput.ApprovalsRequired.
@@ -124,7 +125,27 @@ func (svc *Service) validateRole(v *apperr.Validation, r *Role, kind string) {
 			v.Add("capabilities", "unknown capability %q (valid: %s)", c, strings.Join(AllCapabilities, ", "))
 		}
 	}
-	if kind == KindGit {
+	if kind != KindAPI && (r.API != nil || r.Has(CapAPI)) {
+		v.Add("api", "API rules and the api capability are only for API targets")
+	}
+	switch kind {
+	case KindAPI:
+		for _, c := range r.Capabilities {
+			if c != CapAPI {
+				v.Add("capabilities", "API targets only use the api capability")
+			}
+		}
+		if r.RecordInput {
+			v.Add("record_input", "not available for API targets")
+		}
+		if len(r.EnvAllow) > 0 {
+			v.Add("env_allow", "not available for API targets")
+		}
+		if r.Git != nil {
+			v.Add("git", "git rules are only for git remotes")
+		}
+		validateAPIRules(v, r)
+	case KindGit:
 		for _, c := range r.Capabilities {
 			if c != CapGitRead && c != CapGitWrite {
 				v.Add("capabilities", "git remotes only use git-read and git-write")
@@ -134,7 +155,7 @@ func (svc *Service) validateRole(v *apperr.Validation, r *Role, kind string) {
 			v.Add("record_input", "not available for git remotes")
 		}
 		validateGitRules(v, r)
-	} else {
+	default:
 		if r.Has(CapGitRead) || r.Has(CapGitWrite) {
 			v.Add("capabilities", "git-read and git-write are only for git remotes")
 		}
@@ -208,6 +229,10 @@ func applyRoleInput(r *Role, in RoleInput) {
 		g.Repos = normalizeList(g.Repos)
 		r.Git = &g
 	}
+	if in.API != nil {
+		a := *in.API
+		r.API = &a
+	}
 }
 
 func gitRulesJSON(g *GitRules) sql.NullString {
@@ -249,6 +274,10 @@ func (svc *Service) CreateRole(ctx context.Context, actor audit.Actor, serverID 
 		// Git hosts take every user as "git" and never open shells: read-only by default.
 		r.Capabilities, r.RemoteUser = []string{CapGitRead}, "git"
 	}
+	if srv.Kind == KindAPI {
+		// An API client opens a few connections at a time; each is one tunnel through the proxy.
+		r.Capabilities, r.RemoteUser, r.MaxConcurrent, r.MaxConcurrentPerAgent = []string{CapAPI}, "api", 20, 10
+	}
 	applyRoleInput(r, in)
 	if r.DisplayName == "" {
 		r.DisplayName = r.Alias
@@ -281,6 +310,9 @@ func (svc *Service) CreateRole(ctx context.Context, actor audit.Actor, serverID 
 		}); err != nil {
 			return err
 		}
+		if err := tx.Q.SetRoleAPIRules(ctx, db.SetRoleAPIRulesParams{ApiRulesJson: apiJSON(r.API), ID: id}); err != nil {
+			return err
+		}
 		if err := groups.SetLabels(ctx, tx, groups.EntityRole, id, r.Labels); err != nil {
 			return err
 		}
@@ -290,7 +322,7 @@ func (svc *Service) CreateRole(ctx context.Context, actor audit.Actor, serverID 
 		_, err := svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "role.created", Target: audit.Target{Type: "role", ID: id},
 			Details: map[string]any{"server_id": serverID, "alias": r.Alias, "remote_user": r.RemoteUser, "capabilities": r.Capabilities,
 				"max_duration": r.MaxDuration.String(), "recording_mode": r.RecordingMode, "record_input": r.RecordInput, "git": r.Git,
-				"approvals_required": r.ApprovalsRequired}})
+				"approvals_required": r.ApprovalsRequired, "api": r.API}})
 		svc.publish(tx, eventbus.TopicInventoryChanged, serverID)
 		return err
 	})
@@ -342,6 +374,9 @@ func (svc *Service) UpdateRole(ctx context.Context, actor audit.Actor, id string
 		if n == 0 {
 			return apperr.New(apperr.CodeConflict, "role was modified concurrently; reload and retry")
 		}
+		if err := tx.Q.SetRoleAPIRules(ctx, db.SetRoleAPIRulesParams{ApiRulesJson: apiJSON(next.API), ID: id}); err != nil {
+			return err
+		}
 		if in.Labels != nil {
 			if err := groups.SetLabels(ctx, tx, groups.EntityRole, id, next.Labels); err != nil {
 				return err
@@ -353,7 +388,7 @@ func (svc *Service) UpdateRole(ctx context.Context, actor audit.Actor, id string
 		_, err = svc.audit.Append(ctx, tx, audit.Event{Actor: actor, Action: "role.updated", Target: audit.Target{Type: "role", ID: id},
 			Details: map[string]any{"alias": next.Alias, "remote_user": next.RemoteUser, "capabilities": next.Capabilities,
 				"max_duration": next.MaxDuration.String(), "recording_mode": next.RecordingMode, "record_input": next.RecordInput, "git": next.Git,
-				"approvals_required": next.ApprovalsRequired}})
+				"approvals_required": next.ApprovalsRequired, "api": next.API}})
 		svc.publish(tx, eventbus.TopicInventoryChanged, cur.ServerID)
 		return err
 	})
@@ -432,6 +467,10 @@ func (svc *Service) deleteRoleTx(ctx context.Context, tx *store.Tx, actor audit.
 	if err := svc.runDisableHooks(ctx, tx, "role", id); err != nil {
 		return nil, err
 	}
+	// A deleted API access profile's credential is destroyed, not kept for history.
+	if _, err := tx.Q.DeleteAPICredential(ctx, id); err != nil {
+		return nil, err
+	}
 	return tx.Q.RevokeRoleLoginCredentials(ctx, db.RevokeRoleLoginCredentialsParams{Now: nullNow(tx), RoleID: id})
 }
 
@@ -490,6 +529,12 @@ func RoleFromRow(r db.ServerRole) *Role {
 		var g GitRules
 		if json.Unmarshal([]byte(r.GitRulesJson.String), &g) == nil {
 			role.Git = &g
+		}
+	}
+	if r.ApiRulesJson.Valid {
+		var a APIRules
+		if json.Unmarshal([]byte(r.ApiRulesJson.String), &a) == nil {
+			role.API = &a
 		}
 	}
 	if r.DeletedAt.Valid {

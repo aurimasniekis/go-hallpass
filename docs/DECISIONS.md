@@ -1141,6 +1141,63 @@
   administrator tokens. Keep Terraform's token in a secret manager, watch its last use, prefer non-administrator tokens
   for everything that only reads, and review `operator.*` audit events with `via: api_token:*`.
 
+### ADR-0060 — API targets: HTTPS APIs through a credential-injecting proxy (security-relevant change)
+
+- **Status:** accepted (operator request, 2026-10-27: agents need GitHub, Cloudflare and Google Cloud APIs without
+  holding the operator's tokens, and only when approved). **Security-relevant change, flagged for operator review:**
+  it relaxes HP-SSH-007 (one kind of `direct-tcpip` forward is accepted), HallPass terminates TLS for third-party API
+  hosts with its own CAs, and API calls are recorded as metadata rather than byte streams.
+- **Context:** agents run `gh`, `wrangler`, `gcloud` and `curl` against public APIs. Handing them a token gives
+  unlimited, unrecorded use for the token's lifetime. A base-URL override (for example `GH_HOST`) works only for
+  some tools and some APIs, so the proxy works at the HTTP layer and every tool that honors `HTTPS_PROXY` works.
+- **Decision:**
+  - An **API target** is a server with `kind = api` and `api.hosts` (exact names or `*.domain` wildcards, never IP
+    addresses, port 443 only). Its roles are access profiles with the `api` capability and `api.rules`: allow/deny
+    rules on method, host, path (segment globs, `*`, `**`, `{a,b}`) and, for GraphQL endpoints, operation type. A
+    matching deny wins, no match is refused, matching is case-insensitive, an escaped `/` stays inside its segment and
+    dot segments are refused. GraphQL requests are classified from the document (every operation counts, whatever
+    `operationName` says); unparsable, persisted or oversized (> 1 MiB) bodies are "unknown", which allow rules with
+    GraphQL types never match and deny rules always do. Policy rules, requests, approvals, auto-approval and grants
+    work unchanged.
+  - Each profile has one **credential** (`bearer`, `header`, `basic`, or a `google_service_account` key from which
+    HallPass mints short-lived access tokens at `https://oauth2.googleapis.com/token`). It is sealed with the keyring's
+    credential key, write-only in the API, destroyed when the profile is deleted, and never sent to agents, shown, or
+    written to logs, audit details or timeline events.
+  - **Transport:** the agent opens an SSH local forward to the name `hallpass` (`ssh -fN -L 18080:hallpass:443
+    <gateway>`); the gateway accepts `direct-tcpip` channels to that name only (when `api_proxy.enabled`, the default)
+    and refuses and audits every other forward as before. The agent's identity is the SSH connection's key; no new
+    secret exists. Each channel carries one HTTP `CONNECT`; the host must belong to an API target visible to the
+    agent, otherwise 403 before TLS.
+  - **TLS:** each target has its own ECDSA P-256 CA (sealed private key), path length 0, critical name constraints
+    permitting only the target's hosts and excluding all IP addresses, so an agent that trusts it lets HallPass
+    intercept that API and nothing else. It is replaced when the hosts change. Agents fetch the bundle of the targets
+    visible to them with `ssh <gateway> api ca` or `api env`. Leaves (7 days) are minted in memory.
+  - **Per request:** the profile is the first (active grant, then auto-approve, then requestable; then alias) whose
+    rules allow it. The grant is re-read for every request. An auto-approve profile gets its grant on first use; a
+    requestable one answers 403 with the exact `request` command. The agent's `Authorization`, `Cookie`,
+    `Proxy-Authorization`, the credential's header and forwarding headers are removed, the credential is added and the
+    request goes to the host through a separate **public-only egress guard** (`api_proxy.allow_cidrs`, default all;
+    private, shared, benchmarking and special ranges denied unless `api_proxy.allow_special_cidrs`), with system
+    roots verifying the API's certificate, no environment proxy and no redirect following. Protocol upgrades
+    (WebSocket) are refused.
+  - **Recording:** each tunnel opens one channel per grant it uses (concurrency limits apply; the enforcer ends the
+    tunnel on expiry, revocation, lockdown or policy change). Every request, forwarded or refused under a grant, is an
+    `api.request` timeline event with method, host, path, query (values of token-, key-, secret-, signature-,
+    code-like parameters redacted), status, sizes, duration, profile, deciding rule and GraphQL operation types.
+    Headers and bodies are **not** recorded. Refusals without a grant are rate-limited audit events
+    (`api.connect.denied`, `api.request.denied`).
+  - Refusals are JSON that `gh` (`message`), Cloudflare tools (`errors`) and Google tools (`error.message`) all show,
+    with `X-Hallpass-Error`.
+- **Alternatives:** a short-lived token broker (GitHub App installation tokens, Cloudflare tokens with expiry, GCP
+  impersonation) gives the agent a real, if scoped, token and records only issuance — possible later for APIs where
+  interception is impractical; base-URL overrides (`GH_HOST`, `CLOUDFLARE_API_BASE_URL`) need no CA but cover few
+  tools and need per-API path mapping; a plain HTTP proxy listener would need a new bearer secret for agents.
+- **Consequences:** HallPass holds long-lived API tokens and can read every API response it forwards: it is now also a
+  plaintext-capable component for those APIs (THREAT_MODEL T-27). HallPass limits **which** calls are made and
+  records them, but not what an allowed call does; the token's own scopes remain the real limit, so profiles should
+  use least-privilege tokens. Agents must trust the target CAs (`SSL_CERT_FILE` and friends, or the macOS keychain).
+  A leaked target CA key lets its holder intercept only that target's hosts, for agents that trust it.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

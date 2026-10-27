@@ -12,6 +12,7 @@ there is more to know.
 |---|---|
 | Add a server, its roles and login credentials | [Servers and roles](/operators/servers) |
 | Let agents clone and push through HallPass | [Git remotes](/operators/git) |
+| Let agents call GitHub, Cloudflare or Google Cloud APIs without holding your tokens | [API targets](/operators/apis) |
 | Let agents copy files with scp and sftp | [File transfer](/operators/file-transfer) |
 | Register an agent, rotate or revoke its key | [Agents and keys](/operators/agents) |
 | Decide who sees, requests or auto-receives what | [Access policy](/operators/policy) |

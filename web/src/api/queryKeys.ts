@@ -56,6 +56,8 @@ export const qk = {
   serverRoles: (serverId: string) => ['roles', { server: serverId }] as const,
   role: (id: string) => ['role', id] as const,
   credentials: (roleId: string) => ['role', roleId, 'credentials'] as const,
+  apiCredential: (roleId: string) => ['role', roleId, 'api-credential'] as const,
+  apiTargetCA: (serverId: string) => ['server', serverId, 'api-ca'] as const,
   userCAs: ['user-cas'] as const,
 
   policy: ['policy'] as const,

@@ -1,6 +1,6 @@
 ---
 name: hallpass
-description: Use when you need shell or command access to a server through a HallPass SSH gateway: listing reachable servers and roles, requesting time-bound access with a reason, waiting for human approval, running commands or interactive shells, and interpreting gateway exit codes (80-90). Use it whenever the user mentions HallPass, an SSH "center"/gateway host for agents, or asks you to run something on a server that is reached through such a gateway.
+description: Use when you need shell or command access to a server, or API access (GitHub, Cloudflare, Google Cloud), through a HallPass SSH gateway: listing reachable servers and roles, requesting time-bound access with a reason, waiting for human approval, running commands or interactive shells, calling APIs through its API proxy, and interpreting gateway exit codes (80-90). Use it whenever the user mentions HallPass, an SSH "center"/gateway host for agents, or asks you to run something on a server that is reached through such a gateway.
 ---
 
 # Using a HallPass gateway
@@ -110,6 +110,26 @@ scp web1+deploy@center:/var/log/app.log .
 - A transfer that needs approval waits like `exec`. scp cannot send a reason: if one is required, run
   `ssh center 'request web1 --role <role> --reason "<why>" --wait'` first, then scp again.
 - Do not use `scp -O` (refused). Copy only what the task needs; every file operation is recorded.
+
+## APIs
+
+API targets (marked `(api)` in `list`) are HTTPS APIs such as GitHub, Cloudflare or Google Cloud. Call them with the
+normal tool (`gh`, `wrangler`, `gcloud`, `curl`) through the gateway's API proxy, which adds the real credential.
+You never hold the token: do not ask the user for one.
+
+```sh
+ssh -fN -o ExitOnForwardFailure=yes -L 127.0.0.1:18080:hallpass:443 center   # once: the proxy tunnel
+eval "$(ssh center api env)"     # CA bundle in ~/.hallpass, HTTPS_PROXY, CA variables, placeholder tokens
+gh pr list --repo acme/api
+```
+
+- Load the settings only in the shell that calls the API: they send all HTTPS through the gateway, which refuses
+  hosts that are not API targets.
+- A refused call returns HTTP 403 with a message starting `hallpass:`. "needs access … run ssh center request …":
+  request that profile with a reason (`ssh center 'request github --role <profile> --reason "<why>" --wait'`), then
+  retry. "no access profile you can use … allows": the call is outside what you may do; tell the user.
+- Every call is recorded (method, path, status). Make only the calls the task needs.
+- `connect` and `exec` are refused on API targets.
 
 ## Exit codes
 

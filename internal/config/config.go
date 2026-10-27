@@ -71,6 +71,7 @@ type Config struct {
 	RBAC      RBACConfig      `yaml:"rbac"`
 	Console   ConsoleConfig   `yaml:"console"`
 	Events    EventsConfig    `yaml:"events"`
+	APIProxy  APIProxyConfig  `yaml:"api_proxy"`
 	Dev       DevConfig       `yaml:"dev"`
 }
 
@@ -206,6 +207,17 @@ type ShutdownConfig struct {
 type ConsoleConfig struct {
 	// Terminal lets administrators open recorded terminals on servers from the console (default true).
 	Terminal bool `yaml:"terminal"`
+}
+
+// APIProxyConfig configures the API proxy that lets agents call HTTPS APIs without holding their credentials
+// (ADR-0060). API hosts are dialed under their own egress policy: public addresses only, unless re-allowed.
+type APIProxyConfig struct {
+	// Enabled accepts SSH forwards to the proxy (ssh -L …:hallpass:443). It does nothing until API targets exist.
+	Enabled bool `yaml:"enabled"`
+	// AllowCIDRs limits the addresses API hosts may resolve to (default: every public address).
+	AllowCIDRs []string `yaml:"allow_cidrs"`
+	// AllowSpecialCIDRs re-allows private and special-purpose ranges, which are denied by default.
+	AllowSpecialCIDRs []string `yaml:"allow_special_cidrs"`
 }
 
 // EventsConfig configures event publishing (ADR-0057).

@@ -130,6 +130,22 @@ type WhoAmI struct {
 	JSON bool
 }
 
+// API subcommands.
+const (
+	APICA  = "ca"
+	APIEnv = "env"
+)
+
+// DefaultAPIProxyPort is the local port "api env" assumes for the proxy tunnel.
+const DefaultAPIProxyPort = 18080
+
+// API is "api ca" (the CA bundle of the API targets visible to the agent) or "api env [--port n]" (shell lines that
+// install that bundle and point HTTPS clients at a local proxy tunnel).
+type API struct {
+	Sub  string
+	Port int
+}
+
 func (List) CommandName() string     { return "list" }
 func (Roles) CommandName() string    { return "roles" }
 func (Request) CommandName() string  { return "request" }
@@ -141,6 +157,7 @@ func (Sessions) CommandName() string { return "sessions" }
 func (Help) CommandName() string     { return "help" }
 func (Version) CommandName() string  { return "version" }
 func (WhoAmI) CommandName() string   { return "whoami" }
+func (API) CommandName() string      { return "api" }
 
 func (List) isCommand()     {}
 func (Roles) isCommand()    {}
@@ -153,6 +170,7 @@ func (Sessions) isCommand() {}
 func (Help) isCommand()     {}
 func (Version) isCommand()  {}
 func (WhoAmI) isCommand()   {}
+func (API) isCommand()      {}
 
 // EffectiveWait is the --wait setting with the request default (false).
 func (r Request) EffectiveWait() bool { return r.Opts.WaitOr(false) }
@@ -282,6 +300,8 @@ func parseTokens(input string, t Tokens) (Command, error) {
 	case "whoami":
 		o, err := p.simple("whoami", rest, jsonOnly)
 		return WhoAmI{JSON: o.JSON}, err
+	case "api":
+		return p.api(rest)
 	}
 	switch {
 	case strings.HasPrefix(name, "-"):
@@ -446,6 +466,47 @@ func (p *parser) exec(rest []Token) (Command, error) {
 func (p *parser) sessions(rest []Token) (Command, error) {
 	o, err := p.simple("sessions", rest, sessionOpts)
 	return Sessions{JSON: o.JSON, All: o.all}, err
+}
+
+func (p *parser) api(rest []Token) (Command, error) {
+	if err := p.noSeparator("api"); err != nil {
+		return nil, err
+	}
+	const use = "use: api ca | api env [--port <port>]"
+	if len(rest) == 0 {
+		return nil, usage("missing subcommand; " + use)
+	}
+	sub, rest := rest[0].Value, rest[1:]
+	switch sub {
+	case APICA:
+		if len(rest) > 0 {
+			return nil, usagef("unexpected argument %s; %s", quote(rest[0].Value), use)
+		}
+		return API{Sub: APICA}, nil
+	case APIEnv:
+		port := DefaultAPIProxyPort
+		for i := 0; i < len(rest); i++ {
+			v := rest[i].Value
+			name, val, hasVal := strings.Cut(v, "=")
+			if name != "--port" {
+				return nil, usagef("unexpected argument %s; %s", quote(v), use)
+			}
+			if !hasVal {
+				if i+1 >= len(rest) {
+					return nil, usage("--port needs a value")
+				}
+				i++
+				val = rest[i].Value
+			}
+			n, err := strconv.Atoi(val)
+			if err != nil || n < 1 || n > 65535 {
+				return nil, usagef("invalid --port %s: use 1-65535", quote(val))
+			}
+			port = n
+		}
+		return API{Sub: APIEnv, Port: port}, nil
+	}
+	return nil, usagef("unknown subcommand %s; %s", quote(sub), use)
 }
 
 func (p *parser) help(rest []Token) (Command, error) {

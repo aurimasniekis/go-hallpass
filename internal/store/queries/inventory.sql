@@ -135,3 +135,25 @@ WHERE id = ? AND version = ?;
 -- name: SetRoleEnabled :execrows
 UPDATE server_roles SET enabled = sqlc.arg(enabled), version = version + 1, updated_at = sqlc.arg(now), updated_by = sqlc.arg(actor)
 WHERE id = sqlc.arg(id) AND enabled != sqlc.arg(enabled);
+
+-- name: SetServerAPIHosts :exec
+UPDATE servers SET api_hosts_json = ? WHERE id = ?;
+
+-- name: SetServerAPICA :exec
+UPDATE servers SET api_ca_cert = ?, api_ca_key_enc = ? WHERE id = ?;
+
+-- name: SetRoleAPIRules :exec
+UPDATE server_roles SET api_rules_json = ? WHERE id = ?;
+
+-- name: GetAPICredential :one
+SELECT * FROM api_credentials WHERE role_id = ?;
+
+-- name: UpsertAPICredential :exec
+INSERT INTO api_credentials (role_id, type, header, username, scopes_json, secret_enc, hint, version, updated_at, updated_by)
+VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+ON CONFLICT (role_id) DO UPDATE SET type = excluded.type, header = excluded.header, username = excluded.username,
+  scopes_json = excluded.scopes_json, secret_enc = excluded.secret_enc, hint = excluded.hint,
+  version = api_credentials.version + 1, updated_at = excluded.updated_at, updated_by = excluded.updated_by;
+
+-- name: DeleteAPICredential :execrows
+DELETE FROM api_credentials WHERE role_id = ?;
