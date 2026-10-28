@@ -16,7 +16,7 @@ Download the archive for your architecture, `SHA256SUMS`, and verify both the ch
 before installing. The latest version is on the [releases page](https://github.com/aurimasniekis/go-hallpass/releases).
 
 ```sh
-V=0.7.0 ARCH=amd64      # or arm64
+V=0.7.1 ARCH=amd64      # or arm64
 base=https://github.com/aurimasniekis/go-hallpass/releases/download/v$V
 curl -fLO "$base/hallpass_${V}_linux_${ARCH}.tar.gz" -fLO "$base/SHA256SUMS"
 sha256sum --check --ignore-missing SHA256SUMS

@@ -7,6 +7,11 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-28
+
+> **Recording format, backup format and keyring not externally reviewed.** The known limitations of
+> [0.1.0](https://github.com/aurimasniekis/go-hallpass/releases/tag/v0.1.0) still apply.
+
 ### Added
 
 - **Git: pick the access profile in the SSH user.** `git clone github+acme-push@center:github/acme/api.git` uses only
@@ -278,7 +283,8 @@ through it.
 - API tokens skip recent authentication and MFA on the operations they may use, because issuing one requires both.
   They cannot decide requests, revoke grants, read recordings, manage operators or tokens, or use lockdown.
 
-[Unreleased]: https://github.com/aurimasniekis/go-hallpass/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/aurimasniekis/go-hallpass/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/aurimasniekis/go-hallpass/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/aurimasniekis/go-hallpass/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/aurimasniekis/go-hallpass/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/aurimasniekis/go-hallpass/compare/v0.5.0...v0.6.0
