@@ -4,7 +4,7 @@ This page covers the standalone (systemd) install, the container image, and Dock
 Container details are in [container.md](container.md). Upgrades and rollback are in [upgrade.md](upgrade.md).
 
 > **Releases** are listed at <https://github.com/aurimasniekis/go-hallpass/releases>. The examples use `X.Y.Z`; the
-> current version is 0.7.0. Read the known limitations in [../security-guarantees.md](../security-guarantees.md) and the
+> current version is 0.7.1. Read the known limitations in [../security-guarantees.md](../security-guarantees.md) and the
 > [CHANGELOG](../../CHANGELOG.md) before deploying.
 
 ## Release artifacts
