@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/aurimasniekis/go-hallpass/internal/access"
 	"github.com/aurimasniekis/go-hallpass/internal/gitproto"
@@ -15,7 +16,8 @@ import (
 )
 
 // errRepoNotFound is the single answer for a hidden or unknown remote, a repository no access profile covers and an
-// operation no profile allows, so an agent cannot tell which repositories or remotes exist.
+// operation no profile allows (or the named profile does not), so an agent cannot tell which repositories or remotes
+// exist.
 func errRepoNotFound() *grammar.Error {
 	return grammar.NewError(grammar.ExitNotFoundOrForbidden, "repository not found or not permitted")
 }
@@ -54,10 +56,14 @@ func (c accessCandidate) rank() int {
 	return 2
 }
 
+const gitProfileUsage = "to pick an access profile, connect as <remote>+<profile>@<gateway> with the remote of the " +
+	"repository path, for example: git clone github+deploy@<gateway>:github/acme/api.git"
+
 // gitOp serves a plain git client: `git clone <gateway>:<remote>/<repo>.git` runs git-upload-pack and `git push` runs
 // git-receive-pack over this SSH session. The access profile is chosen from the repository and the operation (git
-// cannot pass --role), access is reused or requested like connect, and the service runs on the git host with the
-// profile's credential.
+// cannot pass --role), or named in the SSH user ("github+deploy", like file transfer), which then is the only
+// candidate. Access is reused or requested like connect, and the service runs on the git host with the profile's
+// credential.
 func (s *session) gitOp(ctx context.Context, gc gitproto.Command) int {
 	if s.pty != nil {
 		return s.fail(grammar.Usage("git operations do not use a terminal"))
@@ -65,6 +71,11 @@ func (s *session) gitOp(ctx context.Context, gc gitproto.Command) int {
 	tgt, err := gitproto.SplitPath(gc.Path)
 	if err != nil {
 		return s.fail(grammar.Usage("invalid repository path: use <remote>/<owner>/<repository>.git"))
+	}
+	// Without "+" the SSH user is ignored, as before. With it, the user only narrows the choice; identity is the key.
+	userRemote, profile, named := strings.Cut(s.c.ClientUser, "+")
+	if named && (userRemote != tgt.Remote || !inventory.ValidAlias(profile)) {
+		return s.fail(grammar.Usage(gitProfileUsage))
 	}
 	vs, err := s.snap.ResolveServer(s.c.AgentID, tgt.Remote)
 	if err != nil || !s.isGitRemote(ctx, vs.Server.ID) {
@@ -77,6 +88,9 @@ func (s *session) gitOp(ctx context.Context, gc gitproto.Command) int {
 	active := s.activeGrants(ctx)
 	var cands []accessCandidate
 	for _, vr := range vs.Roles {
+		if named && vr.Role.Name != profile {
+			continue
+		}
 		role, err := s.h.Inventory.GetRole(ctx, vr.Role.ID)
 		if err != nil || role.Git == nil || !role.Has(need) {
 			continue

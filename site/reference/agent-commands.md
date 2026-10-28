@@ -38,7 +38,7 @@ These use the standard tools instead of a gateway command, and wait for approval
 
 | Tool | Form | Notes |
 |---|---|---|
-| git | `git clone center:<remote>/<owner>/<repo>.git` | Git remotes are marked `(git)` in `list` (`"kind": "git"` in JSON). Fetch and push work the same way. See [Git](/agents/#git). |
+| git | `git clone center:<remote>/<owner>/<repo>.git` | Git remotes are marked `(git)` in `list` (`"kind": "git"` in JSON). Fetch and push work the same way. `<remote>+<profile>@center:<remote>/…` picks the access profile. See [Git](/agents/#git). |
 | scp | `scp <file> <server>@center:<path>` | Roles with the `file-transfer` capability. `<server>+<role>@center` picks the role. |
 | sftp | `sftp <server>[+<role>]@center` | Same roles as scp. See [File transfer](/agents/#file-transfer). |
 

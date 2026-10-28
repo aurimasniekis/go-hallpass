@@ -36,6 +36,7 @@ Options take "--opt value" or "--opt=value", in any order, each at most once.
 
 Git and file transfers use the standard tools, waiting for approval like connect:
   git clone <gateway>:<remote>/<owner>/<repo>.git    git remotes, marked (git) in list
+  git clone <remote>+<profile>@<gateway>:<path>      "+<profile>" picks the access profile
   scp <file> <server>@<gateway>:<path>              roles with the file-transfer capability
   sftp <server>+<role>@<gateway>                    "+<role>" picks the role
 

@@ -36,6 +36,7 @@ Git and file transfer use the standard tools, not a gateway command, and wait fo
 
 ```sh
 git clone center:github/acme/api.git          # git remotes are marked (git) in list
+git clone github+acme-push@center:github/acme/api.git   # "+<profile>" picks the access profile
 scp build.tar web1@center:/tmp/               # roles with the file-transfer capability
 sftp web1+deploy@center                       # "+<role>" picks the role
 ```
