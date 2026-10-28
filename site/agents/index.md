@@ -117,7 +117,7 @@ ssh center 'exec web1 -- echo "$HOME"'                  # $HOME expands on web1
 
 Git remotes work with plain git: no wrapper, no extra configuration beyond your `Host` entry for the gateway.
 
-<Shot name="agent-git" alt="An agent cloning through the gateway, requesting push access with a reason, pushing an agent branch and being refused on main" />
+<Shot name="agent-git" alt="An agent cloning through the gateway, requesting push access with a reason, pinning the push profile in the remote URL, pushing an agent branch and being refused on main" />
 
 ```sh
 git clone center:github/acme/api.git              # <remote>/<owner>/<repository>.git
@@ -165,6 +165,8 @@ ssh -fN -o ClearAllForwardings=no -o ExitOnForwardFailure=yes -L 127.0.0.1:18080
 eval "$(ssh center api env)"                     # CA bundle, HTTPS_PROXY, CA variables, placeholder tokens
 gh pr list --repo acme/api                        # gh, wrangler, gcloud, curl, …
 ```
+
+<Shot name="agent-api" alt="An agent running gh through hallpass-api: a read that is allowed at once, a comment that waits for approval, and a delete that no profile allows" />
 
 `api env` writes the CA bundle to `~/.hallpass/api-ca.pem` (the same as `ssh center api ca`) and exports:
 

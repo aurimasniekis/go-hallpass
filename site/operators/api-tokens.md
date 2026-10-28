@@ -40,6 +40,8 @@ password, watch its **Last used**, and give everything that only reads a lower r
 
 Store it in your secret manager or CI secrets, not in the repository.
 
+<Shot name="api-tokens" alt="The API tokens page with a Terraform token that never expires and an auditor token for monitoring" />
+
 **Never expires** is for your own Terraform or break-glass automation, which should not stop working on a date. Such a
 token still stops when you revoke it, when your account is disabled and when you lose its role, but otherwise it works
 for good. Store it like a root password, check **Last used** now and then, and revoke it as soon as nothing needs it.

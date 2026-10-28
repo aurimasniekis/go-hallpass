@@ -88,12 +88,15 @@ in plaintext.
 | <img src="site/public/screenshots/session-replay-light.png" alt="Replay of a recorded interactive shell"><br>**Replay of a recorded shell** | <img src="site/public/screenshots/session-timeline-light.png" alt="Access session timeline"><br>**Session timeline** |
 | <img src="site/public/screenshots/wizard-credentials.png" alt="Onboarding wizard: install, test and activate a login key"><br>**Guided server onboarding** | <img src="site/public/screenshots/policy-light.png" alt="Policy rules: deny, auto-approve and requestable"><br>**Default-deny policy** |
 | <img src="site/public/screenshots/git-remote-light.png" alt="A git remote with a read profile and a push profile limited to agent branches"><br>**Git remote with access profiles** | <img src="site/public/screenshots/git-timeline-light.png" alt="Session timeline of a git push with ref updates and a refused push to main"><br>**Pushes in the timeline** |
+| <img src="site/public/screenshots/api-target-light.png" alt="An API target with a read profile and a profile that may only comment on issues"><br>**API target with access profiles** | <img src="site/public/screenshots/api-timeline-light.png" alt="Session timeline of API calls with the profile and rule that allowed each one"><br>**API calls in the timeline** |
 
 **What the agent sees:**
 
 <img src="site/public/screenshots/agent-terminal.png" alt="Terminal: an agent lists servers, runs a command, waits for approval, and gets 'not found or not permitted' for a hidden server">
 
-<img src="site/public/screenshots/agent-git.png" alt="Terminal: an agent clones through the gateway, requests push access with a reason, pushes an agent branch and is refused on main">
+<img src="site/public/screenshots/agent-git.png" alt="Terminal: an agent clones through the gateway, requests push access with a reason, pins the push profile in the remote URL, pushes an agent branch and is refused on main">
+
+<img src="site/public/screenshots/agent-api.png" alt="Terminal: an agent runs gh through hallpass-api; a read is allowed at once, a comment waits for approval, and a delete no profile allows is refused">
 
 ## Quick start
 
@@ -161,6 +164,7 @@ ssh center 'exec web1 --role deploy --reason "Deploy 1.4.3" -- ls /srv/app'   # 
 ssh -t center connect web1 --role inspect                     # interactive shell
 ssh center status req_01… --wait                              # keep waiting on a pending request
 git clone center:github/acme/api.git                          # git remotes: plain git, same approvals
+git remote set-url origin github+acme-push@center:github/acme/api.git   # "+profile" pins the access profile
 scp build.tar web1@center:/tmp/                               # file transfer: the SSH user names the server
 sftp web1+deploy@center                                       # ... and "+role" picks the role
 ```

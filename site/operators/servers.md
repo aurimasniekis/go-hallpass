@@ -87,6 +87,8 @@ agent, so the remote user is the role's.
   role.
 - Agent policy rules do not apply to it; an administrator can already change those rules.
 
+<Shot name="web-terminal" alt="A recorded web terminal on web1 opened from the console, running uptime and tail" />
+
 To turn web terminals off, set `console.terminal: false` in the configuration and restart: nobody, not even an
 administrator, can open one then.
 

@@ -5,7 +5,7 @@ host=$(hostname)
 case "$host" in
   web1)
     printf '%s\n' "web1.example.internal  -  nginx front end (docs demo)" >/etc/motd
-    mkdir -p /var/log/nginx /srv/app/releases/1.4.2 /srv/app/releases/1.4.3
+    mkdir -p /var/log/nginx /srv/app/releases/1.4.2 /srv/app/releases/1.4.3 /srv/app/incoming
     head -c 188743680 /dev/zero >/var/log/nginx/access.log.1   # 180 MiB of real bytes, so ls -lh shows the size
     cat >/var/log/nginx/error.log <<'EOF'
 2026/10/24 04:31:07 [error] 31#31: *88412 upstream timed out (110: Operation timed out) while reading response header from upstream, upstream: "http://10.0.2.15:8080/cart"

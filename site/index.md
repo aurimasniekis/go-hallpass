@@ -80,11 +80,15 @@ features:
 <Shot name="policy-effective" themed alt="Effective access preview for one agent" caption="Effective access preview" />
 <Shot name="git-remote" themed alt="A git remote with a read profile and a push profile limited to agent branches" caption="Git remote with access profiles" />
 <Shot name="git-timeline" themed alt="Session timeline of a git push with ref updates and a refused push to main" caption="Pushes in the session timeline" />
+<Shot name="api-target" themed alt="An API target with a read profile and a profile that may only comment on issues" caption="API target with access profiles" />
+<Shot name="api-timeline" themed alt="Session timeline of API calls with the profile and rule that allowed each one" caption="API calls in the session timeline" />
 </div>
 
 <Shot name="agent-terminal" alt="An agent listing servers, running a command and waiting for approval over SSH" caption="What the agent sees: plain ssh" />
 
-<Shot name="agent-git" alt="An agent cloning through the gateway, requesting push access, pushing a branch and being refused on main" caption="And plain git" />
+<Shot name="agent-git" alt="An agent cloning through the gateway, requesting push access, pinning the push profile in the remote URL, pushing a branch and being refused on main" caption="And plain git" />
+
+<Shot name="agent-api" alt="An agent running gh through hallpass-api: a read allowed at once, a comment that waits for approval, and a delete no profile allows" caption="And its usual API tools, without the token" />
 
 ## Where to go next
 
