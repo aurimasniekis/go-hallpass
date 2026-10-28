@@ -126,6 +126,18 @@ git push origin agent/fix-cart-timeout
 ```
 
 - `ssh center list` marks git remotes with `(git)` and lists their access profiles like roles.
+- HallPass picks the profile that covers the repository and the operation, preferring one you already hold access
+  to, then an auto-approved one, then a requestable one. To use one profile only, name it in the SSH user as
+  `<remote>+<profile>`, like `sftp <server>+<role>`:
+
+  ```sh
+  git clone github+acme-push@center:github/acme/api.git
+  git remote set-url origin github+acme-push@center:github/acme/api.git
+  ```
+
+  That profile is then the only candidate: if it does not cover the repository or the operation, git gets
+  `repository not found or not permitted`, never another profile. The remote URL carries the choice, so git's
+  `includeIf "hasconfig:remote.*.url:…"` can set the matching commit identity.
 - A clone or push that needs approval waits for it, printing the request ID on stderr, just like `exec`.
 - Git cannot send a reason. If the profile requires one, request access first, then run git again:
 
@@ -138,7 +150,8 @@ git push origin agent/fix-cart-timeout
   branches never, and rewriting history (force-push) is refused unless the profile allows it. Push new commits on top
   of the branch instead of rewriting it. A refused push changes nothing and prints the reason, for example
   `hallpass: push refused: refs/heads/main: protected branch`.
-- `repository not found or not permitted` means no profile you can use covers that repository and operation.
+- `repository not found or not permitted` means no profile you can use covers that repository and operation (or the
+  profile you named does not).
 - `exec` and `connect` are refused on git remotes.
 
 ## APIs

@@ -1238,6 +1238,30 @@
   separation prevents accidental reuse, not a determined process. `/clear` in Claude Code starts a new session, so its
   earlier grants are no longer used. Subagents of a conversation share its session.
 
+### ADR-0062 — Git: the SSH user can name the access profile
+
+- **Status:** accepted (operator request, issue #1, 2026-10-28). Not a weakening: the SSH user only narrows the
+  profiles policy already lets the agent use.
+- **Context:** git cannot pass `--role`, so the gateway chose the profile from the session's grants (active grant,
+  then auto-approve, then requestable, then alias). When a session held grants for two profiles of one remote, the
+  alphabetically first one won every later push, including pushes meant for the other profile. Agents worked around
+  it with one agent session per profile.
+- **Decision:**
+  - As for file transfer (ADR-0049), the SSH user can name the profile: `github+acme-push@gateway:github/acme/api.git`.
+    The remote before `+` must be the remote of the repository path and the profile must be a valid alias; otherwise
+    the command fails with a usage error (exit 81) instead of silently ignoring the user.
+  - The named profile is the only candidate: reused, auto-approved or requested like before. If it is not visible,
+    does not cover the repository or lacks the operation's capability, the answer is the usual `repository not found
+    or not permitted` (exit 82), never a fallback to another profile.
+  - A user without `+` (`agent`, `git`, `github`, …) is ignored as before.
+  - The user name is routing only, like the command text; identity is still the key (HP-SSH-002), and it stays
+    recorded as untrusted `client_user`.
+- **Alternatives:** a `GIT_PROTOCOL`-style environment variable (needs `SendEnv` and is invisible in the remote URL);
+  a profile segment in the repository path (would change every repository path and collide with owner names).
+- **Consequences:** the remote URL carries the profile, so git's `includeIf "hasconfig:remote.*.url:…"` can set the
+  matching commit identity without wrappers. A user name with `+` that previously worked by accident (ignored) now
+  has to match the remote.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |

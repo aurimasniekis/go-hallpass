@@ -89,12 +89,15 @@ git push origin agent/my-change
 ```
 
 - If a push or clone needs approval, git waits like `exec` does; tell the user you are waiting.
+- To use one access profile only, name it in the SSH user as `<remote>+<profile>`:
+  `git clone github+acme-push@center:github/acme/api.git` (or `git remote set-url origin …`). Without it the gateway
+  picks a profile that covers the repository and operation, preferring one you already hold access to.
 - Git cannot send a reason. When access needs one, request first, then retry git:
   `ssh center 'request github --role <profile> --reason "<why>" --wait'`.
 - Push only to branches the profile allows (often `agent/*`), never to protected branches. Do not rewrite pushed
   history: force-pushes are refused. Add new commits instead.
-- `repository not found or not permitted` means no profile you may use covers it. Ask the user; do not guess other
-  remotes or paths.
+- `repository not found or not permitted` means no profile you may use covers it (or the profile you named does
+  not). Ask the user; do not guess other remotes or paths.
 
 ## File transfer
 

@@ -7,6 +7,19 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+### Added
+
+- **Git: pick the access profile in the SSH user.** `git clone github+acme-push@center:github/acme/api.git` uses only
+  the access profile `acme-push` (reusing or requesting its grant), like `sftp <server>+<role>@center`. If that
+  profile does not cover the repository or the operation, git gets `repository not found or not permitted`, with no
+  fallback to another profile. The remote URL now carries the choice, so a wrapper or separate sessions per profile
+  are no longer needed. Without `+<profile>` nothing changes.
+
+### Changed
+
+- For git, an SSH user containing `+` is no longer ignored: it must be `<remote>+<profile>` with the remote of the
+  repository path, otherwise git gets a usage error (exit 81). Before, any user name was ignored for git.
+
 ## [0.7.0] - 2026-10-27
 
 > **Recording format, backup format and keyring not externally reviewed.** The known limitations of
