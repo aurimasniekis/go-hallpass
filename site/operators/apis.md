@@ -5,6 +5,8 @@ Agents can call HTTPS APIs such as GitHub, Cloudflare and Google Cloud with thei
 their requests go through the HallPass **API proxy**, which checks each one against the access profile's rules,
 replaces whatever credential the agent sent with the profile's credential, and records the call.
 
+<Shot name="apis" themed alt="The APIs page listing a GitHub API target" />
+
 ## How it works
 
 ```
@@ -32,7 +34,7 @@ gh pr list --repo acme/api                          # a normal gh call
 
 | Preset | Hosts | Credential |
 |---|---|---|
-| GitHub | `api.github.com`, `uploads.github.com` | Bearer: a fine-grained personal access token or a GitHub App token |
+| GitHub | `api.github.com`, `uploads.github.com`, `results-receiver.actions.githubusercontent.com` | Bearer: a fine-grained personal access token or a GitHub App token |
 | Cloudflare | `api.cloudflare.com` | Bearer: an API token |
 | Google Cloud | `*.googleapis.com` | Google service account key (JSON) |
 | Custom | your hosts | Bearer, a custom header such as `X-Api-Key`, or Basic |
@@ -41,7 +43,17 @@ Hosts are exact names or `*.domain` wildcards (which cover every subdomain, not 
 allowed, and the port is always 443. Host names must resolve to public addresses: private, shared (100.64.0.0/10) and
 special ranges are refused unless you re-allow them in the configuration (below).
 
+**GitHub Actions logs.** `gh run view --log` (and `--log-failed`) and
+`GET /repos/{owner}/{repo}/actions/{runs,jobs}/{id}/logs` answer with a redirect to a signed URL on
+`results-receiver.actions.githubusercontent.com`. HallPass does not follow redirects; the tool requests that URL
+through the proxy itself, which refuses it unless the host belongs to the target ("not an API host you can reach").
+The GitHub preset includes it; add it to GitHub targets you created with an older preset. It is GitHub's own host, and
+the signed URL still works with the profile's token attached. Do **not** add `*.blob.core.windows.net`, which older
+log redirects use: HallPass would send the GitHub token to any Azure storage account.
+
 ## Access profiles
+
+<Shot name="api-target" themed alt="An API target with a read profile and a profile that may only comment on issues, each with its rules" />
 
 An access profile is like a server role: agents request it, policy rules decide who may use it and whether it is
 approved automatically, and approvals, durations and several-approver settings work the same. Instead of a remote
@@ -109,12 +121,71 @@ destroys its credential.
 | Basic | `Authorization: Basic …` from a username and the secret |
 | Google service account | HallPass signs in as the service account and sends short-lived access tokens for the scopes you list (default `cloud-platform`) |
 
+## Examples
+
+### GitHub
+
+Target `github`, hosts `api.github.com`, `uploads.github.com` and `results-receiver.actions.githubusercontent.com`.
+Each profile gets its own fine-grained token, limited to the repositories it covers and to read access (`github-read`)
+or issues and pull requests (`github-issues`). Both deny the endpoints that create credentials, which would outlive the
+grant:
+
+```json
+[
+  { "effect": "allow", "methods": ["GET", "HEAD"] },
+  { "effect": "allow", "methods": ["POST"], "paths": ["/graphql"], "graphql": ["query"] },
+  { "effect": "deny", "paths": ["/user/keys/**", "/user/gpg_keys/**", "/authorizations/**", "/repos/*/*/keys/**"] }
+]
+```
+
+```json
+[
+  { "effect": "allow", "methods": ["GET", "HEAD"] },
+  { "effect": "allow", "methods": ["POST"], "paths": ["/graphql"], "graphql": ["query", "mutation"] },
+  { "effect": "allow", "methods": ["POST", "PATCH"], "paths": ["/repos/<owner>/*/issues/**", "/repos/<owner>/*/pulls", "/repos/<owner>/*/pulls/**"] },
+  { "effect": "deny", "paths": ["/user/keys/**", "/user/gpg_keys/**", "/authorizations/**", "/repos/*/*/keys/**"] }
+]
+```
+
+A policy rule can approve `github-read` automatically and leave `github-issues` requestable with a reason. Agents run
+`gh` through `hallpass-api`:
+
+```sh
+hallpass-api --gateway gateway --role github-read --reason "Read the failed CI job for #412" -- \
+  gh run view 9876543210 --repo <owner>/<repo> --log-failed
+hallpass-api --gateway gateway --role github-issues --reason "Post the root cause on #412" -- \
+  gh issue comment 412 --repo <owner>/<repo> --body "Root cause: …"
+```
+
+### Cloudflare
+
+Target `cloudflare`, host `api.cloudflare.com`, with an API token limited to the zones and permissions the profile
+needs. A DNS profile reads everything the token can see and changes DNS records, and never touches API tokens:
+
+```json
+[
+  { "effect": "allow", "methods": ["GET", "HEAD"] },
+  { "effect": "allow", "methods": ["POST", "PUT", "PATCH", "DELETE"], "paths": ["/client/v4/zones/*/dns_records/**"] },
+  { "effect": "deny", "paths": ["/client/v4/user/tokens/**", "/client/v4/accounts/*/tokens/**"] }
+]
+```
+
+`hallpass-api` sets a placeholder `CLOUDFLARE_API_TOKEN` for `wrangler`, and the proxy replaces any `Authorization`
+the tool sends, so `curl` needs no token either:
+
+```sh
+hallpass-api --gateway gateway --role cloudflare-dns --reason "Point the status page at the new host" -- \
+  curl -s https://api.cloudflare.com/client/v4/zones/<zone-id>/dns_records
+```
+
 ## What is recorded
 
 Every request made under a grant, allowed or refused, is a timeline entry in the agent's session: method, host, path,
 query (values of parameters that look like tokens, keys, signatures or codes are replaced by `[redacted]`), status,
 sizes, duration, the profile and rule that allowed it, and for GraphQL the operation types. Headers and bodies are not
 recorded. Refusals outside any session (an unknown host, no usable profile) go to the audit log.
+
+<Shot name="api-timeline" themed alt="Session timeline of API calls: method, path, status, profile and the rule that allowed each call, and the command reported by hallpass-api" />
 
 ## Configuration
 
@@ -139,3 +210,5 @@ see what the access is for in the console, Slack or Telegram. The command is the
 still checks every request against the profile's rules, and the timeline records both the reported command and each
 actual request. Changing a target's
 hosts issues a new CA, so agents must fetch the bundle again.
+
+<Shot name="api-request" themed alt="An approved request filed by hallpass-api, with the agent's reason and the gh command it reported" />

@@ -32,7 +32,9 @@ export const API_PRESETS: ApiPreset[] = [
     id: 'github',
     name: 'GitHub',
     alias: 'github',
-    hosts: ['api.github.com', 'uploads.github.com'],
+    // Actions logs (gh run view --log, …/logs) redirect to a signed URL on results-receiver. Never add
+    // *.blob.core.windows.net, which older log redirects use: the token would go to any Azure storage account.
+    hosts: ['api.github.com', 'uploads.github.com', 'results-receiver.actions.githubusercontent.com'],
     credentialType: 'bearer',
     credentialHint:
       'A fine-grained personal access token (or GitHub App token) limited to the repositories and permissions this profile needs.',
