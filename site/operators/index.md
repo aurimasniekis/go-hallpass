@@ -39,6 +39,8 @@ Invite operators under **Administration → Operators**. Each gets one or more r
 with [SSO](/operators/sso). Sensitive actions (generating credentials, creating operators, changing integrations)
 ask the operator to confirm it's them again if they have not authenticated in the last 5 minutes.
 
+<Shot name="operators" alt="The Operators page with an administrator, an approver and an auditor" />
+
 The audit log under **Governance → Audit log** records every security-relevant action in a hash chain. **Verify hash
 chain** checks it.
 

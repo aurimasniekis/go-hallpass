@@ -12,9 +12,12 @@
 #                         and replay specs; they read HP_E2E_DEST (host:port) and HP_E2E_DEST_CONTAINER
 #   E2E_DEX=1             also start a throwaway Dex identity provider on DEX_PORT (default 25556) for the SSO spec,
 #                         with one user whose password is generated per run (HP_E2E_DEX_* variables)
+#   E2E_ADD_HOSTS         "name:ip ..." entries: the server then runs in a container (host network) whose /etc/hosts
+#                         has them, so fake upstreams can answer for real host names without touching this machine
+#   E2E_CA_FILE           with E2E_ADD_HOSTS: PEM bundle the containerized server trusts instead of the system roots
 #
 # Needs Go, pnpm, ssh-keygen and ssh, and Chromium for Playwright (`pnpm exec playwright install chromium`); Docker for
-# E2E_DEST=1 and E2E_DEX=1.
+# E2E_DEST=1, E2E_DEX=1 and E2E_ADD_HOSTS.
 # The server log is kept on failure. Nothing is pushed.
 set -euo pipefail
 
@@ -26,6 +29,7 @@ url="http://127.0.0.1:$http_port"
 pid=""
 dest=""
 dex=""
+server=""
 
 cleanup() {
   local rc=$?
@@ -35,6 +39,7 @@ cleanup() {
   fi
   if [[ -n $dest ]]; then docker rm -f "$dest" >/dev/null 2>&1 || true; fi
   if [[ -n $dex ]]; then docker rm -f "$dex" >/dev/null 2>&1 || true; fi
+  if [[ -n $server ]]; then docker rm -f "$server" >/dev/null 2>&1 || true; fi
   if [[ $rc -ne 0 ]]; then
     echo "e2e: FAIL (server log: $work/server.log)" >&2
     tail -n 40 "$work/server.log" >&2 2>/dev/null || true
@@ -147,7 +152,16 @@ fi
 token=$(printf '%s\n' "$boot" | awk '/^  token: /{print $2}')
 [[ -n $token ]] || { echo "e2e: bootstrap printed no setup token" >&2; exit 1; }
 
-"$work/hallpass" serve -config "$work/hallpass.yaml" >"$work/server.log" 2>&1 &
+if [[ -n ${E2E_ADD_HOSTS:-} ]]; then
+  # The static binary in a minimal container sharing the host network: same loopback ports, its own /etc/hosts.
+  server=hallpass-e2e-server-$$
+  run=(--rm --name "$server" --network host -u "$(id -u):$(id -g)" -v "$work:$work")
+  for h in $E2E_ADD_HOSTS; do run+=(--add-host "$h"); done
+  if [[ -n ${E2E_CA_FILE:-} ]]; then run+=(-v "$E2E_CA_FILE:/etc/hallpass-e2e/ca.pem:ro" -e SSL_CERT_FILE=/etc/hallpass-e2e/ca.pem); fi
+  docker run "${run[@]}" alpine:3.22 "$work/hallpass" serve -config "$work/hallpass.yaml" >"$work/server.log" 2>&1 &
+else
+  "$work/hallpass" serve -config "$work/hallpass.yaml" >"$work/server.log" 2>&1 &
+fi
 pid=$!
 for _ in $(seq 1 100); do
   curl -fsS "$url/readyz" >/dev/null 2>&1 && break

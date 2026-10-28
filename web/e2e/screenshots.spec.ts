@@ -14,13 +14,16 @@ import { freshTotp } from './totp';
 
 /**
  * Documentation screenshots (scripts/screenshots.sh). Runs only when HP_SCREENSHOTS_OUT is set, against a fresh
- * backend and the throwaway sshd containers `hallpass-docs-{web1,db1,ci-runner,forge}` on 127.0.0.1:2431-2434. Every name,
- * reason and file is fictional; agent keys are generated at run time. Agent outputs in the terminal images are real.
+ * backend and the throwaway sshd containers `hallpass-docs-{web1,db1,ci-runner,forge}` on 127.0.0.1:2431-2434. API calls
+ * and backups go to fakes that answer as api.github.com and s3.example.com (scripts/screenshots.sh). Every name, reason
+ * and file is fictional; agent keys are generated at run time. Agent outputs in the terminal images are real.
  */
 const OUT = process.env.HP_SCREENSHOTS_OUT ?? '';
+const HALLPASS_API = process.env.HP_DOCS_HALLPASS_API ?? '';
+const DOCS_CA = process.env.HP_DOCS_CA_PEM ?? '';
 test.skip(
-  !OUT || !e2eUrl || !sshAddr,
-  'HP_SCREENSHOTS_OUT, HALLPASS_E2E_URL and HALLPASS_E2E_SSH are required',
+  !OUT || !e2eUrl || !sshAddr || !HALLPASS_API || !DOCS_CA,
+  'HP_SCREENSHOTS_OUT, HP_DOCS_*, HALLPASS_E2E_URL and HALLPASS_E2E_SSH are required (run scripts/screenshots.sh)',
 );
 test.describe.configure({ mode: 'serial' });
 
@@ -196,7 +199,7 @@ async function terminalShot(browser: Browser, name: string, title: string, lines
       if (l.startsWith('$ ')) {
         return `<span class="p">$</span> ${esc(l.slice(2))}`;
       }
-      if (l.startsWith('hallpass:')) {
+      if (/^(gh: )?hallpass(-api)?:/.test(l)) {
         return `<span class="g">${esc(l)}</span>`;
       }
       if (/^\[exit \d+\]$/.test(l)) {
@@ -226,34 +229,57 @@ async function terminalShot(browser: Browser, name: string, title: string, lines
   await ctx.close();
 }
 
+/** Runs an agent-side tool; output is stderr followed by stdout. */
+function runTool(
+  file: string,
+  args: string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): Promise<{ code: number; out: string }> {
+  return new Promise((resolve) => {
+    execFile(file, args, { cwd, timeout: 300_000, env }, (error, stdout, stderr) => {
+      const code = error ? (typeof error.code === 'number' ? error.code : 1) : 0;
+      resolve({ code, out: stderr + stdout });
+    });
+  });
+}
+
 /** Runs the system git as an agent whose ssh config calls the gateway `center`, ignoring the developer's git config. */
 function runGit(args: string[], cwd: string, sshConfig: string): Promise<{ code: number; out: string }> {
   const who = { name: 'claude-sre', email: 'claude-sre@example.com' };
-  return new Promise((resolve) => {
-    execFile(
-      'git',
-      args,
-      {
-        cwd,
-        timeout: 120_000,
-        env: {
-          ...process.env,
-          GIT_SSH_COMMAND: `ssh -F ${sshConfig}`,
-          GIT_CONFIG_GLOBAL: '/dev/null',
-          GIT_CONFIG_NOSYSTEM: '1',
-          GIT_TERMINAL_PROMPT: '0',
-          GIT_AUTHOR_NAME: who.name,
-          GIT_AUTHOR_EMAIL: who.email,
-          GIT_COMMITTER_NAME: who.name,
-          GIT_COMMITTER_EMAIL: who.email,
-        },
-      },
-      (error, stdout, stderr) => {
-        const code = error ? (typeof error.code === 'number' ? error.code : 1) : 0;
-        resolve({ code, out: stderr + stdout });
-      },
-    );
+  return runTool('git', args, cwd, {
+    ...process.env,
+    GIT_SSH_COMMAND: `ssh -F ${sshConfig}`,
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_AUTHOR_NAME: who.name,
+    GIT_AUTHOR_EMAIL: who.email,
+    GIT_COMMITTER_NAME: who.name,
+    GIT_COMMITTER_EMAIL: who.email,
   });
+}
+
+/**
+ * The environment of an agent running hallpass-api and gh: the developer's gh login, proxy settings and HallPass or
+ * Claude Code session are left out, so the run neither uses them nor shows them.
+ */
+function agentToolEnv(home: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (
+      !/^(GH_|GITHUB_|HALLPASS_|CLAUDE_|HTTPS?_PROXY$|https?_proxy$|NO_PROXY$|no_proxy$|SSL_CERT_)/.test(k)
+    ) {
+      env[k] = v;
+    }
+  }
+  return {
+    ...env,
+    HOME: home,
+    GH_CONFIG_DIR: join(home, 'gh'),
+    GH_PROMPT_DISABLED: '1',
+    GH_NO_UPDATE_NOTIFIER: '1',
+  };
 }
 
 function outputLines(s: string): string[] {
@@ -261,7 +287,7 @@ function outputLines(s: string): string[] {
 }
 
 test('documentation screenshots', async ({ page, browser }) => {
-  test.setTimeout(20 * 60_000);
+  test.setTimeout(30 * 60_000);
   trackApiRequests(page);
   await page.emulateMedia({ colorScheme: 'light' });
 
@@ -585,6 +611,96 @@ test('documentation screenshots', async ({ page, browser }) => {
     max_duration: 4 * HOUR,
   });
 
+  // ---- API target: GitHub (answered by the fake front), a read profile and one that may comment on issues ----------
+  const github = (
+    await api.call<Id>('POST', '/api/v1/servers', {
+      kind: 'api',
+      alias: 'github',
+      description: 'GitHub REST API (acme organization)',
+      api: {
+        hosts: ['api.github.com', 'uploads.github.com', 'results-receiver.actions.githubusercontent.com'],
+      },
+    })
+  ).id;
+  servers.github = github;
+  const apiProfileSpecs = [
+    {
+      alias: 'acme-read',
+      description: 'Read repositories, issues and pull requests of the acme organization.',
+      rules: [{ effect: 'allow', methods: ['GET', 'HEAD'], paths: ['/repos/acme/**'] }],
+      default_duration: 30 * MIN,
+      max_duration: 2 * HOUR,
+    },
+    {
+      alias: 'acme-issues',
+      description: 'Comment on acme issues. Never delete or administer repositories.',
+      rules: [
+        { effect: 'allow', methods: ['POST'], paths: ['/repos/acme/*/issues/*/comments'] },
+        { effect: 'deny', methods: ['DELETE'] },
+      ],
+      default_duration: HOUR,
+      max_duration: 4 * HOUR,
+    },
+  ];
+  for (const { rules, ...p } of apiProfileSpecs) {
+    const role = await api.call<Id>('POST', `/api/v1/servers/${github}/roles`, {
+      ...p,
+      capabilities: ['api'],
+      api: { rules },
+    });
+    roleIds[`github/${p.alias}`] = role.id;
+    await api.call('PUT', `/api/v1/roles/${role.id}/api-credential`, {
+      type: 'bearer',
+      secret: `docs-${randomBytes(18).toString('base64url')}`,
+    });
+  }
+  await rule({
+    name: 'SRE reads acme on GitHub',
+    effect: 'allow',
+    level: 'auto_approve',
+    require_reason: false,
+    subjects: { agent_groups: ['sre-agents'] },
+    targets: { servers: [github] },
+    roles: { names: ['acme-read'] },
+    max_duration: 2 * HOUR,
+    auto_max_duration: 30 * MIN,
+  });
+  await rule({
+    name: 'SRE comments on GitHub issues on request',
+    effect: 'allow',
+    level: 'requestable',
+    subjects: { agent_groups: ['sre-agents'] },
+    targets: { servers: [github] },
+    roles: { names: ['acme-issues'] },
+    max_duration: 4 * HOUR,
+  });
+
+  // ---- File transfer: a web1 role that can only copy files (scp, sftp), recorded per operation --------------------
+  const filesRole = await api.call<Id>('POST', `/api/v1/servers/${servers.web1 ?? ''}/roles`, {
+    alias: 'files',
+    remote_user: 'deploy',
+    description: 'Copy build artifacts to and from /srv/app/incoming. No shell.',
+    capabilities: ['file-transfer'],
+    default_duration: 30 * MIN,
+    max_duration: 2 * HOUR,
+  });
+  roleIds['web1/files'] = filesRole.id;
+  const filesCred = await api.call<Credential>('POST', `/api/v1/roles/${filesRole.id}/credentials:generate`);
+  installKey('web1', 'deploy', filesCred.authorized_keys_line);
+  await api.call('POST', `/api/v1/credentials/${filesCred.id}/probe`);
+  await api.call('POST', `/api/v1/credentials/${filesCred.id}/activate`);
+  await rule({
+    name: 'SRE copies files to web1',
+    effect: 'allow',
+    level: 'auto_approve',
+    require_reason: false,
+    subjects: { agent_groups: ['sre-agents'] },
+    targets: { servers: [servers.web1] },
+    roles: { names: ['files'] },
+    max_duration: 2 * HOUR,
+    auto_max_duration: 30 * MIN,
+  });
+
   // ---- Agent activity over SSH ------------------------------------------------------------------------------------
   const knownHosts = await writeKnownHosts(page.request);
   const sre = keys['claude-sre'];
@@ -603,7 +719,8 @@ test('documentation screenshots', async ({ page, browser }) => {
           found = list.items.find((r) => r.agent_id === agents[agent] && r.server_id === servers[server]);
           return found !== undefined;
         },
-        { timeout: 30_000 },
+        // Generous: each poll waits in the API throttle when the seeding above used up the per-minute budget.
+        { timeout: 120_000 },
       )
       .toBe(true);
     if (!found) {
@@ -765,9 +882,107 @@ test('documentation screenshots', async ({ page, browser }) => {
     },
     gitTranscript,
   );
+  // Pin the push profile in the remote URL ("<remote>+<profile>"), so pushes never use another profile.
+  await git(
+    'git remote set-url origin forge+acme-push@center:forge/acme/api.git',
+    ['remote', 'set-url', 'origin', 'forge+acme-push@center:forge/acme/api.git'],
+    repo,
+  );
   await git('git push origin HEAD:agent/cart-timeout', ['push', 'origin', 'HEAD:agent/cart-timeout'], repo);
   await git('git push origin HEAD:main', ['push', 'origin', 'HEAD:main'], repo, 128);
   await terminalShot(browser, 'agent-git', 'claude-sre@agent-sandbox: ~/src', gitTranscript.slice(0, -1));
+
+  // claude-sre with gh through hallpass-api: a read through the auto-approved profile, a comment that needs approval
+  // (the proxy files the request with the command, hallpass-api waits and runs it again), and a call no profile allows.
+  const sshWrapper = join(gitHome, 'ssh');
+  writeFileSync(sshWrapper, `#!/bin/sh\nexec ssh -F ${sshConfig} "$@"\n`, { mode: 0o755 });
+  const apiTranscript: string[] = [];
+  const hallpassApi = async (shown: string, args: string[], want = 0, during?: () => Promise<void>) => {
+    const run = runTool(
+      HALLPASS_API,
+      ['--gateway', 'center', '--ssh', sshWrapper, ...args],
+      gitHome,
+      agentToolEnv(gitHome),
+    );
+    if (during) {
+      // If hallpass-api ends first, it never filed the request: show what it printed instead of a polling timeout.
+      await Promise.race([
+        during(),
+        run.then((r) => {
+          throw new Error(`hallpass-api ended before approval: exit ${String(r.code)}\n${r.out}`);
+        }),
+      ]);
+    }
+    const res = await run;
+    if (res.code !== want) {
+      throw new Error(`hallpass-api ${args.join(' ')}: exit ${String(res.code)}\n${res.out}`);
+    }
+    apiTranscript.push(`$ ${shown}`, ...(res.out ? outputLines(res.out) : []));
+    if (res.code !== 0) {
+      apiTranscript.push(`[exit ${String(res.code)}]`);
+    }
+    apiTranscript.push('');
+  };
+  const issueList = '.[] | "#\\(.number) \\(.title)"';
+  await hallpassApi(`hallpass-api --gateway center -- gh api repos/acme/shop/issues --jq '${issueList}'`, [
+    '--',
+    'gh',
+    'api',
+    'repos/acme/shop/issues',
+    '--jq',
+    issueList,
+  ]);
+  // --silent: on a refusal gh would also print the proxy's JSON error body after its one-line message.
+  const rca = 'Root cause: 10s upstream timeout. Fix: agent/cart-timeout';
+  await hallpassApi(
+    `hallpass-api --gateway center --reason 'Post the root cause on #412' -- gh api repos/acme/shop/issues/412/comments -f body='${rca}' --silent`,
+    [
+      '--reason',
+      'Post the root cause on #412',
+      '--',
+      'gh',
+      'api',
+      'repos/acme/shop/issues/412/comments',
+      '-f',
+      `body=${rca}`,
+      '--silent',
+    ],
+    0,
+    async () => {
+      await api.call('POST', `/api/v1/requests/${(await pending('claude-sre', 'github')).id}/approve`, {
+        duration: HOUR,
+        comment: 'Comment only.',
+      });
+    },
+  );
+  await hallpassApi(
+    'hallpass-api --gateway center -- gh api -X DELETE repos/acme/shop --silent',
+    ['--', 'gh', 'api', '-X', 'DELETE', 'repos/acme/shop', '--silent'],
+    1,
+  );
+  await terminalShot(browser, 'agent-api', 'claude-sre@agent-sandbox: ~/src', apiTranscript.slice(0, -1));
+
+  // claude-sre copies a build artifact with scp and checks it with sftp through the file-transfer role.
+  const artifact = join(gitHome, 'cart-1.4.4.tar.gz');
+  writeFileSync(artifact, randomBytes(96 * 1024));
+  const sshTool = async (file: string, args: string[]) => {
+    const res = await runTool(file, ['-F', sshConfig, ...args], gitHome, process.env);
+    if (res.code !== 0) {
+      throw new Error(`${file} ${args.join(' ')}: exit ${String(res.code)}\n${res.out}`);
+    }
+  };
+  await sshTool('scp', ['-q', artifact, 'web1+files@center:/srv/app/incoming/']);
+  const batch = join(gitHome, 'sftp.batch');
+  writeFileSync(
+    batch,
+    [
+      'ls -l /srv/app/incoming',
+      'get /srv/app/incoming/cart-1.4.4.tar.gz verify.tar.gz',
+      'rename /srv/app/incoming/cart-1.4.4.tar.gz /srv/app/incoming/cart-1.4.4.ready.tar.gz',
+      '',
+    ].join('\n'),
+  );
+  await sshTool('sftp', ['-q', '-b', batch, 'web1+files@center']);
 
   // deploy-bot: one denied, one canceled, one left pending.
   await ssh(bot, ['request', 'web1', '--role', 'deploy', "--reason='Hotfix straight to production'"]);
@@ -882,6 +1097,44 @@ test('documentation screenshots', async ({ page, browser }) => {
     );
   }
   await page.emulateMedia({ colorScheme: 'light' });
+
+  // API target, the request hallpass-api filed (with the reported command) and the recorded API calls; the file
+  // transfer session's operations.
+  await page.goto('/apis');
+  await themed(page, 'apis');
+  await page.goto(`/apis/${github}`);
+  await expect(page.getByText('acme-issues').first()).toBeVisible();
+  await themed(page, 'api-target');
+  const approved = await api.call<{ items: AccessRequest[] }>('GET', '/api/v1/requests?state=approved');
+  const apiRequest = approved.items.find((r) => r.role_id === roleIds['github/acme-issues']);
+  if (!apiRequest) {
+    throw new Error('no API request');
+  }
+  await page.goto(`/requests/${apiRequest.id}`);
+  await themed(page, 'api-request');
+  for (const [role, name] of [
+    ['github/acme-issues', 'api-timeline'],
+    ['web1/files', 'file-timeline'],
+  ] as const) {
+    const s = sessions.items.find((x) => x.role_id === roleIds[role]);
+    if (!s) {
+      throw new Error(`no ${role} session`);
+    }
+    await page.goto(`/sessions/${s.id}`);
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await cardShot(
+        page,
+        page
+          .locator('.ant-card')
+          .filter({ has: page.getByText('Timeline', { exact: true }) })
+          .last(),
+        `${name}-${scheme}`,
+      );
+    }
+    await page.emulateMedia({ colorScheme: 'light' });
+  }
+
   await page.goto('/policy');
   await themed(page, 'policy');
   await page.getByRole('tab', { name: 'Effective access' }).click();
@@ -896,4 +1149,67 @@ test('documentation screenshots', async ({ page, browser }) => {
   await page.getByRole('button', { name: 'New integration' }).click();
   await page.getByRole('form', { name: 'Chat integration' }).getByLabel('Name').fill('ops-approvals');
   await shot(page, 'integration-new');
+  await page.keyboard.press('Escape');
+
+  // ---- Operators, automation tokens, backups and a web terminal ---------------------------------------------------
+  for (const o of [
+    { email: 'grace@example.com', display_name: 'Grace Hopper', roles: ['approver'] },
+    { email: 'alan@example.com', display_name: 'Alan Turing', roles: ['auditor'] },
+  ]) {
+    await api.call('POST', '/api/v1/operators', o);
+  }
+  await page.goto('/operators');
+  await shot(page, 'operators');
+  await api.call('POST', '/api/v1/api-tokens', {
+    name: 'terraform',
+    role: 'administrator',
+    never_expires: true,
+  });
+  await api.call('POST', '/api/v1/api-tokens', {
+    name: 'grafana-audit',
+    role: 'auditor',
+    expires_in_days: 90,
+  });
+  await page.goto('/settings/api-tokens');
+  await shot(page, 'api-tokens');
+
+  await api.call('PUT', '/api/v1/system/backups/target', {
+    enabled: true,
+    endpoint: 'https://s3.example.com',
+    region: 'us-east-1',
+    bucket: 'hallpass-backups',
+    prefix: 'hallpass/',
+    path_style: true,
+    access_key_id: process.env.HP_DOCS_S3_ACCESS_KEY ?? '',
+    secret_access_key: process.env.HP_DOCS_S3_SECRET_KEY ?? '',
+    ca_bundle_pem: readFileSync(DOCS_CA, 'utf8'),
+    allow_private_network: true,
+    interval: '6h',
+    keep_last: 28,
+    keep_daily_days: 30,
+  });
+  await api.call('POST', '/api/v1/system/backups/runs', {});
+  await expect
+    .poll(
+      async () =>
+        (await api.call<{ items: { state: string }[] }>('GET', '/api/v1/system/backups/runs')).items[0]
+          ?.state,
+      { timeout: 60_000 },
+    )
+    .toBe('succeeded');
+  await page.goto('/settings/backups');
+  await shot(page, 'backups');
+
+  await page.goto(`/servers/${servers.web1 ?? ''}`);
+  await page.getByRole('tab', { name: 'Roles' }).click();
+  await page.getByRole('button', { name: 'Open a terminal as inspect' }).click();
+  const terminal = page.getByRole('dialog');
+  await expect(terminal.locator('.xterm-rows')).toContainText('$', { timeout: 30_000 });
+  for (const line of ['uptime', 'tail -2 /var/log/nginx/error.log']) {
+    await page.keyboard.type(line);
+    await page.keyboard.press('Enter');
+    await sleep(700);
+  }
+  await shot(page, 'web-terminal');
+  await page.keyboard.press('Escape');
 });

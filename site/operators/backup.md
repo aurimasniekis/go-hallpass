@@ -18,6 +18,8 @@ on a schedule. Set it up under **Administration → Backups** (or with the Terra
 - **Schedule**, every 15 minutes to once a week (default hourly). A failed backup is retried within 15 minutes.
 - **Retention**: the newest backups (default 48) plus the newest of each past day (default 30 days).
 
+<Shot name="backups" alt="The Backups page with an S3-compatible target, its schedule and retention, and a successful backup" />
+
 Each backup is a database snapshot plus the recordings it refers to. The snapshot and its file list are encrypted on
 the server before upload, with a key protected by the KEK. Recordings are already encrypted and are uploaded once,
 then shared by later backups. The bucket only ever holds ciphertext, but object names and sizes show how many

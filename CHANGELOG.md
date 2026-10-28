@@ -7,6 +7,14 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+### Changed
+
+- The GitHub API target preset also lists `results-receiver.actions.githubusercontent.com`, where GitHub Actions logs
+  (`gh run view --log`, `…/actions/{runs,jobs}/{id}/logs`) redirect. Without it the proxy refused the redirected
+  request. Existing GitHub targets keep their hosts: add this one exact host to fetch logs, never
+  `*.blob.core.windows.net` (it would send the GitHub token to any Azure storage account). The API targets page has
+  complete GitHub and Cloudflare examples.
+
 ## [0.7.1] - 2026-10-28
 
 > **Recording format, backup format and keyring not externally reviewed.** The known limitations of

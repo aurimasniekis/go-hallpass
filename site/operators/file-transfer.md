@@ -61,6 +61,8 @@ scp build.tar web1+deploy@center:/srv/app/
 
 Every completed operation appears in the session timeline and the audit trail:
 
+<Shot name="file-timeline" themed alt="Session timeline of a file transfer: an upload and a download with sizes and SHA-256, a directory listing and a rename" />
+
 | Operation | Recorded |
 |---|---|
 | Upload, download | Path, bytes, and the SHA-256 checksum when the file moved in order from the start (scp and sftp `put`/`get` do) |
