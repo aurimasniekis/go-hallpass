@@ -7,6 +7,11 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-10-29
+
+> **Recording format, backup format and keyring not externally reviewed.** The known limitations of
+> [0.1.0](https://github.com/aurimasniekis/go-hallpass/releases/tag/v0.1.0) still apply.
+
 ### Fixed
 
 - API proxy: a `hallpass-api` call to an auto-approved access profile that requires a reason was refused with
@@ -327,7 +332,8 @@ through it.
 - API tokens skip recent authentication and MFA on the operations they may use, because issuing one requires both.
   They cannot decide requests, revoke grants, read recordings, manage operators or tokens, or use lockdown.
 
-[Unreleased]: https://github.com/aurimasniekis/go-hallpass/compare/v0.7.3...HEAD
+[Unreleased]: https://github.com/aurimasniekis/go-hallpass/compare/v0.7.4...HEAD
+[0.7.4]: https://github.com/aurimasniekis/go-hallpass/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/aurimasniekis/go-hallpass/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/aurimasniekis/go-hallpass/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/aurimasniekis/go-hallpass/compare/v0.7.0...v0.7.1
