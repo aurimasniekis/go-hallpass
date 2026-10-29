@@ -47,6 +47,35 @@ func TestChildEnvReplacesProxyAndTokens(t *testing.T) {
 	}
 }
 
+// The caller's NO_PROXY entries (any case) are kept after the proxy's own, without duplicates; "*" is dropped so the
+// proxy is never bypassed for every host.
+func TestChildEnvKeepsNoProxyEntries(t *testing.T) {
+	vars := apienv.Vars(1234, "", "", "/tmp/ca.pem", "/tmp/token")
+	values := func(env []string) map[string][]string {
+		got := map[string][]string{}
+		for _, kv := range env {
+			if k, v, _ := strings.Cut(kv, "="); strings.EqualFold(k, "no_proxy") {
+				got[k] = append(got[k], v)
+			}
+		}
+		return got
+	}
+	env := childEnv([]string{"NO_PROXY=tuf-repo-cdn.sigstore.dev, .example.com", "No_Proxy=*,LOCALHOST,,blob.example"}, vars)
+	want := "localhost,127.0.0.1,::1,tuf-repo-cdn.sigstore.dev,.example.com,blob.example"
+	got := values(env)
+	if len(got) != 2 || len(got["NO_PROXY"]) != 1 || len(got["no_proxy"]) != 1 {
+		t.Fatalf("want one NO_PROXY and one no_proxy, got %v", got)
+	}
+	for k, v := range got {
+		if v[0] != want {
+			t.Errorf("%s = %q, want %q", k, v[0], want)
+		}
+	}
+	if got := values(childEnv([]string{"PATH=/bin"}, vars)); got["NO_PROXY"][0] != "localhost,127.0.0.1,::1" {
+		t.Errorf("without a caller NO_PROXY: %v", got)
+	}
+}
+
 // The local proxy adds the hallpass-api headers to the CONNECT and then passes bytes both ways untouched.
 func TestLocalProxyTagsConnect(t *testing.T) {
 	up, err := net.Listen("tcp", "127.0.0.1:0")

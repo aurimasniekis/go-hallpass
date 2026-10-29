@@ -334,18 +334,54 @@ var (
 // proxyVars are replaced in the child's environment, whatever case the parent used.
 var proxyVars = regexp.MustCompile(`(?i)^(https?_proxy|all_proxy|no_proxy|ssl_cert_file|ssl_cert_dir|node_extra_ca_certs|requests_ca_bundle|curl_ca_bundle|cloudsdk_.*|gh_token|github_token|gh_enterprise_token|cloudflare_api_token|cloudflare_api_key|node_use_env_proxy)=`)
 
-// childEnv is the parent's environment without proxy, CA and token variables, plus the proxy settings.
+// noProxyVar matches NO_PROXY in any case; its entries are kept (see childEnv).
+var noProxyVar = regexp.MustCompile(`(?i)^no_proxy=`)
+
+// childEnv is the parent's environment without proxy, CA and token variables, plus the proxy settings. The parent's
+// NO_PROXY entries are added to the proxy's own, so public hosts that are not API targets (and need no credentials)
+// can still be reached directly; "*" is dropped because it would bypass the proxy for every host.
 func childEnv(parent []string, vars [][2]string) []string {
 	out := make([]string, 0, len(parent)+len(vars))
+	var extra []string
 	for _, kv := range parent {
-		if !proxyVars.MatchString(kv) {
+		switch {
+		case noProxyVar.MatchString(kv):
+			_, v, _ := strings.Cut(kv, "=")
+			for e := range strings.SplitSeq(v, ",") {
+				if e = strings.TrimSpace(e); e != "" && e != "*" {
+					extra = append(extra, e)
+				}
+			}
+		case !proxyVars.MatchString(kv):
 			out = append(out, kv)
 		}
 	}
 	for _, kv := range vars {
+		if strings.EqualFold(kv[0], "NO_PROXY") {
+			kv[1] = mergeNoProxy(kv[1], extra)
+		}
 		out = append(out, kv[0]+"="+kv[1])
 	}
 	return out
+}
+
+// mergeNoProxy appends entries to a NO_PROXY list, without duplicates.
+func mergeNoProxy(list string, entries []string) string {
+	seen := map[string]bool{}
+	var out []string
+	for e := range strings.SplitSeq(list, ",") {
+		if e != "" && !seen[strings.ToLower(e)] {
+			seen[strings.ToLower(e)] = true
+			out = append(out, e)
+		}
+	}
+	for _, e := range entries {
+		if !seen[strings.ToLower(e)] {
+			seen[strings.ToLower(e)] = true
+			out = append(out, e)
+		}
+	}
+	return strings.Join(out, ",")
 }
 
 var secretArg = regexp.MustCompile(`(?i)(token|secret|password|passwd|api[-_]?key|credential)`)

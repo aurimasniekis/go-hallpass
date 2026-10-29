@@ -147,13 +147,16 @@ gh pr list --repo acme/api
 - Every call is recorded (method, path, status). Make only the calls the task needs.
 - Public hosts that are not API targets and need no credentials (for `gh attestation verify`:
   `tuf-repo-cdn.sigstore.dev` and `tmaproduction.blob.core.windows.net`) are refused by the proxy. Bypass it for
-  them, inside the command when using `hallpass-api` (it replaces `NO_PROXY`). Never ask for such hosts to be added
-  to an API target: its credential would be sent to them.
+  them with `NO_PROXY`, which `hallpass-api` adds to its own entries. Never ask for such hosts to be added to an API
+  target: its credential would be sent to them.
 
   ```sh
-  hallpass-api --gateway center -- env NO_PROXY=localhost,127.0.0.1,::1,tuf-repo-cdn.sigstore.dev,tmaproduction.blob.core.windows.net \
-    gh attestation verify <file> --repo <owner>/<repo>
+  NO_PROXY=tuf-repo-cdn.sigstore.dev,tmaproduction.blob.core.windows.net \
+    hallpass-api --gateway center -- gh attestation verify <file> --repo <owner>/<repo>
   ```
+
+  If that is still refused (`hallpass-api` 0.7.2 and older replace `NO_PROXY`), set it inside the command:
+  `hallpass-api … -- env NO_PROXY=localhost,127.0.0.1,::1,<hosts> gh …`.
 - `connect` and `exec` are refused on API targets.
 
 ## Sessions (one conversation, one set of grants)

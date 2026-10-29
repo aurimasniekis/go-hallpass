@@ -255,12 +255,16 @@ Exit codes: the command's own, or 83 denied, 84 expired, 85 canceled, 86 still p
 target, and the proxy refuses those ("not an API host you can reach"). `gh attestation verify` is one: it fetches
 Sigstore's trust root from `tuf-repo-cdn.sigstore.dev` and the attestation bundle from a signed URL on
 `tmaproduction.blob.core.windows.net`. Neither needs credentials, so let the tool reach them directly with
-`NO_PROXY`. `hallpass-api` replaces `NO_PROXY` in the command's environment, so set it inside the command:
+`NO_PROXY`. `hallpass-api` adds the entries you set to its own (`localhost`, `127.0.0.1`, `::1`; a `*` entry is
+ignored):
 
 ```sh
-hallpass-api --gateway center -- env NO_PROXY=localhost,127.0.0.1,::1,tuf-repo-cdn.sigstore.dev,tmaproduction.blob.core.windows.net \
-  gh attestation verify release.tar.gz --repo <owner>/<repo>
+NO_PROXY=tuf-repo-cdn.sigstore.dev,tmaproduction.blob.core.windows.net \
+  hallpass-api --gateway center -- gh attestation verify release.tar.gz --repo <owner>/<repo>
 ```
+
+`hallpass-api` 0.7.2 and older replace `NO_PROXY` instead: set it inside the command there,
+`hallpass-api … -- env NO_PROXY=localhost,127.0.0.1,::1,tuf-repo-cdn.sigstore.dev,tmaproduction.blob.core.windows.net gh attestation verify …`.
 
 With `api env`, extend the exported value instead:
 

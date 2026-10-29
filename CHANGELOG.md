@@ -9,9 +9,11 @@ agent JSON schemas, the recording format and the database schema).
 
 ### Changed
 
-- `help api`, the agent guide and the skill explain how to reach public hosts that are not API targets and need no
-  credentials, such as Sigstore for `gh attestation verify`: bypass the proxy with `NO_PROXY`, set inside the
-  command because `hallpass-api` replaces it, and never add such hosts to a target with a credential.
+- `hallpass-api` keeps the `NO_PROXY` entries you set (after its own `localhost`, `127.0.0.1`, `::1`; `*` is
+  ignored) instead of replacing them, so `NO_PROXY=tuf-repo-cdn.sigstore.dev,… hallpass-api -- gh attestation verify …`
+  reaches public hosts that are not API targets directly.
+- `help api`, the agent guide and the skill explain how to reach such public hosts, which need no credentials, and
+  never to add them to a target with a credential.
 - The git docs say how the access profile is chosen without `<remote>+<profile>` (an active grant first, then
   auto-approved, then requestable, ties by name) and show how to keep two identities apart with pinned remotes and
   git's `includeIf`.
