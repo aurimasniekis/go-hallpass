@@ -15,6 +15,12 @@ agent JSON schemas, the recording format and the database schema).
   `*.blob.core.windows.net` (it would send the GitHub token to any Azure storage account). The API targets page has
   complete GitHub and Cloudflare examples.
 
+### Security
+
+- go-jose 4.1.6 (CVE-2026-116587, HIGH): a crafted JWK set could make JWK parsing use excessive resources. HallPass
+  parses the JWKs of configured SSO (OIDC) providers. govulncheck finds no reachable call; the release image scan
+  (Trivy) flagged the dependency.
+
 ## [0.7.1] - 2026-10-28
 
 > **Recording format, backup format and keyring not externally reviewed.** The known limitations of
