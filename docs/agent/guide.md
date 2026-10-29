@@ -113,13 +113,15 @@ one per call.
 
 Public hosts that are not API targets and need no credentials (for `gh attestation verify`:
 `tuf-repo-cdn.sigstore.dev` and `tmaproduction.blob.core.windows.net`) are refused by the proxy. Bypass it with
-`NO_PROXY`, set inside the command because `hallpass-api` replaces it, and never add such hosts to an API target with
-a credential:
+`NO_PROXY`, which `hallpass-api` adds to its own entries, and never add such hosts to an API target with a
+credential:
 
 ```sh
-hallpass-api --gateway center -- env NO_PROXY=localhost,127.0.0.1,::1,tuf-repo-cdn.sigstore.dev,tmaproduction.blob.core.windows.net \
-  gh attestation verify <file> --repo <owner>/<repo>
+NO_PROXY=tuf-repo-cdn.sigstore.dev,tmaproduction.blob.core.windows.net \
+  hallpass-api --gateway center -- gh attestation verify <file> --repo <owner>/<repo>
 ```
+
+With `hallpass-api` 0.7.2 and older, set it inside the command instead: `… -- env NO_PROXY=localhost,127.0.0.1,::1,<hosts> gh …`.
 
 ## Agent sessions
 
