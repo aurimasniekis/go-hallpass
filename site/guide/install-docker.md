@@ -22,7 +22,7 @@ Releases are published to Docker Hub as
 before you run it:
 
 ```sh
-export HP_VERSION=0.7.1
+export HP_VERSION=0.7.2
 docker pull aurimasniekis/hallpass:$HP_VERSION
 gh attestation verify oci://docker.io/aurimasniekis/hallpass:$HP_VERSION --repo aurimasniekis/go-hallpass
 ```

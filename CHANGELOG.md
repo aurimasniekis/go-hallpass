@@ -7,6 +7,15 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-10-29
+
+> **Recording format, backup format and keyring not externally reviewed.** The known limitations of
+> [0.1.0](https://github.com/aurimasniekis/go-hallpass/releases/tag/v0.1.0) still apply.
+
+0.7.1 was tagged but never published: the release image scan stopped it on the go-jose vulnerability below. Its
+changes ship in this release: agents can name the git access profile in the SSH user
+(`git clone github+acme-push@center:github/acme/api.git`); see the 0.7.1 section of the changelog.
+
 ### Changed
 
 - The GitHub API target preset also lists `results-receiver.actions.githubusercontent.com`, where GitHub Actions logs
@@ -23,8 +32,7 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [0.7.1] - 2026-10-28
 
-> **Recording format, backup format and keyring not externally reviewed.** The known limitations of
-> [0.1.0](https://github.com/aurimasniekis/go-hallpass/releases/tag/v0.1.0) still apply.
+> **Not published.** The release image scan found CVE-2026-116587 in go-jose; these changes ship in 0.7.2.
 
 ### Added
 
@@ -297,7 +305,8 @@ through it.
 - API tokens skip recent authentication and MFA on the operations they may use, because issuing one requires both.
   They cannot decide requests, revoke grants, read recordings, manage operators or tokens, or use lockdown.
 
-[Unreleased]: https://github.com/aurimasniekis/go-hallpass/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/aurimasniekis/go-hallpass/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/aurimasniekis/go-hallpass/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/aurimasniekis/go-hallpass/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/aurimasniekis/go-hallpass/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/aurimasniekis/go-hallpass/compare/v0.6.0...v0.6.1
