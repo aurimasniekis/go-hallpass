@@ -19,7 +19,7 @@ name: hallpass
 
 services:
   hallpass:
-    image: ${HP_IMAGE:-docker.io/aurimasniekis/hallpass}:${HP_VERSION:?set HP_VERSION to a release, e.g. 0.7.2}
+    image: ${HP_IMAGE:-docker.io/aurimasniekis/hallpass}:${HP_VERSION:?set HP_VERSION to a release, e.g. 0.7.3}
     command: ["serve"]
     user: "65532:65532"
     restart: unless-stopped
