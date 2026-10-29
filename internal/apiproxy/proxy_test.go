@@ -73,6 +73,7 @@ type fx struct {
 	read     *inventory.Role
 	write    *inventory.Role
 	approver policy.OperatorInfo
+	pol      *policy.Service
 	denied   []map[string]any
 
 	mu   sync.Mutex
@@ -132,6 +133,7 @@ func newFx(t *testing.T) *fx {
 	f.inv = inventory.New(f.s, aw, bus, inventory.Options{Guard: g, MaxGrantDuration: 24 * time.Hour})
 	engine := policy.NewEngine(f.s, 24*time.Hour, []time.Duration{5 * time.Minute, 30 * time.Minute, time.Hour})
 	pol := policy.NewService(f.s, aw, bus, engine)
+	f.pol = pol
 	f.acc = access.New(f.s, kr, aw, bus, engine, access.Options{PendingExpiry: 30 * time.Minute})
 	f.enf = access.NewEnforcer(f.acc, bus, 50*time.Millisecond)
 	go f.enf.Run(ctx)
@@ -541,6 +543,65 @@ func TestProxyFilesRequestsForReportedCommands(t *testing.T) {
 	}
 	if !strings.HasPrefix(cmd, "gh issue comment 42") {
 		t.Fatalf("recorded command %q", cmd)
+	}
+}
+
+// An auto-approved profile that requires a reason: a hallpass-api call that sends one gets the grant and goes through
+// on the first try (no approval_pending, nothing filed to wait for, so the command is not run twice); without a reason
+// it is still refused.
+func TestProxyAutoApprovesProfilesThatRequireAReason(t *testing.T) {
+	f := newFx(t)
+	triage, err := f.inv.CreateRole(f.ctx, admin, f.srv.ID, inventory.RoleInput{Alias: ptr("triage"), API: &inventory.APIRules{
+		Rules: []apirules.Rule{{Effect: apirules.Allow, Methods: []string{"POST"}, Paths: []string{"/repos/acme/*/issues/*/labels"}}}}})
+	must(t, err)
+	_, err = f.svc.SetCredential(f.ctx, admin, triage.ID, CredentialInput{Type: CredBearer, Secret: "triage-secret-token-9012"})
+	must(t, err)
+	_, err = f.pol.CreateRule(f.ctx, admin, policy.Rule{Name: "triage", Effect: policy.EffectAllow, Level: policy.LevelAutoApprove,
+		RequireReason: true, AutoMaxDuration: 30 * time.Minute, Enabled: true, Subjects: policy.SubjectSelector{AgentGroups: []string{"bots"}},
+		Targets: policy.TargetSelector{All: true}, Roles: policy.RoleSelector{Names: []string{"triage"}}})
+	must(t, err)
+	const path = "/repos/acme/api/issues/42/labels"
+	grants := func() int {
+		var n int
+		must(t, f.s.ReadDB().QueryRowContext(f.ctx, `SELECT count(*) FROM grants WHERE role_id = ?`, triage.ID).Scan(&n))
+		return n
+	}
+
+	// Without a reason the profile cannot be granted: refused, nothing forwarded, no grant.
+	before := f.upstreamCount()
+	noReason := f.clientWith(http.Header{apienv.HeaderCommand: {apienv.Encode("gh issue edit 42 --add-label bug")},
+		apienv.HeaderInvocation: {"inv-test-no-reason"}})
+	if st, e := f.do(noReason, "POST", path, `{}`); st != http.StatusForbidden || e.HallPass.Code != "approval_required" {
+		t.Fatalf("without a reason: %d %q", st, e.HallPass.Code)
+	}
+	if f.upstreamCount() != before || grants() != 0 {
+		t.Fatal("a call without a reason reached the API or got a grant")
+	}
+
+	const inv = "inv-test-auto-with-reason"
+	c := f.clientWith(http.Header{
+		apienv.HeaderCommand:    {apienv.Encode("gh issue edit 42 --add-label bug")},
+		apienv.HeaderReason:     {apienv.Encode("Label the cart timeout report")},
+		apienv.HeaderInvocation: {inv},
+	})
+	if st, e := f.do(c, "POST", path, `{}`); st != http.StatusOK {
+		t.Fatalf("first call with a reason: %d %q %q", st, e.HallPass.Code, e.Message)
+	}
+	if got := f.last(); got.Method != http.MethodPost || got.Path != path || got.Authorization != "Bearer triage-secret-token-9012" {
+		t.Fatalf("upstream saw %+v", got)
+	}
+	if got := f.proxy.Filed(f.agentID, inv); len(got) != 0 {
+		t.Fatalf("an auto-approved request was reported as filed: %v", got)
+	}
+	var reqID, state string
+	must(t, f.s.ReadDB().QueryRowContext(f.ctx, `SELECT id, state FROM access_requests WHERE role_id = ?`, triage.ID).Scan(&reqID, &state))
+	reason, err := f.acc.Reason(f.ctx, reqID)
+	must(t, err)
+	if state != access.ReqApproved || reason != "Label the cart timeout report | Command (reported by the agent): gh issue edit 42 --add-label bug" {
+		t.Fatalf("request %s %q", state, reason)
+	}
+	if grants() != 1 {
+		t.Fatalf("grants = %d, want 1", grants())
 	}
 }
 
