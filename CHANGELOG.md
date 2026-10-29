@@ -7,6 +7,12 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+### Fixed
+
+- API proxy: a `hallpass-api` call to an auto-approved access profile that requires a reason was refused with
+  `approval_pending` although policy approved it at once, so `hallpass-api` waited and ran the whole command a second
+  time (non-idempotent commands ran twice). The proxy now uses the grant and forwards the first call.
+
 ## [0.7.3] - 2026-10-29
 
 > **Recording format, backup format and keyring not externally reviewed.** The known limitations of

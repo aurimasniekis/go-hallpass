@@ -306,7 +306,13 @@ func (t *tunnel) choose(ctx context.Context, cands []candidate, rq apirules.Requ
 			return c, d, &refusal{code: "request_failed", via: anyGrant, msg: "access could not be requested: " + publicMessage(err)}
 		default:
 			if t.invocation != "" && (t.reason != "" || !c.decision.RequireReason) {
-				return c, d, t.fileRequest(ctx, c, rq, anyGrant)
+				g, ref := t.fileRequest(ctx, c, rq, anyGrant)
+				if g != nil {
+					c.grant = g
+					_, _ = t.candidates(ctx, true)
+					return c, d, nil
+				}
+				return c, d, ref
 			}
 			return c, d, &refusal{code: "approval_required", via: anyGrant, msg: fmt.Sprintf(
 				"%s %s needs access to %s as %s: run ssh <gateway> request %s --role %s --reason '<why>' --wait, then retry",
@@ -327,7 +333,9 @@ func (t *tunnel) choose(ctx context.Context, cands []candidate, rq apirules.Requ
 
 // fileRequest files (or reuses) the access request a hallpass-api call needs, with the agent's reason and the
 // command it reported, so approvers see what the access is for. hallpass-api waits for it and runs the command again.
-func (t *tunnel) fileRequest(ctx context.Context, c candidate, rq apirules.Request, via *access.Grant) *refusal {
+// A request policy approves at once (an auto-approved profile that requires a reason) returns its grant instead, so
+// the call goes through now rather than being refused and run a second time.
+func (t *tunnel) fileRequest(ctx context.Context, c candidate, rq apirules.Request, via *access.Grant) (*access.Grant, *refusal) {
 	reason := t.reason
 	if t.command != "" {
 		reason = strings.TrimSpace(reason + " | Command (reported by the agent): " + t.command)
@@ -335,10 +343,13 @@ func (t *tunnel) fileRequest(ctx context.Context, c candidate, rq apirules.Reque
 	res, err := t.p.o.Access.CreateRequest(ctx, access.CreateRequestInput{AgentID: t.cl.AgentID, KeyID: t.cl.KeyID,
 		ServerID: t.srv.ID, RoleID: c.role.ID, Reason: truncateRunes(reason, access.MaxReasonRunes), AgentSession: t.agentSession})
 	if err != nil {
-		return &refusal{code: "request_failed", via: via, msg: "access could not be requested: " + publicMessage(err)}
+		return nil, &refusal{code: "request_failed", via: via, msg: "access could not be requested: " + publicMessage(err)}
+	}
+	if res.Grant != nil {
+		return res.Grant, nil
 	}
 	t.p.noteFiled(t.cl.AgentID, t.invocation, res.Request.ID)
-	return &refusal{code: "approval_pending", via: via, requestID: res.Request.ID, msg: fmt.Sprintf(
+	return nil, &refusal{code: "approval_pending", via: via, requestID: res.Request.ID, msg: fmt.Sprintf(
 		"%s %s needs approval of access to %s as %s: request %s is waiting for an approver",
 		rq.Method, "/"+strings.Join(rq.Segments, "/"), t.srv.Alias, c.role.Alias, res.Request.ID)}
 }
