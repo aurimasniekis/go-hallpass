@@ -126,8 +126,10 @@ git push origin agent/fix-cart-timeout
 ```
 
 - `ssh center list` marks git remotes with `(git)` and lists their access profiles like roles.
-- HallPass picks the profile that covers the repository and the operation, preferring one you already hold access
-  to, then an auto-approved one, then a requestable one. To use one profile only, name it in the SSH user as
+- Without a profile in the SSH user, HallPass picks the profile that covers the repository and the operation from
+  your agent session's grants: one you already hold access to, then an auto-approved one, then a requestable one,
+  ties going to the profile name. So once a session holds grants for two profiles of a remote, the alphabetically
+  first one serves every push that both cover. To use one profile only, name it in the SSH user as
   `<remote>+<profile>`, like `sftp <server>+<role>`:
 
   ```sh
@@ -136,8 +138,24 @@ git push origin agent/fix-cart-timeout
   ```
 
   That profile is then the only candidate: if it does not cover the repository or the operation, git gets
-  `repository not found or not permitted`, never another profile. The remote URL carries the choice, so git's
-  `includeIf "hasconfig:remote.*.url:…"` can set the matching commit identity.
+  `repository not found or not permitted`, never another profile. A `+` with another remote or an invalid profile
+  name is a usage error.
+
+- **Two identities, one agent.** Pin each clone to its profile and let git pick the matching commit identity from the
+  remote URL, with no wrapper and no extra agent sessions:
+
+  ```sh
+  git clone github+bot@center:github/<owner>/<repo>.git     # pushes go out as profile bot
+  git clone github+alice@center:github/<owner>/<repo>.git   # pushes go out as profile alice
+  ```
+
+  ```ini
+  # ~/.gitconfig
+  [includeIf "hasconfig:remote.*.url:github+bot@center:github/**"]
+    path = ~/.gitconfig-bot      # [user] name and email of the bot account
+  [includeIf "hasconfig:remote.*.url:github+alice@center:github/**"]
+    path = ~/.gitconfig-alice
+  ```
 - A clone or push that needs approval waits for it, printing the request ID on stderr, just like `exec`.
 - Git cannot send a reason. If the profile requires one, request access first, then run git again:
 
@@ -221,17 +239,37 @@ profiles that allow the same call (say an auto-approved bot profile and a reques
 need:
 
 ```sh
-hallpass-api --gateway center --role aurimas --reason "Merge release PR #57" -- gh pr merge 57
+hallpass-api --gateway center --role alice --reason "Merge release PR #57" -- gh pr merge 57
 ```
 
 The proxy then uses only that profile: your access to it if you have it, otherwise a request for it that shows the
 command. Calls the profile's rules do not allow are refused, never sent with another profile. Without the wrapper, `ssh
-center api env --role aurimas` puts the profile into the proxy URL (`http://aurimas@127.0.0.1:18080`), which `gh`,
+center api env --role alice` puts the profile into the proxy URL (`http://alice@127.0.0.1:18080`), which `gh`,
 `curl` and Node tools send with every connection (`gcloud` gets `CLOUDSDK_PROXY_USERNAME`).
 
 Values of options that look like secrets (`--token x`, `--api-key=x`) are replaced by `[redacted]` in the reported
 command. The command is what you report: approvers see it labeled that way, and HallPass still checks every request.
 Exit codes: the command's own, or 83 denied, 84 expired, 85 canceled, 86 still pending, 80 setup failed.
+
+**Public hosts that are not API targets.** Some commands also download from hosts that are not part of any API
+target, and the proxy refuses those ("not an API host you can reach"). `gh attestation verify` is one: it fetches
+Sigstore's trust root from `tuf-repo-cdn.sigstore.dev` and the attestation bundle from a signed URL on
+`tmaproduction.blob.core.windows.net`. Neither needs credentials, so let the tool reach them directly with
+`NO_PROXY`. `hallpass-api` replaces `NO_PROXY` in the command's environment, so set it inside the command:
+
+```sh
+hallpass-api --gateway center -- env NO_PROXY=localhost,127.0.0.1,::1,tuf-repo-cdn.sigstore.dev,tmaproduction.blob.core.windows.net \
+  gh attestation verify release.tar.gz --repo <owner>/<repo>
+```
+
+With `api env`, extend the exported value instead:
+
+```sh
+NO_PROXY="$NO_PROXY,tuf-repo-cdn.sigstore.dev,tmaproduction.blob.core.windows.net" gh attestation verify release.tar.gz --repo <owner>/<repo>
+```
+
+Do not ask for such hosts to be added to an API target: the proxy would send that target's credential to them, and
+`*.blob.core.windows.net` is any Azure storage account.
 
 `exec` and `connect` are refused on API targets.
 

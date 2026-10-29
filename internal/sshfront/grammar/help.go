@@ -66,6 +66,11 @@ By default the proxy picks the access profile for each call: one you hold access
 a requestable one. To use one profile only (no fallback), pass --role <profile> to hallpass-api, or to api env, which
 puts it in the proxy URL (http://<profile>@127.0.0.1:18080).
 
+Public hosts that are not API targets and need no credentials (gh attestation verify fetches from
+tuf-repo-cdn.sigstore.dev and tmaproduction.blob.core.windows.net) are refused by the proxy. Bypass it for them,
+inside the command because hallpass-api replaces NO_PROXY:
+     hallpass-api --gateway <gateway> -- env NO_PROXY=localhost,127.0.0.1,::1,<host>,… gh attestation verify …
+
 api requests <invocation> lists the requests the proxy filed during a hallpass-api run (used by hallpass-api).
 api ca prints only the CA bundle (PEM). Its CAs can sign certificates for the API host names only. A refused call
 returns HTTP 403 with a "hallpass:" message that says why and what to request.

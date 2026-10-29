@@ -211,4 +211,9 @@ still checks every request against the profile's rules, and the timeline records
 actual request. Changing a target's
 hosts issues a new CA, so agents must fetch the bundle again.
 
+Some agent commands also download from public hosts that are not API targets and need no credentials, such as
+Sigstore's trust root and attestation bundles for `gh attestation verify`. Agents reach those directly with `NO_PROXY`
+(see the [agent guide](/agents/#hallpass-api)). Do not add them to a target that has a credential: the proxy would
+send the credential to them, and wildcards such as `*.blob.core.windows.net` cover every customer of that service.
+
 <Shot name="api-request" themed alt="An approved request filed by hallpass-api, with the agent's reason and the gh command it reported" />

@@ -88,7 +88,7 @@ func TestParse(t *testing.T) {
 		{"api env", API{Sub: APIEnv, Port: DefaultAPIProxyPort}},
 		{"api env --port 19000", API{Sub: APIEnv, Port: 19000}},
 		{"api env --port=19001", API{Sub: APIEnv, Port: 19001}},
-		{"api env --role aurimas", API{Sub: APIEnv, Port: DefaultAPIProxyPort, Role: "aurimas"}},
+		{"api env --role alice", API{Sub: APIEnv, Port: DefaultAPIProxyPort, Role: "alice"}},
 		{"api env --role=read --port 19002", API{Sub: APIEnv, Port: 19002, Role: "read"}},
 		{"'list'", List{}},
 	}

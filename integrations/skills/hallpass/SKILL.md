@@ -91,7 +91,9 @@ git push origin agent/my-change
 - If a push or clone needs approval, git waits like `exec` does; tell the user you are waiting.
 - To use one access profile only, name it in the SSH user as `<remote>+<profile>`:
   `git clone github+acme-push@center:github/acme/api.git` (or `git remote set-url origin …`). Without it the gateway
-  picks a profile that covers the repository and operation, preferring one you already hold access to.
+  picks from your session's grants: an active grant first, then auto-approved, then requestable, ties going to the
+  profile name. When you push as two identities (a bot and a person, say), pin every remote to its profile so a grant
+  for one never serves the other.
 - Git cannot send a reason. When access needs one, request first, then retry git:
   `ssh center 'request github --role <profile> --reason "<why>" --wait'`.
 - Push only to branches the profile allows (often `agent/*`), never to protected branches. Do not rewrite pushed
@@ -143,6 +145,15 @@ gh pr list --repo acme/api
   request that profile with a reason (`ssh center 'request github --role <profile> --reason "<why>" --wait'`), then
   retry. "no access profile you can use … allows": the call is outside what you may do; tell the user.
 - Every call is recorded (method, path, status). Make only the calls the task needs.
+- Public hosts that are not API targets and need no credentials (for `gh attestation verify`:
+  `tuf-repo-cdn.sigstore.dev` and `tmaproduction.blob.core.windows.net`) are refused by the proxy. Bypass it for
+  them, inside the command when using `hallpass-api` (it replaces `NO_PROXY`). Never ask for such hosts to be added
+  to an API target: its credential would be sent to them.
+
+  ```sh
+  hallpass-api --gateway center -- env NO_PROXY=localhost,127.0.0.1,::1,tuf-repo-cdn.sigstore.dev,tmaproduction.blob.core.windows.net \
+    gh attestation verify <file> --repo <owner>/<repo>
+  ```
 - `connect` and `exec` are refused on API targets.
 
 ## Sessions (one conversation, one set of grants)

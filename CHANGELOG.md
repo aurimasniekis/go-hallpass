@@ -7,6 +7,15 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+### Changed
+
+- `help api`, the agent guide and the skill explain how to reach public hosts that are not API targets and need no
+  credentials, such as Sigstore for `gh attestation verify`: bypass the proxy with `NO_PROXY`, set inside the
+  command because `hallpass-api` replaces it, and never add such hosts to a target with a credential.
+- The git docs say how the access profile is chosen without `<remote>+<profile>` (an active grant first, then
+  auto-approved, then requestable, ties by name) and show how to keep two identities apart with pinned remotes and
+  git's `includeIf`.
+
 ## [0.7.2] - 2026-10-29
 
 > **Recording format, backup format and keyring not externally reviewed.** The known limitations of

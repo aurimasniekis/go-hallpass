@@ -16,7 +16,10 @@ git clone center:github/acme/api.git      # "center" is the agent's Host entry f
    (push) of `github/acme/api.git`.
 2. HallPass reads `github` as the git remote and `acme/api` as the repository, and picks the **access profile** of
    that remote that covers the repository and the operation. An agent can name one profile in the SSH user
-   (`github+acme-push@center:github/acme/api.git`); only that profile is then considered.
+   (`github+acme-push@center:github/acme/api.git`); only that profile is then considered. Without it, the profile
+   comes from the agent session's grants: an active grant first, then auto-approved, then requestable, ties going to
+   the profile name. Agents that push as two identities (say a bot account and a person's) should pin each remote to
+   its profile, as the [agent guide](/agents/#git) shows.
 3. It reuses the agent's active grant, or creates a request and waits for approval like `connect` does.
 4. It runs the git service on the real host with the profile's login key, which the agent never sees.
 5. For a push, it checks every ref update before anything reaches the host (see [Push rules](#push-rules)).
