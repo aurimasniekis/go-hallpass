@@ -1217,7 +1217,7 @@
 - **Status:** accepted (operator decision, 2026-10-27: strict separation; commands without a session share a default).
   Not a weakening: it only narrows who may use a grant. The session is stated by the agent and is **not** a security
   boundary between conversations; flagged so nobody relies on it as one.
-- **Context:** one agent identity (one key, e.g. `claude-aurimas-mbp`) runs many Claude Code conversations at once. All
+- **Context:** one agent identity (one key, e.g. `claude-alice-laptop`) runs many Claude Code conversations at once. All
   of them saw and reused each other's grants and pending requests, so access approved for one task served every other
   task on the machine.
 - **Decision:**

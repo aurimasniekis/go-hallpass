@@ -65,7 +65,8 @@ features:
 1. You register an agent's **public key** and enroll your servers, each with one or more **roles** (a remote account
    plus what the role allows).
 2. The agent runs ordinary `ssh` against HallPass: `ssh center list`, `ssh center exec web1 -- uptime`. Git and
-   file transfer use the standard tools: `git clone center:github/acme/api.git`, `scp build.tar web1@center:/tmp/`.
+   file transfer use the standard tools: `git clone center:github/acme/api.git`, `scp build.tar web1@center:/tmp/`;
+   `github+acme-push@center:…` pins the git access profile.
 3. Policy decides: the role is hidden, requestable (a human approves), or approved automatically up to a limit.
 4. HallPass opens the destination session itself, records it, and ends it when the grant ends.
 

@@ -84,6 +84,8 @@ sftp web1+deploy@center                       # "+<role>" picks the role
 ```
 
 Neither git nor scp can send a reason: when one is required, `request … --reason … --wait` first, then retry.
+Without `+<profile>`, git uses a profile from your session's grants (an active grant first, then auto-approved, then
+requestable, ties by name); pin the profile in the remote URL to keep two identities apart.
 
 ## APIs
 
@@ -108,6 +110,16 @@ hallpass-api --gateway center --reason "Answer the customer on #42" -- gh issue 
 
 `--role <profile>` (or `api env --role <profile>`) makes the proxy use that access profile only, instead of picking
 one per call.
+
+Public hosts that are not API targets and need no credentials (for `gh attestation verify`:
+`tuf-repo-cdn.sigstore.dev` and `tmaproduction.blob.core.windows.net`) are refused by the proxy. Bypass it with
+`NO_PROXY`, set inside the command because `hallpass-api` replaces it, and never add such hosts to an API target with
+a credential:
+
+```sh
+hallpass-api --gateway center -- env NO_PROXY=localhost,127.0.0.1,::1,tuf-repo-cdn.sigstore.dev,tmaproduction.blob.core.windows.net \
+  gh attestation verify <file> --repo <owner>/<repo>
+```
 
 ## Agent sessions
 
