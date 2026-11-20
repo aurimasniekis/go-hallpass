@@ -1249,21 +1249,22 @@ func TestGitRemoteAPI(t *testing.T) {
 	if srv.Kind != "git" {
 		t.Fatalf("kind: %s", r.body)
 	}
-	rules := map[string]any{"repos": []string{"acme/{api,web}"}, "push": map[string]any{"branches": []string{"agent/**"}, "protected_branches": []string{"main"}}}
+	rules := map[string]any{"repos": []string{"acme/{api,web}"}, "push": map[string]any{"branches": []string{"agent/**"}, "protected_branches": []string{"main"}}, "thin_push_bases": true}
 	r = c.ok("createRole", 201, "POST", "/api/v1/servers/"+srv.ID+"/roles", map[string]any{"alias": "acme-push",
 		"capabilities": []string{"git-read", "git-write"}, "git": rules})
 	var role struct {
 		RemoteUser string `json:"remote_user"`
 		Git        struct {
-			Repos []string
-			Push  struct {
+			Repos         []string
+			ThinPushBases bool `json:"thin_push_bases"`
+			Push          struct {
 				Branches          []string
 				ProtectedBranches []string `json:"protected_branches"`
 			}
 		}
 	}
 	r.json(t, &role)
-	if role.RemoteUser != "git" || role.Git.Repos[0] != "acme/{api,web}" || role.Git.Push.ProtectedBranches[0] != "main" {
+	if role.RemoteUser != "git" || role.Git.Repos[0] != "acme/{api,web}" || role.Git.Push.ProtectedBranches[0] != "main" || !role.Git.ThinPushBases {
 		t.Fatalf("profile: %s", r.body)
 	}
 	if r := c.do("POST", "/api/v1/servers/"+srv.ID+"/roles", map[string]any{"alias": "bad", "git": map[string]any{"repos": []string{"acme/{api"}}}); r.status != 422 {

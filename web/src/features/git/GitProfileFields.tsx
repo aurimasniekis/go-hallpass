@@ -98,6 +98,14 @@ export function GitProfileFields() {
           >
             <Switch aria-label="Allow force-push" />
           </Form.Item>
+          <Form.Item
+            label="Thin push bases"
+            name="thin_push_bases"
+            valuePropName="checked"
+            extra="Opt in to thin-pack push bases (ADR-0064). Off by default. Not active yet."
+          >
+            <Switch aria-label="Allow thin push bases" />
+          </Form.Item>
         </>
       ) : null}
       <ApprovalsRequiredField />

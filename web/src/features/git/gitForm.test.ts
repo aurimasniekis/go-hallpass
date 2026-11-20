@@ -27,6 +27,7 @@ describe('git profile form', () => {
       branches: ['agent/**'],
       tags: ['v*-rc.*'],
       allow_delete: true,
+      thin_push_bases: true,
     };
     const body = toGitProfileInput(values);
     expect(body.capabilities).toEqual(['git-read', 'git-write']);
@@ -37,6 +38,7 @@ describe('git profile form', () => {
       allow_delete: true,
       allow_force_push: false,
     });
+    expect(body.git.thin_push_bases).toBe(true);
     const role = {
       ...body,
       id: 'rol_1',
@@ -51,6 +53,16 @@ describe('git profile form', () => {
       'Branches: agent/** · Protected: main master · Tags: v*-rc.* · Deletes allowed',
     );
     expect(pushSummary({ capabilities: ['git-read'], git: { repos: ['x'] } })).toBe('Read only');
+  });
+
+  it('does not send thin_push_bases without write', () => {
+    const body = toGitProfileInput({
+      ...GIT_PROFILE_DEFAULTS,
+      alias: 'ro',
+      repos: ['a/b'],
+      thin_push_bases: true,
+    });
+    expect(body.git.thin_push_bases).toBeUndefined();
   });
 
   it('recognizes preset hosts', () => {

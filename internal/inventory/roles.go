@@ -59,6 +59,8 @@ const MaxApprovalsRequired = 5
 type GitRules struct {
 	Repos []string          `json:"repos"`
 	Push  gitproto.RefRules `json:"push"`
+	// ThinPushBases opts the profile into thin-pack push bases (ADR-0064). Absent in stored JSON means false.
+	ThinPushBases bool `json:"thin_push_bases,omitempty"`
 }
 
 // Limits for git rules.
@@ -98,6 +100,9 @@ func validateGitRules(v *apperr.Validation, r *Role) {
 	pushRules := len(p.Branches)+len(p.Tags) > 0 || p.AllowDelete
 	if pushRules && !r.Has(CapGitWrite) {
 		v.Add("git.push", "push rules need the git-write capability")
+	}
+	if r.Git.ThinPushBases && (!r.Has(CapGitRead) || !r.Has(CapGitWrite)) {
+		v.Add("git.thin_push_bases", "thin_push_bases needs the git-read and git-write capabilities")
 	}
 	if r.Has(CapGitWrite) && !pushRules {
 		v.Add("git.push", "git-write needs at least one branch or tag pattern")

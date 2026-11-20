@@ -448,6 +448,41 @@ func TestGitRemoteProfiles(t *testing.T) {
 	if _, err := svc.CreateRole(ctx, admin, git.ID, RoleInput{Alias: ptr("acme-push"), Capabilities: ptr([]string{CapGitRead, CapGitWrite}), Git: push}); err != nil {
 		t.Fatal(err)
 	}
+	if got, _ := svc.GetRole(ctx, read.ID); got.Git.ThinPushBases {
+		t.Fatal("thin_push_bases must default to false")
+	}
+	thin := &GitRules{Repos: []string{"acme/api"}, ThinPushBases: true, Push: gitproto.RefRules{Branches: []string{"agent/**"}}}
+	tr, err := svc.CreateRole(ctx, admin, git.ID, RoleInput{Alias: ptr("acme-thin"), Capabilities: ptr([]string{CapGitRead, CapGitWrite}), Git: thin})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := svc.GetRole(ctx, tr.ID); got.Git == nil || !got.Git.ThinPushBases {
+		t.Fatalf("thin_push_bases not stored: %+v", got.Git)
+	}
+	if _, err := svc.CreateRole(ctx, admin, git.ID, RoleInput{Alias: ptr("thin-ro"), Git: &GitRules{Repos: []string{"x/y"}, ThinPushBases: true}}); !errors.Is(err, apperr.ErrInvalid) {
+		t.Fatalf("thin_push_bases without git-write accepted: %v", err)
+	}
+	if _, err := svc.CreateRole(ctx, admin, git.ID, RoleInput{Alias: ptr("thin-wo"), Capabilities: ptr([]string{CapGitWrite}), Git: &GitRules{Repos: []string{"x/y"}, ThinPushBases: true, Push: gitproto.RefRules{Branches: []string{"agent/**"}}}}); !errors.Is(err, apperr.ErrInvalid) {
+		t.Fatalf("thin_push_bases on a write-only profile accepted: %v", err)
+	}
+	// Update path: dropping git-read or git-write from a profile that has the flag is refused, and the error must name
+	// git.thin_push_bases. The read-only case drops the branch rules: they need git-write and would be reported first.
+	for _, tc := range []struct {
+		caps []string
+		git  *GitRules
+	}{
+		{[]string{CapGitRead}, &GitRules{Repos: []string{"acme/api"}, ThinPushBases: true}},
+		{[]string{CapGitWrite}, &GitRules{Repos: []string{"acme/api"}, ThinPushBases: true, Push: gitproto.RefRules{Branches: []string{"agent/**"}}}},
+	} {
+		cur, err := svc.GetRole(ctx, tr.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = svc.UpdateRole(ctx, admin, tr.ID, RoleInput{Version: cur.Version, Capabilities: ptr(tc.caps), Git: tc.git})
+		if !errors.Is(err, apperr.ErrInvalid) || !namesField(err, "git.thin_push_bases") {
+			t.Fatalf("update to %v with thin_push_bases: want git.thin_push_bases rejection, got %v", tc.caps, err)
+		}
+	}
 	for name, in := range map[string]RoleInput{
 		"no repos":            {Alias: ptr("a1")},
 		"empty repos":         {Alias: ptr("a2"), Git: &GitRules{}},
@@ -478,4 +513,18 @@ func TestGitRemoteProfiles(t *testing.T) {
 	if err != nil || len(upd.Git.Repos) != 1 {
 		t.Fatalf("update git rules: %+v %v", upd, err)
 	}
+}
+
+// namesField reports whether err is a validation error whose field list includes field.
+func namesField(err error, field string) bool {
+	var ae *apperr.Error
+	if !errors.As(err, &ae) {
+		return false
+	}
+	for _, f := range ae.Fields {
+		if f.Field == field {
+			return true
+		}
+	}
+	return false
 }
