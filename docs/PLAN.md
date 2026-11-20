@@ -28,7 +28,7 @@ listed in DECISIONS.md §2.
 
 | # | Assumption | Consequence if false |
 |---|---|---|
-| A-2 | Latest stable Go (1.27.3 at WP01, per user instruction 2026-10-23). `go.mod` declares `go 1.27.3`, and the toolchain auto-downloads where older. Bump to new stable releases as they ship. | Older distro toolchains are not supported; use the official toolchain or the container build. |
+| A-2 | Latest stable Go (1.27.3 at WP01, per user instruction 2026-10-23; 1.27.4 since 2026-11-20 for GO-2026-6859). `go.mod` declares `go 1.27.4`, and the toolchain auto-downloads where older. Bump to new stable releases as they ship. | Older distro toolchains are not supported; use the official toolchain or the container build. |
 | A-3 | Node 24 LTS + pnpm (via corepack) for the frontend. | Adjust in WP19. |
 | A-4 | Destinations run OpenSSH `sshd` ≥ 8.2 on POSIX systems with a POSIX-compatible login shell. | Windows/other sshd are unsupported in v1. |
 | A-5 | Deployments are Linux (amd64/arm64) on local block storage (ext4/xfs/btrfs/zfs). macOS is supported for development only. | Storage checks (HP-DB-007) are Linux-specific. |

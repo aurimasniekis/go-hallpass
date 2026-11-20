@@ -19,7 +19,7 @@
 #           --build-arg BUILD_DATE=2026-01-02T03:04:05Z -t hallpass:local .
 
 ARG NODE_IMAGE=docker.io/library/node:24.22.0-bookworm-slim@sha256:91acba91b842bec0bf7ea6f5e09c644c7ccad72c4996ed9616d861d1c7cd60d4
-ARG GO_IMAGE=docker.io/library/golang:1.27.3-bookworm@sha256:972b4110ba0f47539a975c31e52c64765e1ff19f2d74469ae4a595c6676e80a5
+ARG GO_IMAGE=docker.io/library/golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea
 ARG RUNTIME_IMAGE=gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 
 # ---------------------------------------------------------------------------------------------------------------------
