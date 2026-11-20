@@ -48,7 +48,11 @@ var (
 //
 // objectFormat is "sha1" or "sha256"; wants are lower-case hex IDs of that length. maxBytes bounds everything read
 // from rw, the advertisement included. When ctx ends before the fetch does, rw is closed to unblock a pending read or
-// write, so a silent host cannot hold the call past the deadline. After a completed fetch rw is left open.
+// write, so a silent host cannot hold the call past the deadline. That deadline is only as good as rw.Close(): a
+// Close that does not unblock a pending Read or Write (an ssh.Channel, say, whose Close must really tear the
+// session down) leaves the call blocked. If rw was closed because of ctx, the call returns ctx.Err() and never a
+// pack, even when the response had already been read in full. After a completed fetch with ctx still live, rw is
+// left open.
 //
 // The returned pack is NOT verified: it may hold any objects, deltas or garbage. The caller must check it.
 func FetchCommits(ctx context.Context, rw io.ReadWriteCloser, objectFormat string, wants []string, maxBytes int64) ([]byte, error) {
@@ -82,10 +86,10 @@ func FetchCommits(ctx context.Context, rw io.ReadWriteCloser, objectFormat strin
 		return nil, err
 	}
 
-	// finished is set under mu once the fetch has returned, so a cancellation racing with a completed fetch never
-	// closes rw.
+	// finished is set under mu once the fetch has returned, so a cancellation arriving later never closes rw.
+	// closed is set under mu by the watcher when it closed rw; a pack read from an rw we closed is discarded.
 	var mu sync.Mutex
-	finished := false
+	finished, closed := false, false
 	stop := make(chan struct{})
 	defer close(stop)
 	go func() {
@@ -93,6 +97,7 @@ func FetchCommits(ctx context.Context, rw io.ReadWriteCloser, objectFormat strin
 		case <-ctx.Done():
 			mu.Lock()
 			if !finished {
+				closed = true
 				_ = rw.Close()
 			}
 			mu.Unlock()
@@ -101,9 +106,16 @@ func FetchCommits(ctx context.Context, rw io.ReadWriteCloser, objectFormat strin
 	}()
 
 	pack, err := fetchCommits(ctx, rw, objectFormat, uniq, maxBytes)
+	if afterFetchHook != nil {
+		afterFetchHook()
+	}
 	mu.Lock()
 	finished = true
+	wasClosed := closed
 	mu.Unlock()
+	if wasClosed {
+		return nil, ctx.Err()
+	}
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
 			return nil, cerr
@@ -112,6 +124,9 @@ func FetchCommits(ctx context.Context, rw io.ReadWriteCloser, objectFormat strin
 	}
 	return pack, nil
 }
+
+// afterFetchHook is a test seam: it runs after the fetch returned and before the watcher is fenced off.
+var afterFetchHook func()
 
 func fetchCommits(ctx context.Context, rw io.ReadWriter, objectFormat string, wants []string, maxBytes int64) ([]byte, error) {
 	r := &pktReader{ctx: ctx, r: bufio.NewReader(&budgetReader{r: rw, left: maxBytes})}

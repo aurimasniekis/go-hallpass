@@ -221,6 +221,14 @@ func (h *hangingHost) Close() error {
 	return h.pw.Close()
 }
 
+// closeSignalHost reports Close on a channel.
+type closeSignalHost struct {
+	*scriptedHost
+	closedCh chan struct{}
+}
+
+func (h *closeSignalHost) Close() error { close(h.closedCh); return nil }
+
 func TestFetchCommitsContext(t *testing.T) {
 	t.Run("already cancelled", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -240,6 +248,22 @@ func TestFetchCommitsContext(t *testing.T) {
 		}
 		if h.closed {
 			t.Error("rw closed after a successful fetch")
+		}
+	})
+	t.Run("cancel after the response was read discards the pack", func(t *testing.T) {
+		// Deterministic: the hook cancels ctx after the fetch succeeded and waits for the watcher to close rw,
+		// which is the window between fetchCommits returning and FetchCommits taking its lock.
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		h := &closeSignalHost{scriptedHost: newScriptedHost(advert(goodAdvert, "sha1") + goodResponse("PACK")), closedCh: make(chan struct{})}
+		afterFetchHook = func() {
+			cancel()
+			<-h.closedCh
+		}
+		defer func() { afterFetchHook = nil }()
+		pack, err := FetchCommits(ctx, h, "sha1", []string{fetchWant1}, 1<<20)
+		if !errors.Is(err, context.Canceled) || pack != nil {
+			t.Fatalf("pack %q, err = %v; want nil and context.Canceled", pack, err)
 		}
 	})
 	t.Run("deadline unblocks a silent host", func(t *testing.T) {
@@ -333,20 +357,35 @@ func TestFetchCommitsGitUploadPack(t *testing.T) {
 }
 
 func FuzzFetchResponse(f *testing.F) {
-	f.Add([]byte(advert(goodAdvert, "sha1") + goodResponse("PACKdata")))
-	f.Add([]byte(advert(goodAdvert, "sha1") + pkt("packfile\n") + band(1, "PACK") + "0000"))
-	f.Add([]byte(advert(goodAdvert, "sha1") + pkt("ERR not our ref\n")))
-	f.Add([]byte(advert(goodAdvert, "sha1") + pkt("packfile\n") + band(3, "x")))
-	f.Add([]byte(pkt(fetchWant1 + " HEAD\x00shallow filter\n")))
-	f.Add([]byte(advert(goodAdvert, "sha256") + goodResponse("PACKdata")))
-	f.Add([]byte(advert("shallow filter", "sha256") + pkt("packfile\n") + band(1, "PACK") + "0000"))
-	f.Add([]byte(advert(goodAdvert, "sha1") + pkt("shallow-info\n") + pkt("shallow "+fetchWant1+"\n") + pkt("shallow "+fetchWant2+"\n") +
+	f.Add([]byte("\x00" + advert(goodAdvert, "sha1") + goodResponse("PACKdata")))
+	f.Add([]byte("\x00" + advert(goodAdvert, "sha1") + pkt("packfile\n") + band(1, "PACK") + "0000"))
+	f.Add([]byte("\x00" + advert(goodAdvert, "sha1") + pkt("ERR not our ref\n")))
+	f.Add([]byte("\x00" + advert(goodAdvert, "sha1") + pkt("packfile\n") + band(3, "x")))
+	f.Add([]byte("\x00" + pkt(fetchWant1+" HEAD\x00shallow filter\n")))
+	f.Add([]byte("\x01" + advert(goodAdvert, "sha256") + goodResponse("PACKdata")))
+	f.Add([]byte("\x01" + advert("shallow filter", "sha256") + pkt("packfile\n") + band(1, "PACK") + "0000"))
+	f.Add([]byte("\x00" + advert(goodAdvert, "sha1") + pkt("shallow-info\n") + pkt("shallow "+fetchWant1+"\n") + pkt("shallow "+fetchWant2+"\n") +
 		pkt("unshallow "+fetchWant2+"\n") + "0001" + pkt("packfile\n") + band(2, "p") + band(1, "PACK") + band(1, "data") + "0000"))
-	f.Add([]byte("0001000200030004"))
+	f.Add([]byte("\x00" + "0001000200030004"))
+	f.Add([]byte("\x06" + advert(goodAdvert, "sha1") + goodResponse("PACKdata")))   // 4 wants, sha1
+	f.Add([]byte("\x07" + advert(goodAdvert, "sha256") + goodResponse("PACKdata"))) // 4 wants, sha256
 	f.Fuzz(func(t *testing.T, b []byte) {
 		const limit = 1 << 16
+		// The first byte picks the object format and the number of wants (1..4); the rest is the host's output.
+		format, idLen, nwants := "sha1", 40, 1
+		if len(b) > 0 {
+			if b[0]&1 == 1 {
+				format, idLen = "sha256", 64
+			}
+			nwants = 1 + int(b[0]>>1)%4
+			b = b[1:]
+		}
+		wants := make([]string, nwants)
+		for i := range wants {
+			wants[i] = strings.Repeat(string("0123456789abcdef"[i+1]), idLen)
+		}
 		h := &scriptedHost{in: bytes.NewReader(b)}
-		pack, err := FetchCommits(context.Background(), h, "sha1", []string{fetchWant1}, limit)
+		pack, err := FetchCommits(context.Background(), h, format, wants, limit)
 		if err != nil {
 			if pack != nil {
 				t.Fatal("pack returned with an error")
@@ -356,7 +395,8 @@ func FuzzFetchResponse(f *testing.F) {
 		if len(pack) == 0 || len(pack) > limit || len(pack) > len(b) {
 			t.Fatalf("pack of %d bytes from %d input bytes", len(pack), len(b))
 		}
-		if !bytes.HasPrefix(h.sent.Bytes(), []byte(pkt("command=fetch\n"))) || bytes.Contains(h.sent.Bytes(), []byte("have ")) {
+		if !bytes.HasPrefix(h.sent.Bytes(), []byte(pkt("command=fetch\n"))) || bytes.Contains(h.sent.Bytes(), []byte("have ")) ||
+			bytes.Count(h.sent.Bytes(), []byte("want ")) != nwants {
 			t.Fatalf("bad request %q", h.sent.String())
 		}
 	})
