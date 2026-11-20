@@ -223,3 +223,106 @@ func TestPulseEvents(t *testing.T) {
 		t.Fatalf("disabled pulse is not validated: %v", err)
 	}
 }
+
+func TestThinPushBasesDefaults(t *testing.T) {
+	cfg, err := Load(writeFile(t, minimalProd), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := ThinPushBasesConfig{Enabled: true, MaxBases: 256, MaxFetchBytes: 8 << 20, Timeout: Duration(20 * time.Second), MaxConcurrent: 4, MaxConcurrentPerAgent: 1}
+	if got := cfg.Git.ThinPushBases; got != want {
+		t.Fatalf("defaults = %+v, want %+v", got, want)
+	}
+}
+
+func TestThinPushBasesYAML(t *testing.T) {
+	cfg, err := Load(writeFile(t, minimalProd+"git:\n  thin_push_bases:\n    enabled: false\n    max_bases: 16\n    max_fetch_bytes: 1048576\n    timeout: 45s\n    max_concurrent: 8\n    max_concurrent_per_agent: 2\n"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := cfg.Git.ThinPushBases
+	if got.Enabled || got.MaxBases != 16 || got.MaxFetchBytes != 1<<20 || got.Timeout.D() != 45*time.Second ||
+		got.MaxConcurrent != 8 || got.MaxConcurrentPerAgent != 2 {
+		t.Fatalf("yaml not applied: %+v", got)
+	}
+	if _, err := Load(writeFile(t, minimalProd+"git:\n  thin_push_bases:\n    enable: true\n"), nil); err == nil {
+		t.Fatal("unknown key under git.thin_push_bases must be rejected")
+	}
+}
+
+func TestThinPushBasesBounds(t *testing.T) {
+	ok := func(field, value string) string {
+		return minimalProd + "git:\n  thin_push_bases:\n    " + field + ": " + value + "\n"
+	}
+	// Each bound is checked at both ends: the value just inside is accepted, the value just outside is refused.
+	cases := []struct {
+		name, content, problem string
+		valid                  bool
+	}{
+		{"max_bases 0", ok("max_bases", "0"), "git.thin_push_bases.max_bases must be within 1..256, got 0", false},
+		{"max_bases 257", ok("max_bases", "257"), "git.thin_push_bases.max_bases must be within 1..256, got 257", false},
+		{"max_bases 1", ok("max_bases", "1"), "", true},
+		{"max_bases 256", ok("max_bases", "256"), "", true},
+		{"max_fetch_bytes below", ok("max_fetch_bytes", "65535"), "max_fetch_bytes must be within 65536..67108864", false},
+		{"max_fetch_bytes above", ok("max_fetch_bytes", "67108865"), "max_fetch_bytes must be within 65536..67108864", false},
+		{"max_fetch_bytes min", ok("max_fetch_bytes", "65536"), "", true},
+		{"max_fetch_bytes max", ok("max_fetch_bytes", "67108864"), "", true},
+		{"timeout below", ok("timeout", "500ms"), "git.thin_push_bases.timeout must be within 1s..2m0s", false},
+		{"timeout above", ok("timeout", "121s"), "git.thin_push_bases.timeout must be within 1s..2m0s", false},
+		{"timeout min", ok("timeout", "1s"), "", true},
+		{"timeout max", ok("timeout", "120s"), "", true},
+		{"max_concurrent 0", ok("max_concurrent", "0"), "git.thin_push_bases.max_concurrent must be within 1..64, got 0", false},
+		{"max_concurrent 65", ok("max_concurrent", "65"), "git.thin_push_bases.max_concurrent must be within 1..64, got 65", false},
+		{"max_concurrent_per_agent 0", ok("max_concurrent_per_agent", "0"), "max_concurrent_per_agent must be within 1..4, got 0", false},
+		{"max_concurrent_per_agent 5", ok("max_concurrent_per_agent", "5"), "max_concurrent_per_agent must be within 1..4, got 5", false},
+		{"per agent above global", minimalProd + "git:\n  thin_push_bases:\n    max_concurrent: 1\n    max_concurrent_per_agent: 2\n", "must not exceed git.thin_push_bases.max_concurrent", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := Load(writeFile(t, c.content), nil)
+			if c.valid {
+				if err != nil {
+					t.Fatalf("expected valid, got %v", err)
+				}
+				return
+			}
+			if ps := problems(t, err); !hasProblem(ps, c.problem) {
+				t.Fatalf("problems %v, want %q", ps, c.problem)
+			}
+		})
+	}
+}
+
+func TestThinPushBasesValidatedWhileDisabled(t *testing.T) {
+	// Bounds are checked even with the switch off, so a later enable cannot start from an invalid value.
+	content := minimalProd + "git:\n  thin_push_bases:\n    enabled: false\n    max_bases: 0\n"
+	if _, err := Load(writeFile(t, content), nil); !hasProblem(problems(t, err), "max_bases") {
+		t.Fatalf("expected max_bases problem, got %v", err)
+	}
+}
+
+func TestThinPushBasesEnvOverrides(t *testing.T) {
+	env := []string{
+		"HALLPASS_GIT_THIN_PUSH_BASES_ENABLED=false",
+		"HALLPASS_GIT_THIN_PUSH_BASES_MAX_BASES=12",
+		"HALLPASS_GIT_THIN_PUSH_BASES_MAX_FETCH_BYTES=1048576",
+		"HALLPASS_GIT_THIN_PUSH_BASES_TIMEOUT=45s",
+		"HALLPASS_GIT_THIN_PUSH_BASES_MAX_CONCURRENT=8",
+		"HALLPASS_GIT_THIN_PUSH_BASES_MAX_CONCURRENT_PER_AGENT=2",
+	}
+	cfg, err := Load(writeFile(t, minimalProd), env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := cfg.Git.ThinPushBases
+	if got.Enabled || got.MaxBases != 12 || got.MaxFetchBytes != 1<<20 || got.Timeout.D() != 45*time.Second ||
+		got.MaxConcurrent != 8 || got.MaxConcurrentPerAgent != 2 {
+		t.Fatalf("overrides not applied: %+v", got)
+	}
+	if _, err := Load(writeFile(t, minimalProd), []string{"HALLPASS_GIT_THIN_PUSH_BASES_MAX_BASES=257"}); !hasProblem(problems(t, err), "max_bases") {
+		t.Fatalf("env value 257 must be refused, got %v", err)
+	}
+	if _, err := Load(writeFile(t, minimalProd), []string{"HALLPASS_GIT_THIN_PUSH_BASES_ENABLED=maybe"}); err == nil {
+		t.Fatal("expected parse error for a non-boolean enabled override")
+	}
+}

@@ -71,6 +71,14 @@ func Default() *Config {
 			ReauthWindow:           Duration(5 * time.Minute),
 			PasswordMinBytes:       12,
 		},
+		Git: GitConfig{ThinPushBases: ThinPushBasesConfig{
+			Enabled:               true,
+			MaxBases:              256,
+			MaxFetchBytes:         8 << 20,
+			Timeout:               Duration(20 * time.Second),
+			MaxConcurrent:         4,
+			MaxConcurrentPerAgent: 1,
+		}},
 		Telemetry: TelemetryConfig{Prometheus: true},
 		Shutdown:  ShutdownConfig{DrainTimeout: Duration(30 * time.Second)},
 	}

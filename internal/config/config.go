@@ -72,6 +72,7 @@ type Config struct {
 	Console   ConsoleConfig   `yaml:"console"`
 	Events    EventsConfig    `yaml:"events"`
 	APIProxy  APIProxyConfig  `yaml:"api_proxy"`
+	Git       GitConfig       `yaml:"git"`
 	Dev       DevConfig       `yaml:"dev"`
 }
 
@@ -218,6 +219,31 @@ type APIProxyConfig struct {
 	AllowCIDRs []string `yaml:"allow_cidrs"`
 	// AllowSpecialCIDRs re-allows private and special-purpose ranges, which are denied by default.
 	AllowSpecialCIDRs []string `yaml:"allow_special_cidrs"`
+}
+
+// GitConfig configures git remotes beyond the defaults of each access profile.
+type GitConfig struct {
+	ThinPushBases ThinPushBasesConfig `yaml:"thin_push_bases"`
+}
+
+// ThinPushBasesConfig configures fetching the delta bases of a thin push from the host, so the push can be proven
+// a fast-forward (R-17, ADR-0064, docs/security/thin-push-bases.md §5). The feature is off everywhere unless an
+// access profile opts in; Enabled is the operator's global switch over those opt-ins.
+type ThinPushBasesConfig struct {
+	// Enabled lets access profiles opt in. False turns the feature off for every profile at once.
+	Enabled bool `yaml:"enabled"`
+	// MaxBases is the number of bases wanted per fetch (1..256; every candidate is recorded).
+	MaxBases int `yaml:"max_bases"`
+	// MaxFetchBytes caps the whole upload-pack response (64 KiB..64 MiB).
+	MaxFetchBytes int64 `yaml:"max_fetch_bytes"`
+	// Timeout runs from the decision to fetch, including revalidation and the slot wait, until the trailer decision
+	// (1s..120s): the checksum is withheld for at most one timeout.
+	Timeout Duration `yaml:"timeout"`
+	// MaxConcurrent is the number of simultaneous fetches gateway-wide (1..64).
+	MaxConcurrent int `yaml:"max_concurrent"`
+	// MaxConcurrentPerAgent is the number of simultaneous fetches per agent, on top of MaxConcurrent (1..4). It must
+	// not exceed MaxConcurrent.
+	MaxConcurrentPerAgent int `yaml:"max_concurrent_per_agent"`
 }
 
 // EventsConfig configures event publishing (ADR-0057).
