@@ -465,15 +465,22 @@ func TestGitRemoteProfiles(t *testing.T) {
 	if _, err := svc.CreateRole(ctx, admin, git.ID, RoleInput{Alias: ptr("thin-wo"), Capabilities: ptr([]string{CapGitWrite}), Git: &GitRules{Repos: []string{"x/y"}, ThinPushBases: true, Push: gitproto.RefRules{Branches: []string{"agent/**"}}}}); !errors.Is(err, apperr.ErrInvalid) {
 		t.Fatalf("thin_push_bases on a write-only profile accepted: %v", err)
 	}
-	// Update path: dropping git-read or git-write from a profile that has the flag is refused.
-	for _, caps := range [][]string{{CapGitRead}, {CapGitWrite}} {
+	// Update path: dropping git-read or git-write from a profile that has the flag is refused, and the error must name
+	// git.thin_push_bases. The read-only case drops the branch rules: they need git-write and would be reported first.
+	for _, tc := range []struct {
+		caps []string
+		git  *GitRules
+	}{
+		{[]string{CapGitRead}, &GitRules{Repos: []string{"acme/api"}, ThinPushBases: true}},
+		{[]string{CapGitWrite}, &GitRules{Repos: []string{"acme/api"}, ThinPushBases: true, Push: gitproto.RefRules{Branches: []string{"agent/**"}}}},
+	} {
 		cur, err := svc.GetRole(ctx, tr.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = svc.UpdateRole(ctx, admin, tr.ID, RoleInput{Version: cur.Version, Capabilities: ptr(caps)})
-		if !errors.Is(err, apperr.ErrInvalid) {
-			t.Fatalf("update to %v with thin_push_bases accepted: %v", caps, err)
+		_, err = svc.UpdateRole(ctx, admin, tr.ID, RoleInput{Version: cur.Version, Capabilities: ptr(tc.caps), Git: tc.git})
+		if !errors.Is(err, apperr.ErrInvalid) || !namesField(err, "git.thin_push_bases") {
+			t.Fatalf("update to %v with thin_push_bases: want git.thin_push_bases rejection, got %v", tc.caps, err)
 		}
 	}
 	for name, in := range map[string]RoleInput{
@@ -506,4 +513,18 @@ func TestGitRemoteProfiles(t *testing.T) {
 	if err != nil || len(upd.Git.Repos) != 1 {
 		t.Fatalf("update git rules: %+v %v", upd, err)
 	}
+}
+
+// namesField reports whether err is a validation error whose field list includes field.
+func namesField(err error, field string) bool {
+	var ae *apperr.Error
+	if !errors.As(err, &ae) {
+		return false
+	}
+	for _, f := range ae.Fields {
+		if f.Field == field {
+			return true
+		}
+	}
+	return false
 }
