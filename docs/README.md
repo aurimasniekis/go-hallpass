@@ -75,5 +75,5 @@ Internal design and status documents. They use requirement IDs (`HP-*`); nothing
 | [DECISIONS.md](DECISIONS.md) | Architectural decision records and open review items. |
 | [THREAT_MODEL.md](THREAT_MODEL.md) | Assets, trust boundaries, threats, mitigations, residual risks. |
 | [TEST_STRATEGY.md](TEST_STRATEGY.md) | Test layers, requirement→test matrix, fault catalog, performance method. |
-| [security/](security/) | Internal security review report and checklist. |
+| [security/](security/) | Internal security review report and checklist; security designs awaiting review (thin-push-bases.md, ADR-0064). |
 | [evidence/](evidence/) | Release-gate evaluations and test evidence. |

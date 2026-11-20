@@ -1285,6 +1285,69 @@
 - **Consequences:** agents whose repositories write bitmaps need `--no-thin` for updates of existing branches under
   profiles without `allow_force_push`. The packs they send are somewhat larger.
 
+### ADR-0064 — Git: fetch missing delta bases to prove thin pushes (security-relevant change)
+
+- **Status:** **proposed** (design requested by the operator, 2026-11-20; review item R-17). **Not implemented.**
+  **Security-relevant change, flagged for operator review:** during a push, HallPass would read objects from the git
+  host with the access profile's credential, which the agent did not ask for, and base a force-push decision on
+  content that came from the host. The fast-forward rule itself (ADR-0047) is not relaxed. Full design, threat
+  analysis, implementation plan and task split: [security/thin-push-bases.md](security/thin-push-bases.md).
+- **Context:** ADR-0063. After a repack with bitmaps, git's default thin push can send a new commit as a delta
+  against a commit only the host has. HallPass cannot rebuild it, the proof is Unknown and a real fast-forward is
+  refused; the agent must push again with `git push --no-thin`.
+- **Decision (proposed):**
+  - Only when an update that needs a proof is still Unknown and the pack is thin: while the pack checksum is still
+    withheld, HallPass revalidates the grant and, **only if the profile also has `git-read`** for the repository,
+    opens a second session on the push's existing, host-key-verified SSH connection (same credential, same
+    repository path) and runs `git-upload-pack` with protocol v2: `want` exactly the missing base IDs of commit-sized
+    `REF_DELTA`s (at most `max_bases`), `deepen 1`, `filter tree:0`, no `have`, no thin pack. Hosts without
+    `shallow` and `filter`, or that answer protocol v0, are not asked.
+  - Every returned object's ID is recomputed and kept only if it is a requested ID and a commit. The retained deltas
+    are applied to those bases; the IDs of the resulting commits are computed from their content and they join the
+    commit graph. Fetched bases **never** become graph nodes, so the proof is still a parent chain of pushed commits
+    from the new tip to the old tip.
+  - The checksum is written only if every checked update is now proven and the channel was not terminated meanwhile.
+    Every other outcome (disabled, no `git-read`, no candidates, a limit, timeout, host refusal, hash mismatch, a real
+    non-fast-forward) is today's refusal with the `--no-thin` hint.
+  - Limits (config `git.thin_push_bases`): `enabled`, `max_bases` 256, `max_fetch_bytes` 8 MiB, `timeout` 20 s,
+    `max_concurrent` 4; retained candidate deltas ≤ 16 MiB and 4096 within the existing 64 MiB commit budget. One
+    fetch per push, no retries. A host that refuses a second session gets one more dial to the same enrolled target
+    with the same verifier and credential.
+  - Recording: metadata only (ADR-0047): `base_fetch` (result class, counts, bytes, duration) on `git.push` and
+    `git.push_refused`, `bytes_fetched` on `git.transferred`, metrics per result. Host error text never reaches the
+    agent.
+- **Threats considered** (details in the design): an agent using the proof as an oracle on host objects it may not
+  read (mitigated by requiring `git-read`, which can already fetch them); SSRF (no new target: same connection,
+  validated path, wants are hex IDs); proof poisoning by a wrong base (IDs recomputed; bases never graph nodes; a
+  malicious host can only cause a refusal); racing the ref (the host's compare-and-swap on the old ID); load on the
+  host (`filter tree:0` + `deepen 1` required, measured ~1 KB per commit versus a whole snapshot without the filter;
+  caps); gateway exhaustion (caps, semaphore, leak checks); hostile upload-pack output (bounded parser, fuzzing);
+  revocation during the fetch (revalidation, enforcer closes both sessions, trailer only while live).
+- **Alternatives:**
+  - *Keep `--no-thin` only* (ADR-0063): no new risk or host traffic; agents fail the first push after a repack and
+    send larger packs. The safe default if this ADR is rejected.
+  - *Ask the host for ancestry* (merge-base, or fetching history around the old tip): the new commits are not on the
+    host before the update, so the host cannot answer for them; walking host history reads more than the bases.
+  - *Compare API of a hosted service*: same problem (the new tip does not exist there yet); checking after the update
+    would need a rollback, so the host would briefly hold a forbidden update; needs an API credential and works for
+    one vendor only.
+  - *Server-side pre-receive hook or host branch protection*: not available on every host (hosted services offer
+    branch protection, not custom hooks), and not per HallPass profile. Remains the recommended second layer.
+  - *Fetch the bases through a host API* (for example a commit endpoint): returns parsed fields, not the raw object,
+    so the ID cannot be verified exactly. Rejected.
+- **Effect on the contract:** no GOAL.md requirement changes. HP-SSH-025 applies to the upload-pack session
+  (revalidated before it opens); HP-SSH-011/G-7 hold because no new destination is dialed; HP-GRT-008 holds through
+  the channel's terminator; HP-SSH-014/015 through the caps and leak checks. Interpretation recorded here: the fetch
+  session is part of the registered push channel, not a new agent channel, so it does not count against concurrency
+  limits (HP-GRT-006). THREAT_MODEL T-28 describes the git push gate and this proposal.
+- **Open for the operator:** (1) approve the design or keep `--no-thin` only; (2) `enabled` by default (proposed:
+  on, since it needs `git-read` and does not change the proof) or opt-in; (3) the fallback second dial when a host
+  refuses a second session (proposed: yes); (4) T0, a spike against a hosted git service through the gateway.
+- **Consequences:** thin pushes after a bitmap repack work unchanged for profiles with both `git-read` and
+  `git-write` on hosts that support protocol v2 with `filter` and `shallow`. Such a push may cause one extra fetch
+  under the profile, visible in the host's logs and in HallPass's push event. Write-only profiles and other hosts
+  keep the `--no-thin` hint.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |
@@ -1305,4 +1368,4 @@
 | R-14 | **Trivy unfixed-findings waiver** (ADR-0033 item 3, security-relevant). | Add `.trivyignore` with per-finding justification and expiry before 1.0; until then manual review. | RG-2 |
 | R-15 | **Versioning policy commitments** in docs/VERSIONING.md (ADR-0033 item 9). | **Resolved 2026-10-25 (operator decision):** accepted as written. | Resolved |
 | R-16 | **Built-in reverse-tunnel connector** for destinations behind NAT (operator request). | Today: Tailscale, WireGuard or reverse SSH tunnels (docs/operator/remote-networks.md). Proposal: a `hallpass-connector` that dials out over mutually authenticated TLS or SSH with an enrolled Ed25519 identity, is bound to an explicit set of servers, carries only TCP to those servers' port 22 (host keys still pinned end to end), and has every stream audited. Needs operator approval of scope before implementation. | Before 1.0 or later |
-| R-17 | **Thin pushes whose new commits are deltas against host commits** (ADR-0063, security-relevant). | Today the update is refused and the agent is told to push with `--no-thin`. Proposal: while the pack checksum is withheld, fetch the missing delta bases (commits only) from the host over a separate upload-pack call with the same profile, rebuild the commits and prove the fast-forward as usual. This adds host traffic during a push and needs the profile's read capability. Needs operator approval before implementation. | — |
+| R-17 | **Thin pushes whose new commits are deltas against host commits** (ADR-0063, security-relevant). | Today the update is refused and the agent is told to push with `--no-thin`. **Designed in ADR-0064 (proposed, not implemented; design, threat analysis and task split in [security/thin-push-bases.md](security/thin-push-bases.md)):** while the pack checksum is withheld, fetch the missing commit delta bases from the host over a second upload-pack session on the same connection with the same profile, only when the profile also has `git-read`, verify their IDs, rebuild the commits and prove the fast-forward as usual; otherwise refuse with the hint. Needs operator approval of ADR-0064 before implementation. | — |
