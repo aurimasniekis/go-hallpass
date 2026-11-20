@@ -1296,32 +1296,39 @@
   against a commit only the host has. HallPass cannot rebuild it, the proof is Unknown and a real fast-forward is
   refused; the agent must push again with `git push --no-thin`.
 - **Decision (proposed):**
-  - Only when an update that needs a proof is still Unknown and the pack is thin: while the pack checksum is still
-    withheld, HallPass revalidates the grant and, **only if the profile also has `git-read`** for the repository,
-    opens a second session on the push's existing, host-key-verified SSH connection (same credential, same
-    repository path) and runs `git-upload-pack` with protocol v2: `want` exactly the missing base IDs of commit-sized
+  - Only when the access profile has opted in (off by default), and an update that needs a proof is still Unknown
+    and the pack is thin: while the pack checksum is still withheld, HallPass revalidates with every check of
+    `RegisterChannel` except the concurrency reservation (storage reserve, lockdown, grant, policy decision, agent
+    key, open session; one shared check) and, **only if `git-read` is in both the grant's snapshotted capabilities
+    and the current role** and the repository rules cover the repository, opens a second session on the push's
+    existing, host-key-verified SSH connection (same credential, same repository path) and runs `git-upload-pack` with protocol v2: `want` exactly the missing base IDs of commit-sized
     `REF_DELTA`s (at most `max_bases`), `deepen 1`, `filter tree:0`, no `have`, no thin pack. Hosts without
     `shallow` and `filter`, or that answer protocol v0, are not asked.
   - Every returned object's ID is recomputed and kept only if it is a requested ID and a commit. The retained deltas
-    are applied to those bases; the IDs of the resulting commits are computed from their content and they join the
-    commit graph. Fetched bases **never** become graph nodes, so the proof is still a parent chain of pushed commits
-    from the new tip to the old tip.
+    are applied to those bases (and to pack objects later in the pack and other resolved candidates); the IDs of the
+    resulting commits are computed from their content and they join the commit graph. Fetched bases **never** become graph nodes, so the proof is still a parent chain of pushed commits
+    from the new tip to the old tip. **Precondition:** commit header parsing is equivalent to git's (T-pre, done in
+    #15); T1 and `FuzzResolveWith` check it differentially against git.
   - The checksum is written only if every checked update is now proven and the channel was not terminated meanwhile.
     Every other outcome (disabled, no `git-read`, no candidates, a limit, timeout, host refusal, hash mismatch, a real
     non-fast-forward) is today's refusal with the `--no-thin` hint.
-  - Limits (config `git.thin_push_bases`): `enabled`, `max_bases` 256, `max_fetch_bytes` 8 MiB, `timeout` 20 s,
-    `max_concurrent` 4; retained candidate deltas ≤ 16 MiB and 4096 within the existing 64 MiB commit budget. One
-    fetch per push, no retries. A host that refuses a second session gets one more dial to the same enrolled target
-    with the same verifier and credential.
-  - Recording: metadata only (ADR-0047): `base_fetch` (result class, counts, bytes, duration) on `git.push` and
-    `git.push_refused`, `bytes_fetched` on `git.transferred`, metrics per result. Host error text never reaches the
-    agent.
+  - Configuration: per-profile opt-in `thin_push_bases`, **default off**; turning it off is the rollback. Global
+    limits (`git.thin_push_bases`): an `enabled` switch, `max_bases` 256, `max_fetch_bytes` 8 MiB, `timeout` 20 s
+    (includes waiting for a slot, so the checksum is withheld for at most one timeout), `max_concurrent` 4 gateway-wide
+    and `max_concurrent_per_agent` 1; retained candidate deltas ≤ 16 MiB and 4096 within the existing 64 MiB commit
+    budget. One fetch per push, no retries. A host that refuses a second session gets one more dial to the same
+    enrolled target with the same verifier; a certificate credential gets a fresh per-connection certificate bound to
+    the same grant and channel (HP-KEY-004).
+  - Recording: metadata only (ADR-0047): `base_fetch` (result class, the requested base IDs (≤ 256), counts, bytes,
+    duration, `fallback_dial`) on `git.push` and `git.push_refused`, `bytes_fetched` on `git.transferred`, metrics
+    per result. Host error text never reaches the agent.
 - **Threats considered** (details in the design): an agent using the proof as an oracle on host objects it may not
-  read (mitigated by requiring `git-read`, which can already fetch them); SSRF (no new target: same connection,
+  read (mitigated by requiring `git-read` in the grant and the current role, which can already fetch the same
+  objects; the host decides what is fetchable by SHA, for hosted services possibly the whole fork network); SSRF (no new target: same connection,
   validated path, wants are hex IDs); proof poisoning by a wrong base (IDs recomputed; bases never graph nodes; a
   malicious host can only cause a refusal); racing the ref (the host's compare-and-swap on the old ID); load on the
   host (`filter tree:0` + `deepen 1` required, measured ~1 KB per commit versus a whole snapshot without the filter;
-  caps); gateway exhaustion (caps, semaphore, leak checks); hostile upload-pack output (bounded parser, fuzzing);
+  caps, per-agent cap since pushes are not rate limited); gateway exhaustion (caps, per-agent cap, semaphore, leak checks); hostile upload-pack output (bounded parser, fuzzing);
   revocation during the fetch (revalidation, enforcer closes both sessions, trailer only while live).
 - **Alternatives:**
   - *Keep `--no-thin` only* (ADR-0063): no new risk or host traffic; agents fail the first push after a repack and
@@ -1335,15 +1342,30 @@
     branch protection, not custom hooks), and not per HallPass profile. Remains the recommended second layer.
   - *Fetch the bases through a host API* (for example a commit endpoint): returns parsed fields, not the raw object,
     so the ID cannot be verified exactly. Rejected.
-- **Effect on the contract:** no GOAL.md requirement changes. HP-SSH-025 applies to the upload-pack session
-  (revalidated before it opens); HP-SSH-011/G-7 hold because no new destination is dialed; HP-GRT-008 holds through
-  the channel's terminator; HP-SSH-014/015 through the caps and leak checks. Interpretation recorded here: the fetch
-  session is part of the registered push channel, not a new agent channel, so it does not count against concurrency
-  limits (HP-GRT-006). THREAT_MODEL T-28 describes the git push gate and this proposal.
-- **Open for the operator:** (1) approve the design or keep `--no-thin` only; (2) `enabled` by default (proposed:
-  on, since it needs `git-read` and does not change the proof) or opt-in; (3) the fallback second dial when a host
-  refuses a second session (proposed: yes); (4) T0, a spike against a hosted git service through the gateway.
-- **Consequences:** thin pushes after a bitmap repack work unchanged for profiles with both `git-read` and
+- **Effect on the contract:**
+  - **Deviation (security-relevant, flagged for operator review): HP-SSH-025 and HP-GRT-006.** HP-SSH-025 requires
+    every new destination channel to revalidate concurrency limits, and HP-GRT-006 requires them to be reserved
+    atomically when the channel is registered. The upload-pack session (and the fallback connection, if used) is a
+    new destination channel that does **not** check or reserve a concurrency slot. Justification: it exists only
+    while the push channel, which holds a slot, withholds its checksum, and it is bounded instead by
+    `max_concurrent_per_agent` (1), the gateway semaphore and one `timeout`. Every other HP-SSH-025 check runs
+    before it opens (`RevalidateGit`, the same check as `RegisterChannel`). If the operator rejects this
+    deviation, the alternative is to register the fetch as its own channel and refuse with `busy` when the role is at
+    its limit.
+  - Unchanged: HP-SSH-011/G-7 hold because the only destination is the push's enrolled target, through the egress
+    guard with the pinned host key; HP-KEY-004 holds because a fallback dial gets its own per-connection certificate;
+    HP-GRT-008 holds through the channel's terminator; HP-SSH-014/015 through the caps and leak checks. THREAT_MODEL
+    T-28 describes the git push gate and this proposal.
+- **Open for the operator:** (1) approve the design or keep `--no-thin` only; (2) the per-profile opt-in, default
+  off (this revision; turning it off is the rollback); (3) the fallback second dial when a host refuses a second
+  session (proposed: yes, with a fresh certificate); (4) the HP-SSH-025/HP-GRT-006 concurrency deviation above;
+  (5) T0, a spike against a hosted git service through the gateway.
+- **Revised 2026-11-20 after an internal security review:** git-read gate on the grant snapshot and the current role;
+  `RevalidateGit` shares `RegisterChannel`'s checks; the concurrency deviation stated explicitly; git-equivalent
+  commit header parsing as a precondition (T-pre, #15) with differential checks; per-agent cap and the timeout
+  including the slot wait; fresh certificate for the fallback dial; base IDs and the fallback recorded; opt-in per
+  profile.
+- **Consequences:** thin pushes after a bitmap repack work unchanged for opted-in profiles with both `git-read` and
   `git-write` on hosts that support protocol v2 with `filter` and `shallow`. Such a push may cause one extra fetch
   under the profile, visible in the host's logs and in HallPass's push event. Write-only profiles and other hosts
   keep the `--no-thin` hint.
@@ -1368,4 +1390,4 @@
 | R-14 | **Trivy unfixed-findings waiver** (ADR-0033 item 3, security-relevant). | Add `.trivyignore` with per-finding justification and expiry before 1.0; until then manual review. | RG-2 |
 | R-15 | **Versioning policy commitments** in docs/VERSIONING.md (ADR-0033 item 9). | **Resolved 2026-10-25 (operator decision):** accepted as written. | Resolved |
 | R-16 | **Built-in reverse-tunnel connector** for destinations behind NAT (operator request). | Today: Tailscale, WireGuard or reverse SSH tunnels (docs/operator/remote-networks.md). Proposal: a `hallpass-connector` that dials out over mutually authenticated TLS or SSH with an enrolled Ed25519 identity, is bound to an explicit set of servers, carries only TCP to those servers' port 22 (host keys still pinned end to end), and has every stream audited. Needs operator approval of scope before implementation. | Before 1.0 or later |
-| R-17 | **Thin pushes whose new commits are deltas against host commits** (ADR-0063, security-relevant). | Today the update is refused and the agent is told to push with `--no-thin`. **Designed in ADR-0064 (proposed, not implemented; design, threat analysis and task split in [security/thin-push-bases.md](security/thin-push-bases.md)):** while the pack checksum is withheld, fetch the missing commit delta bases from the host over a second upload-pack session on the same connection with the same profile, only when the profile also has `git-read`, verify their IDs, rebuild the commits and prove the fast-forward as usual; otherwise refuse with the hint. Needs operator approval of ADR-0064 before implementation. | — |
+| R-17 | **Thin pushes whose new commits are deltas against host commits** (ADR-0063, security-relevant). | Today the update is refused and the agent is told to push with `--no-thin`. **Designed in ADR-0064 (proposed, not implemented; design, threat analysis and task split in [security/thin-push-bases.md](security/thin-push-bases.md)):** while the pack checksum is withheld, fetch the missing commit delta bases from the host over a second upload-pack session on the same connection with the same profile, only when the profile has opted in (off by default) and `git-read` is in the grant and the current role, verify their IDs, rebuild the commits and prove the fast-forward as usual; otherwise refuse with the hint. Needs operator approval of ADR-0064 before implementation. | — |
