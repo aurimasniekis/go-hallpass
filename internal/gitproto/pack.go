@@ -44,14 +44,14 @@ type CommitGraph struct {
 	// complete is false when some objects could not be resolved (a delta whose base is not in the pack, or limits),
 	// so a commit may be missing.
 	complete bool
-	// thin is true when some object was sent as a delta against an object that is not a commit of the pack: normally
-	// one the host already has (a thin pack).
+	// thin is true when some object was sent as a delta whose base is not a commit in the pack (normally an object
+	// only the host has): a thin pack.
 	thin bool
 }
 
-// Thin reports whether the pack holds deltas against objects it does not carry, normally objects the host already
-// has. git sends such packs by default ("git push --thin"), and after a repack with reachability bitmaps it can reuse
-// a stored delta of a new commit against a commit on the host: that commit cannot be read from the pack, so its
+// Thin reports whether the pack holds deltas whose base is not a commit in the pack (normally an object only the
+// host has). git sends such packs by default ("git push --thin"), and after a repack with reachability bitmaps it can
+// reuse a stored delta of a new commit against a commit on the host: that commit cannot be read from the pack, so its
 // ancestry is Unknown. "git push --no-thin" sends every pushed commit readable.
 func (g *CommitGraph) Thin() bool { return g.thin }
 
