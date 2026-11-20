@@ -273,8 +273,11 @@ func TestThinPushBasesBounds(t *testing.T) {
 		{"timeout max", ok("timeout", "120s"), "", true},
 		{"max_concurrent 0", ok("max_concurrent", "0"), "git.thin_push_bases.max_concurrent must be within 1..64, got 0", false},
 		{"max_concurrent 65", ok("max_concurrent", "65"), "git.thin_push_bases.max_concurrent must be within 1..64, got 65", false},
+		{"max_concurrent 1", minimalProd + "git:\n  thin_push_bases:\n    max_concurrent: 1\n    max_concurrent_per_agent: 1\n", "", true},
+		{"max_concurrent 64", ok("max_concurrent", "64"), "", true},
 		{"max_concurrent_per_agent 0", ok("max_concurrent_per_agent", "0"), "max_concurrent_per_agent must be within 1..4, got 0", false},
 		{"max_concurrent_per_agent 5", ok("max_concurrent_per_agent", "5"), "max_concurrent_per_agent must be within 1..4, got 5", false},
+		{"max_concurrent_per_agent 4", minimalProd + "git:\n  thin_push_bases:\n    max_concurrent: 4\n    max_concurrent_per_agent: 4\n", "", true},
 		{"per agent above global", minimalProd + "git:\n  thin_push_bases:\n    max_concurrent: 1\n    max_concurrent_per_agent: 2\n", "must not exceed git.thin_push_bases.max_concurrent", false},
 	}
 	for _, c := range cases {
