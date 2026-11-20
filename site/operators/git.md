@@ -105,9 +105,9 @@ Notes, pull request refs and other refs are always refused. Signed pushes (push 
 ### Force-push
 
 With **Force-push** off, every update of an existing branch must be a fast-forward. HallPass reads the commits in the
-pushed pack as they stream to the host and follows their parents from the new branch tip back to the old one. It
-holds back the last bytes of the pack until that succeeds; if it does not, it ends the connection, the host rejects
-the incomplete pack, and the branch stays where it was.
+pushed pack as they stream to the host and follows their parents, read exactly as git reads them, from the new branch
+tip back to the old one. It holds back the last bytes of the pack until that succeeds; if it does not, it ends the
+connection, the host rejects the incomplete pack, and the branch stays where it was.
 
 An update HallPass cannot prove from the pushed commits alone, such as moving a branch to a commit the host already
 has, is refused too. The agent sees:

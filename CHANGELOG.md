@@ -7,6 +7,12 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+### Fixed
+
+- Git push gate: the fast-forward proof reads commit headers exactly as git does. A pushed commit whose headers git
+  would read differently, or not at all, no longer counts toward the proof, so with force-push off a branch update
+  that depends on it is refused.
+
 ## [0.7.4] - 2026-10-29
 
 > **Recording format, backup format and keyring not externally reviewed.** The known limitations of

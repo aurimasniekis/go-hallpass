@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("tree 0000000000000000000a00aa0a00000aaaa00000\n")

@@ -13,7 +13,6 @@ import (
 	"hash"
 	"io"
 	"strconv"
-	"strings"
 )
 
 // Limits for pack inspection. A pack beyond them is forwarded as usual but its ancestry is unknown, so a force-push
@@ -226,7 +225,14 @@ func scanObjects(t *byteTee, hashLen int) (*CommitGraph, error) {
 		id := objectID(hashLen, data)
 		byOffset[start] = stored{typ: objCommit, data: data}
 		byID[id] = data
-		g.parents[id] = commitParents(data)
+		ps, ok := commitParents(data, hashLen)
+		if !ok {
+			// git would read this commit's parents differently, or not at all: leave it out of the graph, so any
+			// proof through it is Unknown and the update is refused.
+			g.complete = false
+			continue
+		}
+		g.parents[id] = ps
 	}
 	return g, nil
 }
@@ -394,16 +400,53 @@ func deltaSize(r io.ByteReader) (uint64, error) {
 	return 0, errors.New("size overflow")
 }
 
-// commitParents returns the parent IDs from a commit's header lines.
-func commitParents(commit []byte) []string {
-	var ps []string
-	for line := range strings.SplitSeq(string(commit), "\n") {
-		if line == "" {
+// commitParents returns a commit's parent IDs as git reads them (parse_commit_buffer): the object must start with a
+// "tree <id>" line, and the parents are exactly the "parent <id>" lines that directly follow it. ok is false for a
+// commit git would read differently or not at all: a missing or misplaced tree line, an ID that is not lower-case hex
+// of the object format's length (hashLen bytes), a line not ending in a bare LF, an object that ends right after its
+// tree or a parent line, a parent that is the tree, or another "tree" or "parent" header before the message. Such a
+// commit cannot be used to prove ancestry.
+func commitParents(commit []byte, hashLen int) (parents []string, ok bool) {
+	idLen := 2 * hashLen
+	// idLine reads "<prefix><id>\n" at the start of b and returns the ID and the rest. Like git, it wants at least one
+	// more byte after the line: git refuses a commit that ends with its tree or a parent line.
+	idLine := func(b []byte, prefix string) (id string, rest []byte, found, valid bool) {
+		after, found := bytes.CutPrefix(b, []byte(prefix))
+		if !found {
+			return "", b, false, false
+		}
+		if len(after) <= idLen+1 || after[idLen] != '\n' || !validObjectID(string(after[:idLen])) {
+			return "", b, true, false
+		}
+		return string(after[:idLen]), after[idLen+1:], true, true
+	}
+	tree, rest, _, valid := idLine(commit, "tree ")
+	if !valid {
+		return nil, false
+	}
+	parents = []string{}
+	for {
+		id, next, found, valid := idLine(rest, "parent ")
+		if !found {
+			break
+		}
+		if !valid || id == tree { // git refuses an object named both as the tree and as a parent
+			return nil, false
+		}
+		parents = append(parents, id)
+		rest = next
+	}
+	// The other headers, up to the first empty line, must not hold another tree or parent line. Continuation lines
+	// (gpgsig, mergetag) start with a space and are not headers.
+	for len(rest) > 0 {
+		line, next, _ := bytes.Cut(rest, []byte("\n"))
+		if len(line) == 0 {
 			break // end of headers
 		}
-		if id, ok := strings.CutPrefix(line, "parent "); ok && validObjectID(id) {
-			ps = append(ps, id)
+		if bytes.HasPrefix(line, []byte("tree")) || bytes.HasPrefix(line, []byte("parent")) {
+			return nil, false
 		}
+		rest = next
 	}
-	return ps
+	return parents, true
 }

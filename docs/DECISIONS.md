@@ -834,7 +834,8 @@
   pack objects), computes their object IDs and follows parent links from the new tip to the old one. The pack's final
   checksum is withheld until the proof succeeds; otherwise the session ends, the host rejects the truncated pack and
   no ref changes. An update it cannot prove from the pushed commits (for example moving a branch to a commit the host
-  already has) is refused rather than guessed.
+  already has) is refused rather than guessed. Commit headers are parsed exactly as git parses them (object format
+  included); a commit whose headers git would read differently, or not at all, proves nothing (clarified 2026-11-20).
 - **Limits:** multi-approver requests are a separate follow-up. Host-side branch protection remains a good second
   layer.
 
