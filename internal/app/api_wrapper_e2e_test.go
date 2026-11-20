@@ -164,7 +164,7 @@ func TestHallpassAPIWrapperEndToEnd(t *testing.T) {
 	cmd := exec.CommandContext(cctx, bin, "--gateway", "center", "--ssh", sshScript, "--role", "issues", "--reason", "Answer the customer on #42",
 		"--wait", "1m", "--", "curl", "-sS", "-f", "-X", "POST", "-H", "Authorization: Bearer agent-own-token",
 		"https://"+wrapperHost+"/repos/acme/api/issues/42/comments", "-d", `{"body":"Fixed"}`)
-	cmd.Env = append(os.Environ(), "CLAUDE_CODE_SESSION_ID=0a1b2c3d-1111-4222-8333-444455556666")
+	cmd.Env = append(isolatedEnv(), "CLAUDE_CODE_SESSION_ID=0a1b2c3d-1111-4222-8333-444455556666")
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	err = cmd.Run()
@@ -184,4 +184,23 @@ func TestHallpassAPIWrapperEndToEnd(t *testing.T) {
 	if len(got) != 1 || got[0] != "POST /repos/acme/api/issues/42/comments Bearer real-github-token-0001" {
 		t.Fatalf("the API saw %q", got)
 	}
+}
+
+// isolatedEnv returns the test process's environment without the variables that steer hallpass-api or the
+// tools it runs (flag defaults, session id, proxies, CA bundles), so the result does not depend on the
+// caller's shell, such as an agent session that already has HALLPASS_SESSION set.
+func isolatedEnv() []string {
+	var env []string
+	for _, kv := range os.Environ() {
+		name, _, _ := strings.Cut(kv, "=")
+		upper := strings.ToUpper(name)
+		switch {
+		case strings.HasPrefix(upper, "HALLPASS_"), strings.HasPrefix(upper, "CLAUDE_CODE_"),
+			strings.HasSuffix(upper, "_PROXY"), upper == "NO_PROXY",
+			strings.HasPrefix(upper, "SSL_CERT_"), upper == "CURL_CA_BUNDLE", upper == "REQUESTS_CA_BUNDLE":
+			continue
+		}
+		env = append(env, kv)
+	}
+	return env
 }
