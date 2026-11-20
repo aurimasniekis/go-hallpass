@@ -7,6 +7,16 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+### Fixed
+
+- Git: when force-push is blocked, a real fast-forward pushed after a repack with reachability bitmaps (`git gc`,
+  `git maintenance`) was refused with `cannot prove a fast-forward from the pushed commits` and no hint. In that
+  case git sends new commits as deltas against commits already on the host (a thin pack), and HallPass cannot read
+  them. Such updates are still refused, but the message now tells the agent to push again with
+  `git push --no-thin`, which is proven and goes through. On 0.7.4, `git push --no-thin` works the same way. The
+  agent guide, the operator git docs and ADR-0063 describe the case; reading the missing commits from the host is
+  proposed as review item R-17.
+
 ## [0.7.4] - 2026-10-29
 
 > **Recording format, backup format and keyring not externally reviewed.** The known limitations of

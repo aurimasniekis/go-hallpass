@@ -168,6 +168,10 @@ git push origin agent/fix-cart-timeout
   branches never, and rewriting history (force-push) is refused unless the profile allows it. Push new commits on top
   of the branch instead of rewriting it. A refused push changes nothing and prints the reason, for example
   `hallpass: push refused: refs/heads/main: protected branch`.
+- If a push that only adds commits on top of the branch is refused with `cannot prove a fast-forward from the pushed
+  commits`, push it again with `git push --no-thin …`. After a repack (`git gc`, `git maintenance`), git can send
+  new commits as deltas against commits the host already has, and HallPass cannot read those. `--no-thin` sends them
+  whole, so the push can be checked. Pushing a commit the host already has to another branch is refused either way.
 - `repository not found or not permitted` means no profile you can use covers that repository and operation (or the
   profile you named does not).
 - `exec` and `connect` are refused on git remotes.

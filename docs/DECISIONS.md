@@ -1262,6 +1262,29 @@
   matching commit identity without wrappers. A user name with `+` that previously worked by accident (ignored) now
   has to match the remote.
 
+### ADR-0063 — Git: thin packs that hide the pushed commits
+
+- **Status:** accepted (2026-11-20). Not a weakening: the fast-forward rule (ADR-0047 force-push) is unchanged; only
+  the refusal message and the docs change.
+- **Context:** a real fast-forward to an existing branch was refused with "cannot prove a fast-forward from the
+  pushed commits". git pushes thin packs by default. After a repack with reachability bitmaps, pack-objects reuses a
+  stored delta whose base the receiver has (`can_reuse_delta` with the bitmap's uninteresting set), and that base
+  can be a commit already on the host. The new commit then arrives as a REF_DELTA against an object outside the pack.
+  HallPass cannot rebuild it, so it cannot compute its ID or parents, and the proof is Unknown. Reproduced with real
+  `git push` (git 2.55) in `internal/gitproto` and through the gateway in `internal/app`. Without bitmaps, or with
+  `git push --no-thin`, the same push is proven.
+- **Decision:**
+  - The rule stays: an update that cannot be proven from the pack is refused, thin pack or not.
+  - The pack scan records whether the pack held deltas against objects it does not carry. When such a pack leaves an
+    update unproven, the refusal says so and tells the agent to push again with `git push --no-thin`, which sends
+    every pushed commit whole. The agent guide and the operator git docs explain the case.
+- **Alternatives:** advertising `no-thin` to the client (receive-pack has no such capability: send-pack ignores it).
+  Accepting unprovable updates when the pack is thin (would let a force-push through: rejected). Reading the missing
+  delta bases from the host. That would make thin pushes work unchanged, but it opens a second, upload-pack
+  connection with the profile's credential during a push, so it is left as open review item R-17.
+- **Consequences:** agents whose repositories write bitmaps need `--no-thin` for updates of existing branches under
+  profiles without `allow_force_push`. The packs they send are somewhat larger.
+
 ## 2. Open review items (operator decisions required)
 
 | ID | Item | Proposal | Blocks |
@@ -1282,3 +1305,4 @@
 | R-14 | **Trivy unfixed-findings waiver** (ADR-0033 item 3, security-relevant). | Add `.trivyignore` with per-finding justification and expiry before 1.0; until then manual review. | RG-2 |
 | R-15 | **Versioning policy commitments** in docs/VERSIONING.md (ADR-0033 item 9). | **Resolved 2026-10-25 (operator decision):** accepted as written. | Resolved |
 | R-16 | **Built-in reverse-tunnel connector** for destinations behind NAT (operator request). | Today: Tailscale, WireGuard or reverse SSH tunnels (docs/operator/remote-networks.md). Proposal: a `hallpass-connector` that dials out over mutually authenticated TLS or SSH with an enrolled Ed25519 identity, is bound to an explicit set of servers, carries only TCP to those servers' port 22 (host keys still pinned end to end), and has every stream audited. Needs operator approval of scope before implementation. | Before 1.0 or later |
+| R-17 | **Thin pushes whose new commits are deltas against host commits** (ADR-0063). | Today the update is refused and the agent is told to push with `--no-thin`. Proposal: while the pack checksum is withheld, fetch the missing delta bases (commits only) from the host over a separate upload-pack call with the same profile, rebuild the commits and prove the fast-forward as usual. This adds host traffic during a push and needs the profile's read capability. Needs operator approval before implementation. | — |
