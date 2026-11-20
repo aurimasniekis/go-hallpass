@@ -98,9 +98,11 @@ All of these must hold, otherwise behaviour is exactly as today:
 - **Command:** `git-upload-pack <quoted forward path>` with `GIT_PROTOCOL=version=2` set on the session. If the host
   answers with a protocol v0 reference advertisement, HallPass ends the fetch (result `unsupported`).
 - **Request:** `command=fetch`, `object-format` matching the push (`sha1` or `sha256`), `no-progress`,
-  `ofs-delta`, `deepen 1`, `filter tree:0`, one `want <id>` per candidate base, `done`. Never `have`,
+  `deepen 1`, `filter tree:0`, one `want <id>` per candidate base, `done`. Never `have`, `ofs-delta`,
   `thin-pack`, `include-tag`, `want-ref` or `packfile-uris`. The capability advertisement must list
-  `fetch` with `shallow` and `filter`; otherwise no request is sent.
+  `fetch` with `shallow` and `filter`; otherwise no request is sent. Without `thin-pack` and `ofs-delta` the host
+  returns a self-contained pack, so any deltas in it are `REF_DELTA`s against bases inside that same pack. T1 must
+  resolve those in-pack `REF_DELTA`s and has a test for them.
 - **Response:** `shallow-info` (ignored beyond syntax), then `packfile` over sideband 1; band 2 (progress) is
   discarded, band 3 or `ERR` ends the fetch (result `host_refused`).
 
@@ -239,7 +241,7 @@ External verification (recorded as such, not as CI): one thin push through the g
 |---|---|---|---|
 | T-pre | Commit header parsing is git-equivalent (precondition of the proof, §2); T1 depends on it. | hard | — |
 | T0 | Spike: verify against a hosted git service and OpenSSH that a second session on one connection works, that `deepen 1` + `filter tree:0` + `want <reachable sha>` returns only commits, and how long receive-pack waits for the checksum. Needs gateway access approved by the operator. Report only, no code. | medium | ADR-0064 accepted (2026-11-20) |
-| T1 | `gitproto` core: candidate retention in `ScanPack`, `ThinBases`, `ResolveWith` with hash verification (including later-in-pack and candidate-on-candidate `REF_DELTA`s), the differential check against git, unit tests, `FuzzResolveWith`, `FuzzApplyDelta`. The soundness of the proof lives here. | **hard** | T-pre |
+| T1 | `gitproto` core: candidate retention in `ScanPack`, `ThinBases`, `ResolveWith` with hash verification (including later-in-pack and candidate-on-candidate `REF_DELTA`s), the differential check against git, unit tests (including in-pack `REF_DELTA`s whose bases are inside the same pack), `FuzzResolveWith`, `FuzzApplyDelta`. The soundness of the proof lives here. | **hard** | T-pre |
 | T2 | `gitproto` fetch client (`fetch.go`): v2 request, capability check, bounded pkt-line/sideband/pack reading, unit tests, `FuzzFetchResponse`. Security impact limited to availability because T1 re-verifies everything. | medium | — |
 | T3 | `sshproxy` + `access` integration: trigger conditions, `RevalidateGit` sharing `RegisterChannel`'s checks, second session and fallback dial with a fresh certificate, per-agent cap and semaphore, budgets, terminator, trailer only when proven and live, events with base IDs and `fallback_dial`; flip `TestGatewayGitPushThinPackAfterBitmapRepack` (with the profile opted in). | **hard** | T0, T1, T2, T4 |
 | T4 | Config section (global limits and switch, per-profile opt-in **defaulting to off**), validation, env overrides, metrics, `docs/operator/configuration.md`. Lands with the feature off everywhere. | light | — |
