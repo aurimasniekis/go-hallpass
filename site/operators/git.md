@@ -116,6 +116,12 @@ has, is refused too. The agent sees:
 hallpass: push refused: refs/heads/agent/fix: cannot prove a fast-forward from the pushed commits; force-push is blocked
 ```
 
+By default git sends a *thin* pack, which may hold objects as deltas against objects the host already has. After a
+repack with reachability bitmaps (`git gc` or `git maintenance` in a repository that writes bitmaps), git can reuse
+a stored delta of a new commit against a commit on the host. HallPass cannot read such a commit, so it cannot prove
+the update and refuses it. The message then ends with `push again with git push --no-thin`: `--no-thin` makes git
+send every new commit whole, and the push goes through. The check is not relaxed for thin packs.
+
 Branch protection on the host itself remains a good second layer.
 
 ## Several approvers

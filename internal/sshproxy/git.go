@@ -104,7 +104,12 @@ func (p *Proxy) gitPushGate(ctx context.Context, s *Session, reg *access.Channel
 		updates[i]["fast_forward"] = ff == gitproto.FastForward
 		if ff != gitproto.FastForward {
 			reason := "not a fast-forward; force-push is blocked for this access profile"
-			if ff == gitproto.Unknown {
+			switch {
+			case ff == gitproto.Unknown && graph.Thin():
+				// git reused deltas against objects the host already has (a thin pack, typical after a repack with
+				// bitmaps): the new commits may be among them. A pack without such deltas can be proven.
+				reason = "cannot prove a fast-forward from the pushed commits; force-push is blocked (the pack holds deltas against objects only the host has, which can hide the new commits: push again with git push --no-thin)"
+			case ff == gitproto.Unknown:
 				reason = "cannot prove a fast-forward from the pushed commits; force-push is blocked (push new commits on top of the branch)"
 			}
 			refused = append(refused, map[string]any{"ref": u.Ref, "reason": reason})

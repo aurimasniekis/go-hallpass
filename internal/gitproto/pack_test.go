@@ -4,7 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"fmt"
+	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -106,6 +110,95 @@ func TestScanPackAncestry(t *testing.T) {
 	}
 	if got := scan(t, r.pack(false, e)).AncestryOf(e, e); got != FastForward {
 		t.Errorf("same id = %s", got)
+	}
+}
+
+// pushCapture runs a real "git push" from r to the bare repository host and returns what git sent to
+// git-receive-pack: the command list, then the pack.
+func (r *gitRepo) pushCapture(host, refspec string, flags ...string) []byte {
+	r.t.Helper()
+	dir := r.t.TempDir()
+	capture, wrapper := filepath.Join(dir, "push"), filepath.Join(dir, "receive-pack")
+	script := "#!/bin/sh\ntee '" + capture + "' | git-receive-pack \"$@\"\n"
+	if err := os.WriteFile(wrapper, []byte(script), 0o700); err != nil { //nolint:gosec // test helper script
+		r.t.Fatal(err)
+	}
+	r.run(nil, append(append([]string{"push", "-q", "--receive-pack=" + wrapper}, flags...), host, refspec)...)
+	b, err := os.ReadFile(capture) //nolint:gosec // test file
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	return b
+}
+
+// scanPush reads a captured push like the gateway does and returns its updates and the pack's commit graph.
+func scanPush(t *testing.T, stream []byte) ([]RefUpdate, *CommitGraph) {
+	t.Helper()
+	br := bufio.NewReader(bytes.NewReader(stream))
+	pc, err := ReadPushCommands(br)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, _, err := ScanPack(br, io.Discard, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pc.Updates, g
+}
+
+// A real fast-forward pushed after a repack with reachability bitmaps: git reuses the stored delta of a new commit
+// against a commit the host already has (a thin pack), so the commit cannot be read from the pack. Its ancestry stays
+// Unknown (never guessed) and the graph reports the pack as thin; "git push --no-thin" makes it provable.
+func TestScanPackThinPushAfterBitmapRepack(t *testing.T) {
+	host := newGitRepo(t)
+	host.run(nil, "config", "receive.denyCurrentBranch", "ignore")
+	r := newGitRepo(t)
+	write := func(name, content string) {
+		if err := os.WriteFile(filepath.Join(r.dir, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		r.run(nil, "add", name)
+	}
+	// Long messages make the old commits bigger than the new ones, so a repack stores the new ones as deltas
+	// against them.
+	long := strings.Repeat(" with a long description", 20)
+	for i := range 4 {
+		write("f", strings.Repeat(fmt.Sprintf("line %d\n", i), i+1))
+		r.run(nil, "commit", "-q", "-m", fmt.Sprintf("change %d%s", i, long))
+	}
+	r.run(nil, "push", "-q", host.dir, "main")
+	r.run(nil, "checkout", "-q", "-b", "other")
+	write("g", "other\n")
+	r.run(nil, "commit", "-q", "-m", "other work")
+	r.run(nil, "push", "-q", host.dir, "other")
+	r.run(nil, "checkout", "-q", "main")
+	write("f", "new work\n")
+	r.run(nil, "commit", "-q", "-m", "new work")
+	c := strings.TrimSpace(r.run(nil, "rev-parse", "HEAD"))
+	r.run(nil, "merge", "-q", "--no-edit", "other") // a merge of a branch the host already has
+	m := strings.TrimSpace(r.run(nil, "rev-parse", "HEAD"))
+	r.run(nil, "fetch", "-q", host.dir, "+refs/heads/*:refs/remotes/host/*")
+	r.run(nil, "repack", "-q", "-a", "-d", "-f", "-b")
+
+	old := strings.TrimSpace(host.run(nil, "rev-parse", "main"))
+	// push sends tip to the host's main (still at old) and resets it afterwards: the plain host accepts any push.
+	push := func(tip string, flags ...string) (RefUpdate, *CommitGraph) {
+		updates, g := scanPush(t, r.pushCapture(host.dir, tip+":refs/heads/main", flags...))
+		host.run(nil, "update-ref", "refs/heads/main", old)
+		if len(updates) != 1 || updates[0].Old != old || updates[0].New != tip {
+			t.Fatalf("push %s: updates %v", tip, updates)
+		}
+		return updates[0], g
+	}
+	for name, tip := range map[string]string{"merge": m, "single commit": c} {
+		u, g := push(tip)
+		if got := g.AncestryOf(u.Old, u.New); got != Unknown || !g.Thin() {
+			t.Fatalf("%s: thin push after a bitmap repack = %s, thin %v; want unknown, thin", name, got, g.Thin())
+		}
+		u, g = push(tip, "--no-thin")
+		if got := g.AncestryOf(u.Old, u.New); got != FastForward || g.Thin() {
+			t.Fatalf("%s: --no-thin push = %s, thin %v; want fast-forward", name, got, g.Thin())
+		}
 	}
 }
 
