@@ -82,6 +82,16 @@ collectors and `promhttp_metric_handler_*`.
 | `hallpass_ssh_env_rejected_total` | counter | – | Environment variables dropped because they are not on the allowlist. Variable names are not exported. |
 | `hallpass_ssh_dial_duration_seconds` | histogram | `result` = `ok`, `timeout`, `egress_denied`, `host_key_mismatch`, `auth_failed`, `error`, `other` | Outbound destination dial and handshake. |
 
+### Git thin-push base fetches
+
+Declared for R-17 (ADR-0064). They are recorded only once the thin-push base fetch is wired up, so they stay at zero until then.
+
+| Metric | Type | Labels | Meaning |
+|---|---|---|---|
+| `hallpass_git_base_fetch_total` | counter | `result` = `proven`, `not_proven`, `no_read`, `revalidation_failed`, `disabled`, `no_candidates`, `limit`, `timeout`, `busy`, `unsupported`, `host_refused`, `session_refused`, `error`, `other` | Thin-push base fetches by result. |
+| `hallpass_git_base_fetch_duration_seconds` | histogram | – | Time from the decision to fetch until the fetch ends. Buckets 50 ms–120 s. |
+| `hallpass_git_base_fetch_bytes` | histogram | – | Bytes received per fetch (whole upload-pack response). |
+
 ### Access lifecycle and enforcement
 
 | Metric | Type | Labels | Meaning |

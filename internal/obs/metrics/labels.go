@@ -85,6 +85,26 @@ const (
 	DialError        DialResult = "error"
 )
 
+// BaseFetchResult is the outcome class of a thin-push base fetch (R-17, docs/security/thin-push-bases.md §6.1).
+type BaseFetchResult string
+
+// Base fetch results.
+const (
+	BaseFetchProven         BaseFetchResult = "proven"              // every needed base fetched and the push proven a fast-forward
+	BaseFetchNotProven      BaseFetchResult = "not_proven"          // fetched, but the push is still not a fast-forward
+	BaseFetchNoRead         BaseFetchResult = "no_read"             // grant or role lacks git-read
+	BaseFetchRevalidation   BaseFetchResult = "revalidation_failed" // access no longer holds at the fetch
+	BaseFetchDisabled       BaseFetchResult = "disabled"            // global switch or profile opt-in is off
+	BaseFetchNoCandidates   BaseFetchResult = "no_candidates"       // no delta candidate needs a base
+	BaseFetchLimit          BaseFetchResult = "limit"               // max_bases or max_fetch_bytes exceeded
+	BaseFetchTimeout        BaseFetchResult = "timeout"             // timeout reached before the trailer decision
+	BaseFetchBusy           BaseFetchResult = "busy"                // per-agent or gateway slot not free in time
+	BaseFetchUnsupported    BaseFetchResult = "unsupported"         // host speaks protocol v0 or lacks filter or shallow
+	BaseFetchHostRefused    BaseFetchResult = "host_refused"        // host answered with an error or sideband 3
+	BaseFetchSessionRefused BaseFetchResult = "session_refused"     // host refused the second session
+	BaseFetchError          BaseFetchResult = "error"               // any other failure
+)
+
 // RequestState is an access request state reached by a transition.
 type RequestState string
 
@@ -267,6 +287,9 @@ var (
 	enumChanResult = newEnum(ChannelOpened, ChannelDenied, ChannelLimited, ChannelFailed, ChannelLockdown, ChannelNoStorage)
 	enumRefused    = newEnum(RefusedChannelType, RefusedPortForward, RefusedSubsystem, RefusedX11, RefusedAgentForward)
 	enumDial       = newEnum(DialOK, DialTimeout, DialEgressDenied, DialHostKey, DialAuthFailed, DialError)
+	enumBaseFetch  = newEnum(BaseFetchProven, BaseFetchNotProven, BaseFetchNoRead, BaseFetchRevalidation, BaseFetchDisabled,
+		BaseFetchNoCandidates, BaseFetchLimit, BaseFetchTimeout, BaseFetchBusy, BaseFetchUnsupported, BaseFetchHostRefused,
+		BaseFetchSessionRefused, BaseFetchError)
 	enumReqState   = newEnum(RequestPending, RequestApproved, RequestDenied, RequestExpired, RequestCanceled)
 	enumDecChannel = newEnum(DecisionWeb, DecisionSlack, DecisionTelegram, DecisionAPI)
 	enumDecOutcome = newEnum(DecisionApproved, DecisionDenied, DecisionConflict, DecisionForbidden, DecisionError)

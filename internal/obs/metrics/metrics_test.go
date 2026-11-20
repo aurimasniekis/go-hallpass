@@ -28,6 +28,7 @@ func exercise(m *Metrics) {
 	m.SSHRefused(RefusedPortForward)
 	m.SSHEnvRejected(2)
 	m.Dial(DialOK, 20*time.Millisecond)
+	m.BaseFetch(BaseFetchProven, 20*time.Millisecond, 1024)
 	m.AccessRequest(RequestPending)
 	m.SetAccessRequestsPending(3)
 	m.Decision(DecisionSlack, DecisionApproved)
@@ -101,6 +102,9 @@ func TestCatalogGolden(t *testing.T) {
 		"hallpass_ssh_refused_requests_total":                   "counter:type",
 		"hallpass_ssh_env_rejected_total":                       "counter:",
 		"hallpass_ssh_dial_duration_seconds":                    "histogram:result",
+		"hallpass_git_base_fetch_total":                         "counter:result",
+		"hallpass_git_base_fetch_duration_seconds":              "histogram:",
+		"hallpass_git_base_fetch_bytes":                         "histogram:",
 		"hallpass_access_requests_total":                        "counter:state",
 		"hallpass_access_requests_pending":                      "gauge:",
 		"hallpass_access_decisions_total":                       "counter:channel,outcome",

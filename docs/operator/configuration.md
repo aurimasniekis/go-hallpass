@@ -69,6 +69,12 @@ Example: [`deploy/examples/hallpass.example.yaml`](../../deploy/examples/hallpas
 | `access.requests_per_agent_hour` / `access.max_pending_per_agent` | `30` / `10` | Request rate limits. |
 | `access.enforcement_tick` | `1s` | Enforcer ticker (bound: 5 s). |
 | `access.min_remaining_to_connect` | `2s` | Grants closer to expiry than this don't start new channels. |
+| `git.thin_push_bases.enabled` | `true` | Global switch for fetching a thin push's delta bases from the host (R-17, ADR-0064). `true`: access profiles may opt in. `false`: off for every profile. |
+| `git.thin_push_bases.max_bases` | `256` | Bases wanted per fetch (1–256). |
+| `git.thin_push_bases.max_fetch_bytes` | `8 MiB` | Whole upload-pack response per fetch (64 KiB–64 MiB). |
+| `git.thin_push_bases.timeout` | `20s` | From the decision to fetch (revalidation and slot waits included) until the push's trailer decision (1s–2m). |
+| `git.thin_push_bases.max_concurrent` | `4` | Simultaneous base fetches gateway-wide (1–64). |
+| `git.thin_push_bases.max_concurrent_per_agent` | `1` | Simultaneous base fetches per agent, on top of `max_concurrent` (1–4; must not exceed `max_concurrent`). |
 | `auth.session_idle_timeout` / `auth.session_absolute_timeout` | `30m` / `12h` | Operator web sessions. |
 | `auth.reauth_window` | `5m` | Recent-authentication window for sensitive actions. |
 | `auth.password_min_bytes` | `12` | Minimum password length (max is fixed at 1024 bytes). |
@@ -86,3 +92,9 @@ Example: [`deploy/examples/hallpass.example.yaml`](../../deploy/examples/hallpas
 | `rbac.auditor_recording_export` | `false` | Auditors may export recordings. |
 | `rbac.approvers_can_lockdown` | `false` | Approvers may enable lockdown (lifting stays administrator-only). |
 | `dev.insecure_http`, `dev.auth`, `dev.seed_file` | off | Development-only features. Production rejects them. |
+
+## Thin-push base fetch (R-17)
+
+The `git.thin_push_bases` limits are validated at load, but **nothing reads them yet**. The per-access-profile opt-in
+(`thin_push_bases`, default off) is not available either. Until both ship, no push fetches delta bases from the host,
+whatever `git.thin_push_bases.enabled` says. This section will say how to opt a profile in once that is available.

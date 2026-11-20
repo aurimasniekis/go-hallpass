@@ -170,6 +170,7 @@ func (c *Config) Validate() error {
 	}
 	v.durationRange("shutdown.drain_timeout", c.Shutdown.DrainTimeout, 0, 10*time.Minute)
 	c.validateEvents(v, prod)
+	c.validateGit(v)
 
 	if prod {
 		if c.Dev.InsecureHTTP {
@@ -183,6 +184,19 @@ func (c *Config) Validate() error {
 		}
 	}
 	return v.err()
+}
+
+func (c *Config) validateGit(v *validator) {
+	t := c.Git.ThinPushBases
+	v.intRange("git.thin_push_bases.max_bases", t.MaxBases, 1, 256)
+	v.int64Range("git.thin_push_bases.max_fetch_bytes", t.MaxFetchBytes, 64<<10, 64<<20)
+	v.durationRange("git.thin_push_bases.timeout", t.Timeout, time.Second, 2*time.Minute)
+	v.intRange("git.thin_push_bases.max_concurrent", t.MaxConcurrent, 1, 64)
+	v.intRange("git.thin_push_bases.max_concurrent_per_agent", t.MaxConcurrentPerAgent, 1, 4)
+	if t.MaxConcurrentPerAgent > t.MaxConcurrent {
+		v.add("git.thin_push_bases.max_concurrent_per_agent (%d) must not exceed git.thin_push_bases.max_concurrent (%d)",
+			t.MaxConcurrentPerAgent, t.MaxConcurrent)
+	}
 }
 
 func (c *Config) validateEvents(v *validator, prod bool) {
@@ -298,6 +312,18 @@ func (v *validator) add(format string, args ...any) {
 func (v *validator) positive(name string, n int) {
 	if n <= 0 {
 		v.add("%s must be positive", name)
+	}
+}
+
+func (v *validator) intRange(name string, n, lo, hi int) {
+	if n < lo || n > hi {
+		v.add("%s must be within %d..%d, got %d", name, lo, hi, n)
+	}
+}
+
+func (v *validator) int64Range(name string, n, lo, hi int64) {
+	if n < lo || n > hi {
+		v.add("%s must be within %d..%d, got %d", name, lo, hi, n)
 	}
 }
 

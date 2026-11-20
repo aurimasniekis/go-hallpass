@@ -36,6 +36,10 @@ var (
 	DialBuckets = []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30}
 	// HTTPBuckets suit API requests.
 	HTTPBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30}
+	// BaseFetchBuckets suit thin-push base fetches, which run under a timeout of up to 120 s.
+	BaseFetchBuckets = []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 30, 60, 120}
+	// BaseFetchByteBuckets suit the response size of a thin-push base fetch (max_fetch_bytes: 64 KiB..64 MiB).
+	BaseFetchByteBuckets = []float64{64 << 10, 256 << 10, 1 << 20, 4 << 20, 8 << 20, 16 << 20, 64 << 20}
 )
 
 // Metrics holds every HallPass metric family.
@@ -52,6 +56,9 @@ type Metrics struct {
 	sshRefused      *prometheus.CounterVec
 	sshEnvRejected  prometheus.Counter
 	dialDuration    *prometheus.HistogramVec
+	baseFetch       *prometheus.CounterVec
+	baseFetchTime   prometheus.Histogram
+	baseFetchBytes  prometheus.Histogram
 	requestsTotal   *prometheus.CounterVec
 	requestsPending prometheus.Gauge
 	decisions       *prometheus.CounterVec
@@ -120,6 +127,9 @@ func New() *Metrics {
 	m.sshRefused = f.counterVec("ssh_refused_requests_total", "Refused SSH channel types and requests (forwarding, subsystems) by type.", "type")
 	m.sshEnvRejected = f.counter("ssh_env_rejected_total", "Environment variables dropped because they are not allowlisted.")
 	m.dialDuration = f.histogramVec("ssh_dial_duration_seconds", "Outbound destination dial and handshake duration by result.", DialBuckets, "result")
+	m.baseFetch = f.counterVec("git_base_fetch_total", "Thin-push base fetches by result.", "result")
+	m.baseFetchTime = f.histogram("git_base_fetch_duration_seconds", "Thin-push base fetch duration, from the decision to fetch until the fetch ends.", BaseFetchBuckets)
+	m.baseFetchBytes = f.histogram("git_base_fetch_bytes", "Bytes received per thin-push base fetch (whole upload-pack response).", BaseFetchByteBuckets)
 
 	m.requestsTotal = f.counterVec("access_requests_total", "Access request state transitions by target state.", "state")
 	m.requestsPending = f.gauge("access_requests_pending", "Access requests currently pending a decision.")
@@ -288,6 +298,16 @@ func (m *Metrics) Dial(r DialResult, d time.Duration) {
 		return
 	}
 	m.dialDuration.WithLabelValues(enumDial.norm(string(r))).Observe(d.Seconds())
+}
+
+// BaseFetch records one thin-push base fetch (R-17, ADR-0064): its result class, its duration and the bytes received.
+func (m *Metrics) BaseFetch(r BaseFetchResult, d time.Duration, bytes int64) {
+	if m == nil {
+		return
+	}
+	m.baseFetch.WithLabelValues(enumBaseFetch.norm(string(r))).Inc()
+	m.baseFetchTime.Observe(d.Seconds())
+	m.baseFetchBytes.Observe(float64(bytes))
 }
 
 // --- Access lifecycle ---
