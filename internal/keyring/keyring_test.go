@@ -266,6 +266,10 @@ func TestLoadKEKSources(t *testing.T) {
 	if err := os.WriteFile(loose, EncodeKEK(k), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// WriteFile is subject to the umask; make the file world-readable explicitly.
+	if err := os.Chmod(loose, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := LoadKEK(Source{Kind: "file", File: loose, Production: true}); !errors.Is(err, ErrBadKEKFile) {
 		t.Fatalf("world-readable KEK accepted: %v", err)
 	}
