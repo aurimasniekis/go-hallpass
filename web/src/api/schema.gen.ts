@@ -2621,7 +2621,7 @@ export interface components {
                 /** @description Allow moving a branch to a commit that does not descend from its current tip. When false (the default), every branch update must be provable as a fast-forward from the pushed commits. */
                 allow_force_push?: boolean;
             };
-            /** @description Opt this profile into thin-pack push bases (ADR-0064). Needs the git-write capability. Absent means false. Stored for now; nothing reads it yet. */
+            /** @description Opt this profile into thin-pack push bases (ADR-0064). Needs git-read and git-write. Absent means false. Stored for now; nothing reads it yet. */
             thin_push_bases?: boolean;
         };
         RoleInput: {

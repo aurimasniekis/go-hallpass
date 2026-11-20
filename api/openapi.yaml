@@ -2634,7 +2634,7 @@ components:
         thin_push_bases:
           type: boolean
           description: >-
-            Opt this profile into thin-pack push bases (ADR-0064). Needs the git-write capability. Absent means false.
+            Opt this profile into thin-pack push bases (ADR-0064). Needs git-read and git-write. Absent means false.
             Stored for now; nothing reads it yet.
     RoleInput:
       type: object

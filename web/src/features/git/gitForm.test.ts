@@ -55,6 +55,16 @@ describe('git profile form', () => {
     expect(pushSummary({ capabilities: ['git-read'], git: { repos: ['x'] } })).toBe('Read only');
   });
 
+  it('does not send thin_push_bases without write', () => {
+    const body = toGitProfileInput({
+      ...GIT_PROFILE_DEFAULTS,
+      alias: 'ro',
+      repos: ['a/b'],
+      thin_push_bases: true,
+    });
+    expect(body.git.thin_push_bases).toBeUndefined();
+  });
+
   it('recognizes preset hosts', () => {
     expect(presetFor('GitHub.com')?.name).toBe('GitHub');
     expect(presetFor('git.example.com')).toBeUndefined();

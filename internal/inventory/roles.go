@@ -101,8 +101,8 @@ func validateGitRules(v *apperr.Validation, r *Role) {
 	if pushRules && !r.Has(CapGitWrite) {
 		v.Add("git.push", "push rules need the git-write capability")
 	}
-	if r.Git.ThinPushBases && !r.Has(CapGitWrite) {
-		v.Add("git.thin_push_bases", "needs the git-write capability")
+	if r.Git.ThinPushBases && (!r.Has(CapGitRead) || !r.Has(CapGitWrite)) {
+		v.Add("git.thin_push_bases", "thin_push_bases needs the git-read and git-write capabilities")
 	}
 	if r.Has(CapGitWrite) && !pushRules {
 		v.Add("git.push", "git-write needs at least one branch or tag pattern")
