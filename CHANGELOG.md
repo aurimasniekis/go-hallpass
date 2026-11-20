@@ -7,6 +7,12 @@ agent JSON schemas, the recording format and the database schema).
 
 ## [Unreleased]
 
+### Security
+
+- Go 1.27.4 (GO-2026-6859, net/http): an HTTP/1 server could crash from a race in `MaxBytesReader` header handling.
+  HallPass now builds and tests with Go 1.27.4 (`go.mod`, `tools/go.mod`, the container build image and the helper
+  images in the smoke and recovery scripts). govulncheck reported the vulnerability on Go 1.27.3.
+
 ## [0.7.4] - 2026-10-29
 
 > **Recording format, backup format and keyring not externally reviewed.** The known limitations of
