@@ -1307,8 +1307,7 @@
   - Every returned object's ID is recomputed and kept only if it is a requested ID and a commit. The retained deltas
     are applied to those bases (and to pack objects later in the pack and other resolved candidates); the IDs of the
     resulting commits are computed from their content and they join the commit graph. Fetched bases **never** become graph nodes, so the proof is still a parent chain of pushed commits
-    from the new tip to the old tip. **Precondition:** commit header parsing is equivalent to git's (T-pre, done in
-    #15); T1 and `FuzzResolveWith` check it differentially against git.
+    from the new tip to the old tip. **Precondition:** commit header parsing is equivalent to git's (T-pre; T1 depends on it). T1 and `FuzzResolveWith` check it differentially against git.
   - The checksum is written only if every checked update is now proven and the channel was not terminated meanwhile.
     Every other outcome (disabled, no `git-read`, no candidates, a limit, timeout, host refusal, hash mismatch, a real
     non-fast-forward) is today's refusal with the `--no-thin` hint.
@@ -1362,7 +1361,7 @@
   (5) T0, a spike against a hosted git service through the gateway.
 - **Revised 2026-11-20 after an internal security review:** git-read gate on the grant snapshot and the current role;
   `RevalidateGit` shares `RegisterChannel`'s checks; the concurrency deviation stated explicitly; git-equivalent
-  commit header parsing as a precondition (T-pre, #15) with differential checks; per-agent cap and the timeout
+  commit header parsing as a precondition (T-pre) with differential checks; per-agent cap and the timeout
   including the slot wait; fresh certificate for the fallback dial; base IDs and the fallback recorded; opt-in per
   profile.
 - **Consequences:** thin pushes after a bitmap repack work unchanged for opted-in profiles with both `git-read` and
