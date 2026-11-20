@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os/exec"
 	"strings"
@@ -13,8 +14,9 @@ import (
 
 // scriptedHost is the host side of a fetch: it serves canned bytes and records what the client sent.
 type scriptedHost struct {
-	in   *bytes.Reader
-	sent bytes.Buffer
+	in     *bytes.Reader
+	sent   bytes.Buffer
+	closed bool
 }
 
 func newScriptedHost(response string) *scriptedHost {
@@ -23,6 +25,7 @@ func newScriptedHost(response string) *scriptedHost {
 
 func (h *scriptedHost) Read(p []byte) (int, error)  { return h.in.Read(p) }
 func (h *scriptedHost) Write(p []byte) (int, error) { return h.sent.Write(p) }
+func (h *scriptedHost) Close() error                { h.closed = true; return nil }
 
 const (
 	fetchWant1 = "3333333333333333333333333333333333333333"
@@ -81,6 +84,15 @@ func TestFetchCommits(t *testing.T) {
 		{name: "oversized response", response: advert(goodAdvert, "sha1") + goodResponse(strings.Repeat("x", 4096)), max: 1024, wantErr: ErrFetchTooLarge},
 		{name: "response exactly at the limit", response: advert(goodAdvert, "sha1") + goodResponse(pack), max: int64(len(advert(goodAdvert, "sha1") + goodResponse(pack))), want: pack},
 		{name: "one byte over the limit", response: advert(goodAdvert, "sha1") + goodResponse(pack), max: int64(len(advert(goodAdvert, "sha1")+goodResponse(pack))) - 1, wantErr: ErrFetchTooLarge},
+		{name: "advertisement too long", response: pkt("version 2\n") + strings.Repeat(pkt("x=1\n"), maxAdvertLines) + "0000", wantErr: ErrProtocol, noReq: true},
+		{name: "advertisement at the line limit", response: pkt("version 2\n") + pkt("fetch=shallow filter\n") + strings.Repeat(pkt("x=1\n"), maxAdvertLines-2) + "0000" + goodResponse(pack), want: pack},
+		{name: "duplicate fetch line", response: advert(goodAdvert, "sha1")[:len(advert(goodAdvert, "sha1"))-4] + pkt("fetch=shallow filter\n") + "0000", wantErr: ErrProtocol, noReq: true},
+		{name: "duplicate object-format line", response: advert(goodAdvert, "sha1")[:len(advert(goodAdvert, "sha1"))-4] + pkt("object-format=sha1\n") + "0000", wantErr: ErrProtocol, noReq: true},
+		{name: "too much sideband progress", response: advert(goodAdvert, "sha1") + pkt("packfile\n") + strings.Repeat(band(2, "p"), maxSidebandProgress+1) + band(1, pack) + "0000", wantErr: ErrProtocol},
+		{name: "sideband progress at the limit", response: advert(goodAdvert, "sha1") + pkt("packfile\n") + strings.Repeat(band(2, "p"), maxSidebandProgress) + band(1, pack) + "0000", want: pack},
+		{name: "shallow-info too long", response: advert(goodAdvert, "sha1") + pkt("shallow-info\n") + strings.Repeat(pkt("shallow "+fetchWant1+"\n"), maxShallowInfoLines+1) + "0001" + pkt("packfile\n") + band(1, pack) + "0000", wantErr: ErrProtocol},
+		{name: "shallow-info at the line limit", response: advert(goodAdvert, "sha1") + pkt("shallow-info\n") + strings.Repeat(pkt("shallow "+fetchWant1+"\n"), maxShallowInfoLines) + "0001" + pkt("packfile\n") + band(1, pack) + "0000", want: pack},
+		{name: "shallow-info line too long", response: advert(goodAdvert, "sha1") + pkt("shallow-info\n") + "fff1", wantErr: ErrProtocol},
 		{name: "missing filter", response: advert("shallow wait-for-done", "sha1"), wantErr: ErrUnsupported, noReq: true},
 		{name: "missing shallow", response: advert("filter", "sha1"), wantErr: ErrUnsupported, noReq: true},
 		{name: "no fetch command", response: pkt("version 2\n") + pkt("ls-refs\n") + "0000", wantErr: ErrUnsupported, noReq: true},
@@ -144,6 +156,21 @@ func TestFetchRequestBytes(t *testing.T) {
 	}
 }
 
+func manyWants(n int) []string {
+	w := make([]string, n)
+	for i := range w {
+		w[i] = fmt.Sprintf("%040x", i+1)
+	}
+	return w
+}
+
+func TestFetchCommitsMaxWants(t *testing.T) {
+	h := newScriptedHost(advert(goodAdvert, "sha1") + goodResponse("PACKdata"))
+	if _, err := FetchCommits(context.Background(), h, "sha1", manyWants(maxWants), 1<<20); err != nil {
+		t.Fatalf("%d wants: %v", maxWants, err)
+	}
+}
+
 func TestFetchCommitsBadInput(t *testing.T) {
 	ok := []string{fetchWant1}
 	for name, tc := range map[string]struct {
@@ -153,6 +180,7 @@ func TestFetchCommitsBadInput(t *testing.T) {
 	}{
 		"unknown format":    {"md5", ok, 1 << 10},
 		"no wants":          {"sha1", nil, 1 << 10},
+		"too many wants":    {"sha1", manyWants(maxWants + 1), 1 << 10},
 		"short id":          {"sha1", []string{"abc"}, 1 << 10},
 		"upper case id":     {"sha1", []string{strings.Repeat("A", 40)}, 1 << 10},
 		"sha1 id as sha256": {"sha256", ok, 1 << 10},
@@ -205,6 +233,15 @@ func TestFetchCommitsContext(t *testing.T) {
 			t.Error("request sent")
 		}
 	})
+	t.Run("completed fetch leaves rw open", func(t *testing.T) {
+		h := newScriptedHost(advert(goodAdvert, "sha1") + goodResponse("PACK"))
+		if _, err := FetchCommits(context.Background(), h, "sha1", []string{fetchWant1}, 1<<20); err != nil {
+			t.Fatal(err)
+		}
+		if h.closed {
+			t.Error("rw closed after a successful fetch")
+		}
+	})
 	t.Run("deadline unblocks a silent host", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
@@ -230,6 +267,14 @@ func TestFetchCommitsContext(t *testing.T) {
 type rwPair struct {
 	io.Reader
 	io.Writer
+	closers []io.Closer
+}
+
+func (p rwPair) Close() error {
+	for _, c := range p.closers {
+		_ = c.Close()
+	}
+	return nil
 }
 
 func TestFetchCommitsGitUploadPack(t *testing.T) {
@@ -255,7 +300,7 @@ func TestFetchCommitsGitUploadPack(t *testing.T) {
 		if err := cmd.Start(); err != nil {
 			t.Fatal(err)
 		}
-		pack, ferr := FetchCommits(ctx, rwPair{out, in}, "sha1", wants, 1<<20)
+		pack, ferr := FetchCommits(ctx, rwPair{out, in, []io.Closer{in, out}}, "sha1", wants, 1<<20)
 		_ = in.Close()
 		_ = cmd.Wait()
 		if ferr != nil {
@@ -293,6 +338,10 @@ func FuzzFetchResponse(f *testing.F) {
 	f.Add([]byte(advert(goodAdvert, "sha1") + pkt("ERR not our ref\n")))
 	f.Add([]byte(advert(goodAdvert, "sha1") + pkt("packfile\n") + band(3, "x")))
 	f.Add([]byte(pkt(fetchWant1 + " HEAD\x00shallow filter\n")))
+	f.Add([]byte(advert(goodAdvert, "sha256") + goodResponse("PACKdata")))
+	f.Add([]byte(advert("shallow filter", "sha256") + pkt("packfile\n") + band(1, "PACK") + "0000"))
+	f.Add([]byte(advert(goodAdvert, "sha1") + pkt("shallow-info\n") + pkt("shallow "+fetchWant1+"\n") + pkt("shallow "+fetchWant2+"\n") +
+		pkt("unshallow "+fetchWant2+"\n") + "0001" + pkt("packfile\n") + band(2, "p") + band(1, "PACK") + band(1, "data") + "0000"))
 	f.Add([]byte("0001000200030004"))
 	f.Fuzz(func(t *testing.T, b []byte) {
 		const limit = 1 << 16

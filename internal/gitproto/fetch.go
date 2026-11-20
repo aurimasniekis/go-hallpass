@@ -9,6 +9,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // Limits for the upload-pack conversation. The host is untrusted (ADR-0064, threat 7): everything it sends is
@@ -16,6 +17,8 @@ import (
 const (
 	// maxAdvertLines bounds the capability advertisement; git sends about ten lines.
 	maxAdvertLines = 64
+	// maxWants bounds the objects requested in one fetch.
+	maxWants = 256
 	// maxShallowInfoLines bounds the shallow-info section. With deepen 1 it holds at most one line per want.
 	maxShallowInfoLines = 4096
 	// maxSidebandProgress bounds the progress packets ignored before the pack ends. We ask for no-progress, so
@@ -44,10 +47,11 @@ var (
 // advertisement listed the fetch features "shallow" and "filter" and the same object format.
 //
 // objectFormat is "sha1" or "sha256"; wants are lower-case hex IDs of that length. maxBytes bounds everything read
-// from rw, the advertisement included. When ctx ends and rw is an io.Closer, rw is closed to unblock a pending read.
+// from rw, the advertisement included. When ctx ends before the fetch does, rw is closed to unblock a pending read or
+// write, so a silent host cannot hold the call past the deadline. After a completed fetch rw is left open.
 //
 // The returned pack is NOT verified: it may hold any objects, deltas or garbage. The caller must check it.
-func FetchCommits(ctx context.Context, rw io.ReadWriter, objectFormat string, wants []string, maxBytes int64) ([]byte, error) {
+func FetchCommits(ctx context.Context, rw io.ReadWriteCloser, objectFormat string, wants []string, maxBytes int64) ([]byte, error) {
 	idLen := 0
 	switch objectFormat {
 	case "sha1":
@@ -57,8 +61,8 @@ func FetchCommits(ctx context.Context, rw io.ReadWriter, objectFormat string, wa
 	default:
 		return nil, fmt.Errorf("unknown object format %q", objectFormat)
 	}
-	if len(wants) == 0 {
-		return nil, errors.New("no objects to fetch")
+	if len(wants) == 0 || len(wants) > maxWants {
+		return nil, fmt.Errorf("need between 1 and %d objects to fetch, got %d", maxWants, len(wants))
 	}
 	seen := make(map[string]bool, len(wants))
 	uniq := make([]string, 0, len(wants))
@@ -78,19 +82,28 @@ func FetchCommits(ctx context.Context, rw io.ReadWriter, objectFormat string, wa
 		return nil, err
 	}
 
+	// finished is set under mu once the fetch has returned, so a cancellation racing with a completed fetch never
+	// closes rw.
+	var mu sync.Mutex
+	finished := false
 	stop := make(chan struct{})
 	defer close(stop)
-	if c, ok := rw.(io.Closer); ok {
-		go func() {
-			select {
-			case <-ctx.Done():
-				_ = c.Close()
-			case <-stop:
+	go func() {
+		select {
+		case <-ctx.Done():
+			mu.Lock()
+			if !finished {
+				_ = rw.Close()
 			}
-		}()
-	}
+			mu.Unlock()
+		case <-stop:
+		}
+	}()
 
 	pack, err := fetchCommits(ctx, rw, objectFormat, uniq, maxBytes)
+	mu.Lock()
+	finished = true
+	mu.Unlock()
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
 			return nil, cerr
@@ -206,7 +219,7 @@ func readErr(err error) error {
 func (p *pktReader) checkAdvertisement(objectFormat string) error {
 	var first = true
 	var fetchFeatures []string
-	haveFetch := false
+	haveFetch, haveFormat := false, false
 	format := "sha1" // git's default when the host does not advertise object-format
 	for i := 0; ; i++ {
 		kind, payload, err := p.next()
@@ -233,9 +246,16 @@ func (p *pktReader) checkAdvertisement(objectFormat string) error {
 		key, value, _ := strings.Cut(line, "=")
 		switch key {
 		case "fetch":
+			if haveFetch {
+				return fmt.Errorf("%w: duplicate fetch line in advertisement", ErrProtocol)
+			}
 			haveFetch = true
 			fetchFeatures = strings.Fields(value)
 		case "object-format":
+			if haveFormat {
+				return fmt.Errorf("%w: duplicate object-format line in advertisement", ErrProtocol)
+			}
+			haveFormat = true
 			format = value
 		}
 	}
