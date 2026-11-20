@@ -835,6 +835,9 @@
   checksum is withheld until the proof succeeds; otherwise the session ends, the host rejects the truncated pack and
   no ref changes. An update it cannot prove from the pushed commits (for example moving a branch to a commit the host
   already has) is refused rather than guessed.
+- **Thin push bases (opt-in field):** git rules carry `thin_push_bases` (default false; absent in stored JSON reads as
+  false; needs git-write). It is stored and editable through the API and console only: nothing reads it yet (ADR-0064,
+  wired in a follow-up).
 - **Limits:** multi-approver requests are a separate follow-up. Host-side branch protection remains a good second
   layer.
 

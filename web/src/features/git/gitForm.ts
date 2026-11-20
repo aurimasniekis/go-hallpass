@@ -11,6 +11,7 @@ export interface GitProfileFormValues {
   tags: string[];
   allow_delete: boolean;
   allow_force_push: boolean;
+  thin_push_bases: boolean;
   approvals_required: number;
   default_duration: number;
   max_duration: number;
@@ -26,6 +27,7 @@ export const GIT_PROFILE_DEFAULTS: GitProfileFormValues = {
   tags: [],
   allow_delete: false,
   allow_force_push: false,
+  thin_push_bases: false,
   approvals_required: 1,
   default_duration: 3600,
   max_duration: 8 * 3600,
@@ -42,6 +44,7 @@ export function toGitProfileInput(v: GitProfileFormValues) {
       allow_delete: v.allow_delete,
       allow_force_push: v.allow_force_push,
     };
+    git.thin_push_bases = v.thin_push_bases;
   }
   return {
     alias: v.alias.trim(),
@@ -66,6 +69,7 @@ export function gitProfileFormValues(r: Role): GitProfileFormValues {
     tags: push?.tags ?? [],
     allow_delete: push?.allow_delete ?? false,
     allow_force_push: push?.allow_force_push ?? false,
+    thin_push_bases: r.git?.thin_push_bases ?? false,
     approvals_required: r.approvals_required ?? 1,
     default_duration: r.default_duration,
     max_duration: r.max_duration,

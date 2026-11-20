@@ -27,6 +27,7 @@ describe('git profile form', () => {
       branches: ['agent/**'],
       tags: ['v*-rc.*'],
       allow_delete: true,
+      thin_push_bases: true,
     };
     const body = toGitProfileInput(values);
     expect(body.capabilities).toEqual(['git-read', 'git-write']);
@@ -37,6 +38,7 @@ describe('git profile form', () => {
       allow_delete: true,
       allow_force_push: false,
     });
+    expect(body.git.thin_push_bases).toBe(true);
     const role = {
       ...body,
       id: 'rol_1',

@@ -448,6 +448,20 @@ func TestGitRemoteProfiles(t *testing.T) {
 	if _, err := svc.CreateRole(ctx, admin, git.ID, RoleInput{Alias: ptr("acme-push"), Capabilities: ptr([]string{CapGitRead, CapGitWrite}), Git: push}); err != nil {
 		t.Fatal(err)
 	}
+	if got, _ := svc.GetRole(ctx, read.ID); got.Git.ThinPushBases {
+		t.Fatal("thin_push_bases must default to false")
+	}
+	thin := &GitRules{Repos: []string{"acme/api"}, ThinPushBases: true, Push: gitproto.RefRules{Branches: []string{"agent/**"}}}
+	tr, err := svc.CreateRole(ctx, admin, git.ID, RoleInput{Alias: ptr("acme-thin"), Capabilities: ptr([]string{CapGitRead, CapGitWrite}), Git: thin})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := svc.GetRole(ctx, tr.ID); got.Git == nil || !got.Git.ThinPushBases {
+		t.Fatalf("thin_push_bases not stored: %+v", got.Git)
+	}
+	if _, err := svc.CreateRole(ctx, admin, git.ID, RoleInput{Alias: ptr("thin-ro"), Git: &GitRules{Repos: []string{"x/y"}, ThinPushBases: true}}); !errors.Is(err, apperr.ErrInvalid) {
+		t.Fatalf("thin_push_bases without git-write accepted: %v", err)
+	}
 	for name, in := range map[string]RoleInput{
 		"no repos":            {Alias: ptr("a1")},
 		"empty repos":         {Alias: ptr("a2"), Git: &GitRules{}},
